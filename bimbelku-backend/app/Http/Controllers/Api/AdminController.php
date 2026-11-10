@@ -1145,6 +1145,18 @@ class AdminController extends Controller
             })
             ->count() : 0;
         $pendingPayouts = $canPayouts ? TeacherPayoutRequest::where('status', 'pending')->count() : 0;
+        $failedRefunds = $canRefunds ? Refund::query()
+            ->where('status', 'failed')
+            ->count() : 0;
+        $refundsNeedingReview = $canRefunds ? Refund::query()
+            ->where('status', 'pending')
+            ->whereNotNull('destination_selected_at')
+            ->where('created_at', '<=', now()->subDay())
+            ->count() : 0;
+        $payoutsNeedingReview = $canPayouts ? TeacherPayoutRequest::query()
+            ->whereIn('status', ['pending', 'failed'])
+            ->where('created_at', '<=', now()->subDay())
+            ->count() : 0;
 
         $matchingPreview = $canMatching
             ? BookingRequest::query()
@@ -1268,7 +1280,10 @@ class AdminController extends Controller
                 'cases' => $pendingCases,
                 'monitoring_attention' => $monitoringNeedsAttention,
                 'refunds' => $pendingRefunds,
+                'refund_failed' => $failedRefunds,
+                'refund_needs_review' => $refundsNeedingReview,
                 'payouts' => $pendingPayouts,
+                'payout_needs_review' => $payoutsNeedingReview,
             ],
             'visible_sections' => [
                 'payments' => $canPayments,
