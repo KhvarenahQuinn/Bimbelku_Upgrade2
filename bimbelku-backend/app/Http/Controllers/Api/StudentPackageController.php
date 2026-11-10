@@ -1156,23 +1156,32 @@ class StudentPackageController extends Controller
 
         $automaticStarted = $refund && $automatic && $refunds->startAutomatic($refund);
 
-        $teacherIds->each(fn (int $teacherId) => Notification::create([
-            'user_id' => $teacherId,
-            'title' => 'Permintaan paket dibatalkan',
-            'message' => "Murid membatalkan pencarian paket {$learningPackage->package_code}. Penawaran tidak lagi aktif.",
-            'type' => 'info',
-            'target_url' => '/guru/permintaan',
-        ]));
+        $teacherIds->each(fn (int $teacherId) => Notification::updateOrCreate(
+            ['unique_key' => "package-search-cancelled:{$learningPackage->id}:{$teacherId}"],
+            [
+                'user_id' => $teacherId,
+                'title' => 'Permintaan paket dibatalkan',
+                'message' => "Murid membatalkan pencarian paket {$learningPackage->package_code}. Penawaran tidak lagi aktif.",
+                'type' => 'info',
+                'target_url' => '/guru/permintaan',
+                'is_read' => false,
+            ]
+        ));
 
         if ($refund && ! $automatic) {
+            $refundNeedsReviewKey = "refund-needs-review:{$refund->id}";
             User::query()->where('role', 'admin')->pluck('id')->each(
-                fn (int $adminId) => Notification::create([
-                    'user_id' => $adminId,
-                    'title' => 'Refund paket menunggu proses',
-                    'message' => "Paket {$learningPackage->package_code} dibatalkan saat pencarian tutor.",
-                    'type' => 'warning',
-                    'target_url' => '/admin/finance?tab=refunds',
-                ])
+                fn (int $adminId) => Notification::updateOrCreate(
+                    ['unique_key' => "{$refundNeedsReviewKey}:{$adminId}"],
+                    [
+                        'user_id' => $adminId,
+                        'title' => 'Refund paket menunggu proses',
+                        'message' => "Paket {$learningPackage->package_code} dibatalkan saat pencarian tutor.",
+                        'type' => 'warning',
+                        'target_url' => '/admin/finance?tab=refunds',
+                        'is_read' => false,
+                    ]
+                )
             );
         }
 

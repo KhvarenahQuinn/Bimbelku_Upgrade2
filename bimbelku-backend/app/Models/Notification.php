@@ -42,6 +42,7 @@ class Notification extends Model
                 str_starts_with($target, '/student/history') => 'student_refund_status_changed',
                 str_starts_with($target, '/guru/permintaan') => 'teacher_new_offer',
                 str_starts_with($target, '/guru/kelas') => 'teacher_class_changed',
+                str_starts_with($target, '/guru/jadwal') => 'teacher_schedule_changed',
                 str_starts_with($target, '/guru/dompet') => 'teacher_payout_changed',
                 str_starts_with($target, '/admin/finance?tab=refunds') => 'admin_refund_exception',
                 default => 'targeted_notification',

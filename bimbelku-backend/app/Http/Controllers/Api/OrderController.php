@@ -619,13 +619,17 @@ class OrderController extends Controller
         }
 
         User::query()->where('role', 'admin')->pluck('id')->each(
-            fn (int $adminId) => Notification::create([
-                'user_id' => $adminId,
-                'title' => 'Bukti pembayaran paket',
-                'message' => "Tagihan {$order->order_id} menunggu pemeriksaan.",
-                'type' => 'info',
-                'target_url' => '/admin/finance?tab=payments',
-            ])
+            fn (int $adminId) => Notification::updateOrCreate(
+                ['unique_key' => "package-payment-proof:{$order->id}:{$adminId}"],
+                [
+                    'user_id' => $adminId,
+                    'title' => 'Bukti pembayaran paket',
+                    'message' => "Tagihan {$order->order_id} menunggu pemeriksaan.",
+                    'type' => 'info',
+                    'target_url' => '/admin/finance?tab=payments',
+                    'is_read' => false,
+                ]
+            )
         );
 
         return response()->json([
@@ -809,13 +813,17 @@ class OrderController extends Controller
                 ->where('new_package_id', $package->id)
                 ->whereIn('status', ['requested', 'tutor_accepted'])
                 ->update(['status' => 'cancelled']);
-            Notification::create([
-                'user_id' => $lockedOrder->user_id,
-                'title' => 'Batas pembayaran paket berakhir',
-                'message' => 'Tagihan dibatalkan karena batas waktu pembayaran sudah berakhir.',
-                'type' => 'warning',
-                'target_url' => '/student/history',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "package-payment-expired:{$lockedOrder->id}:{$lockedOrder->user_id}"],
+                [
+                    'user_id' => $lockedOrder->user_id,
+                    'title' => 'Batas pembayaran paket berakhir',
+                    'message' => 'Tagihan dibatalkan karena batas waktu pembayaran sudah berakhir.',
+                    'type' => 'warning',
+                    'target_url' => '/student/history',
+                    'is_read' => false,
+                ]
+            );
         }, 3);
     }
 

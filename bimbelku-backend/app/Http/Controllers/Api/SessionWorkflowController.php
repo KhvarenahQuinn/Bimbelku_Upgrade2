@@ -95,13 +95,17 @@ class SessionWorkflowController extends Controller
                     $lockedBooking->update(['status' => 'absence_review']);
                 }
 
-                Notification::create([
-                    'user_id' => $lockedParticipant->student_id,
-                    'title' => 'Ketidakhadiran dilaporkan',
-                    'message' => 'Tutor melaporkan ketidakhadiran Anda. Admin akan memeriksa kronologi dan bukti.',
-                    'type' => 'warning',
-                    'target_url' => '/student/my-classes',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "session-report-student-absence:{$report->id}:{$lockedParticipant->student_id}"],
+                    [
+                        'user_id' => $lockedParticipant->student_id,
+                        'title' => 'Ketidakhadiran dilaporkan',
+                        'message' => 'Tutor melaporkan ketidakhadiran Anda. Admin akan memeriksa kronologi dan bukti.',
+                        'type' => 'warning',
+                        'target_url' => '/student/my-classes',
+                        'is_read' => false,
+                    ]
+                );
 
                 return $report;
             });
@@ -192,15 +196,19 @@ class SessionWorkflowController extends Controller
                             $participant->bookingRequest?->update(['status' => 'cancelled']);
                         }
 
-                        Notification::create([
-                            'user_id' => $participant->student_id,
-                            'title' => 'Sesi dibatalkan karena keadaan darurat',
-                            'message' => $participant->order?->status === 'refund_pending'
-                                ? 'Refund penuh sedang diproses admin.'
-                                : 'Tagihan dibatalkan dan tidak perlu dibayar.',
-                            'type' => 'warning',
-                            'target_url' => '/student/history',
-                        ]);
+                        Notification::updateOrCreate(
+                            ['unique_key' => "session-emergency-cancelled:{$lockedBooking->id}:{$participant->student_id}"],
+                            [
+                                'user_id' => $participant->student_id,
+                                'title' => 'Sesi dibatalkan karena keadaan darurat',
+                                'message' => $participant->order?->status === 'refund_pending'
+                                    ? 'Refund penuh sedang diproses admin.'
+                                    : 'Tagihan dibatalkan dan tidak perlu dibayar.',
+                                'type' => 'warning',
+                                'target_url' => '/student/history',
+                                'is_read' => false,
+                            ]
+                        );
                     });
 
                 return $report;
@@ -330,13 +338,17 @@ class SessionWorkflowController extends Controller
                 $lockedParticipant->bookingRequest?->update(['status' => 'disputed']);
                 $lockedBooking->update(['status' => 'disputed', 'payout_status' => 'locked']);
 
-                Notification::create([
-                    'user_id' => $lockedBooking->teacher_id,
-                    'title' => 'Murid mengajukan keberatan',
-                    'message' => 'Pencairan ditahan sampai admin menyelesaikan pemeriksaan.',
-                    'type' => 'warning',
-                    'target_url' => '/guru/kelas',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "session-dispute:{$dispute->id}:{$lockedBooking->teacher_id}"],
+                    [
+                        'user_id' => $lockedBooking->teacher_id,
+                        'title' => 'Murid mengajukan keberatan',
+                        'message' => 'Pencairan ditahan sampai admin menyelesaikan pemeriksaan.',
+                        'type' => 'warning',
+                        'target_url' => '/guru/kelas',
+                        'is_read' => false,
+                    ]
+                );
 
                 return $dispute;
             });
@@ -418,13 +430,17 @@ class SessionWorkflowController extends Controller
                     'payout_status' => 'locked',
                 ]);
 
-                Notification::create([
-                    'user_id' => $lockedBooking->teacher_id,
-                    'title' => 'Ketidakhadiran Anda dilaporkan',
-                    'message' => 'Murid mengirim kronologi dan bukti. Admin akan memeriksa laporan sebelum memutus refund dan sanksi.',
-                    'type' => 'warning',
-                    'target_url' => '/guru/performa',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "session-report-teacher-absence:{$report->id}:{$lockedBooking->teacher_id}"],
+                    [
+                        'user_id' => $lockedBooking->teacher_id,
+                        'title' => 'Ketidakhadiran Anda dilaporkan',
+                        'message' => 'Murid mengirim kronologi dan bukti. Admin akan memeriksa laporan sebelum memutus refund dan sanksi.',
+                        'type' => 'warning',
+                        'target_url' => '/guru/performa',
+                        'is_read' => false,
+                    ]
+                );
 
                 return $report;
             });
@@ -550,17 +566,21 @@ class SessionWorkflowController extends Controller
                 $this->finalizeBookingIfSettled($booking);
             }
 
-            Notification::create([
-                'user_id' => $lockedDispute->student_id,
-                'title' => 'Keberatan telah diputuskan',
-                'message' => $validated['resolution'] === 'student_refund'
-                    ? 'Keberatan disetujui. Refund penuh masuk antrean transfer.'
-                    : 'Sesi dinyatakan valid dan hak tutor diteruskan.',
-                'type' => 'info',
-                'target_url' => $validated['resolution'] === 'student_refund'
-                    ? '/student/history'
-                    : '/student/my-classes',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "session-dispute-resolved:{$lockedDispute->id}:{$lockedDispute->student_id}"],
+                [
+                    'user_id' => $lockedDispute->student_id,
+                    'title' => 'Keberatan telah diputuskan',
+                    'message' => $validated['resolution'] === 'student_refund'
+                        ? 'Keberatan disetujui. Refund penuh masuk antrean transfer.'
+                        : 'Sesi dinyatakan valid dan hak tutor diteruskan.',
+                    'type' => 'info',
+                    'target_url' => $validated['resolution'] === 'student_refund'
+                        ? '/student/history'
+                        : '/student/my-classes',
+                    'is_read' => false,
+                ]
+            );
         });
 
         return response()->json(['message' => 'Keputusan keberatan berhasil disimpan.']);
@@ -597,15 +617,19 @@ class SessionWorkflowController extends Controller
             ]);
 
             if ($lockedReport->type === 'teacher_emergency') {
-                Notification::create([
-                    'user_id' => $booking->teacher_id,
-                    'title' => 'Laporan keadaan darurat diperiksa',
-                    'message' => $accepted
-                        ? 'Laporan keadaan darurat diterima. Refund peserta tetap diproses.'
-                        : 'Laporan keadaan darurat ditolak. Refund peserta tetap diproses.',
-                    'type' => $accepted ? 'info' : 'warning',
-                    'target_url' => '/guru/performa',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "session-report-emergency-reviewed:{$lockedReport->id}:{$booking->teacher_id}"],
+                    [
+                        'user_id' => $booking->teacher_id,
+                        'title' => 'Laporan keadaan darurat diperiksa',
+                        'message' => $accepted
+                            ? 'Laporan keadaan darurat diterima. Refund peserta tetap diproses.'
+                            : 'Laporan keadaan darurat ditolak. Refund peserta tetap diproses.',
+                        'type' => $accepted ? 'info' : 'warning',
+                        'target_url' => '/guru/performa',
+                        'is_read' => false,
+                    ]
+                );
 
                 return;
             }
@@ -640,13 +664,17 @@ class SessionWorkflowController extends Controller
                         ->get()
                         ->each(function (BookingParticipant $affected) use ($booking) {
                             $this->queueRefund($affected, $booking, 'Tutor tidak hadir');
-                            Notification::create([
-                                'user_id' => $affected->student_id,
-                                'title' => 'Refund ketidakhadiran tutor',
-                                'message' => 'Laporan diterima. Refund penuh masuk antrean. Pilih tujuan refund di Riwayat Transaksi.',
-                                'type' => 'success',
-                                'target_url' => '/student/history',
-                            ]);
+                            Notification::updateOrCreate(
+                                ['unique_key' => "session-teacher-absence-refund:{$lockedReport->id}:{$affected->student_id}"],
+                                [
+                                    'user_id' => $affected->student_id,
+                                    'title' => 'Refund ketidakhadiran tutor',
+                                    'message' => 'Laporan diterima. Refund penuh masuk antrean. Pilih tujuan refund di Riwayat Transaksi.',
+                                    'type' => 'success',
+                                    'target_url' => '/student/history',
+                                    'is_read' => false,
+                                ]
+                            );
                         });
                     $booking->update([
                         'status' => 'refund_pending',
@@ -677,15 +705,19 @@ class SessionWorkflowController extends Controller
                 }
 
                 if (! $accepted) {
-                    Notification::create([
-                        'user_id' => $lockedReport->reported_by,
-                        'title' => 'Laporan ketidakhadiran tutor diputuskan',
-                        'message' => $otherPendingReports
-                            ? 'Laporan Anda belum terbukti. Laporan peserta lain pada sesi yang sama masih diperiksa.'
-                            : 'Laporan belum terbukti. Sesi dikembalikan ke proses pelaksanaan.',
-                        'type' => 'info',
-                        'target_url' => '/student/my-classes',
-                    ]);
+                    Notification::updateOrCreate(
+                        ['unique_key' => "session-report-not-proven:{$lockedReport->id}:{$lockedReport->reported_by}"],
+                        [
+                            'user_id' => $lockedReport->reported_by,
+                            'title' => 'Laporan ketidakhadiran tutor diputuskan',
+                            'message' => $otherPendingReports
+                                ? 'Laporan Anda belum terbukti. Laporan peserta lain pada sesi yang sama masih diperiksa.'
+                                : 'Laporan belum terbukti. Sesi dikembalikan ke proses pelaksanaan.',
+                            'type' => 'info',
+                            'target_url' => '/student/my-classes',
+                            'is_read' => false,
+                        ]
+                    );
                 }
 
                 return;
@@ -714,24 +746,32 @@ class SessionWorkflowController extends Controller
                 ]);
             }
 
-            Notification::create([
-                'user_id' => $participant->student_id,
-                'title' => 'Laporan ketidakhadiran murid diputuskan',
-                'message' => $accepted
-                    ? 'Laporan diterima. Pembayaran sesi dinyatakan hangus sesuai kebijakan.'
-                    : 'Laporan ditolak. Status keikutsertaan Anda dikembalikan.',
-                'type' => $accepted ? 'warning' : 'info',
-                'target_url' => '/student/my-classes',
-            ]);
-            Notification::create([
-                'user_id' => $booking->teacher_id,
-                'title' => 'Laporan ketidakhadiran murid diputuskan',
-                'message' => $accepted
-                    ? 'Laporan diterima dan pembayaran murid dihitung sebagai pendapatan sesi.'
-                    : 'Laporan ditolak.',
-                'type' => $accepted ? 'success' : 'warning',
-                'target_url' => '/guru/performa',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "session-student-absence-decision:{$lockedReport->id}:{$participant->student_id}"],
+                [
+                    'user_id' => $participant->student_id,
+                    'title' => 'Laporan ketidakhadiran murid diputuskan',
+                    'message' => $accepted
+                        ? 'Laporan diterima. Pembayaran sesi dinyatakan hangus sesuai kebijakan.'
+                        : 'Laporan ditolak. Status keikutsertaan Anda dikembalikan.',
+                    'type' => $accepted ? 'warning' : 'info',
+                    'target_url' => '/student/my-classes',
+                    'is_read' => false,
+                ]
+            );
+            Notification::updateOrCreate(
+                ['unique_key' => "session-student-absence-decision-teacher:{$lockedReport->id}:{$booking->teacher_id}"],
+                [
+                    'user_id' => $booking->teacher_id,
+                    'title' => 'Laporan ketidakhadiran murid diputuskan',
+                    'message' => $accepted
+                        ? 'Laporan diterima dan pembayaran murid dihitung sebagai pendapatan sesi.'
+                        : 'Laporan ditolak.',
+                    'type' => $accepted ? 'success' : 'warning',
+                    'target_url' => '/guru/performa',
+                    'is_read' => false,
+                ]
+            );
         });
 
         return response()->json(['message' => 'Hasil pemeriksaan laporan berhasil disimpan.']);
@@ -1240,15 +1280,19 @@ class SessionWorkflowController extends Controller
         ]);
         $booking->order?->classroom?->sessions()->update(['is_completed' => true]);
 
-        Notification::create([
-            'user_id' => $booking->teacher_id,
-            'title' => 'Sesi selesai',
-            'message' => $earningParticipants > 0
-                ? 'Penyelesaian disahkan. Pendapatan siap masuk proses pencairan admin.'
-                : 'Sesi ditutup tanpa pendapatan tutor.',
-            'type' => 'success',
-            'target_url' => $earningParticipants > 0 ? '/guru/gaji' : '/guru/kelas',
-        ]);
+        Notification::updateOrCreate(
+            ['unique_key' => "session-completed:{$booking->id}:{$booking->teacher_id}"],
+            [
+                'user_id' => $booking->teacher_id,
+                'title' => 'Sesi selesai',
+                'message' => $earningParticipants > 0
+                    ? 'Penyelesaian disahkan. Pendapatan siap masuk proses pencairan admin.'
+                    : 'Sesi ditutup tanpa pendapatan tutor.',
+                'type' => 'success',
+                'target_url' => $earningParticipants > 0 ? '/guru/gaji' : '/guru/kelas',
+                'is_read' => false,
+            ]
+        );
     }
 
     private function restoredStatusAfterReport(Booking $booking): string

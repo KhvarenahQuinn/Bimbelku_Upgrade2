@@ -70,13 +70,17 @@ class ExpireBookingWorkflow extends Command
                             return;
                         }
                         $locked->update(['reminder_sent_at' => now()]);
-                        Notification::create([
-                            'user_id' => $locked->teacher_id,
-                            'title' => 'Pengingat permintaan bimbel',
-                            'message' => 'Penawaran masih menunggu jawabanmu. Pilih Terima atau Tolak sebelum batas waktu agar murid mendapat kepastian.',
-                            'type' => 'warning',
-                            'target_url' => '/guru/permintaan',
-                        ]);
+                        Notification::updateOrCreate(
+                            ['unique_key' => "offer-reminder:{$locked->id}:{$locked->teacher_id}"],
+                            [
+                                'user_id' => $locked->teacher_id,
+                                'title' => 'Pengingat permintaan bimbel',
+                                'message' => 'Penawaran masih menunggu jawabanmu. Pilih Terima atau Tolak sebelum batas waktu agar murid mendapat kepastian.',
+                                'type' => 'warning',
+                                'target_url' => '/guru/permintaan',
+                                'is_read' => false,
+                            ]
+                        );
                         $count++;
                     }, 3);
                 }
@@ -198,13 +202,17 @@ class ExpireBookingWorkflow extends Command
                             ->whereIn('status', ['requested', 'tutor_accepted'])
                             ->update(['status' => 'cancelled']);
 
-                        Notification::create([
-                            'user_id' => $lockedOrder->user_id,
-                            'title' => 'Batas pembayaran paket berakhir',
-                            'message' => 'Tagihan paket kedaluwarsa karena pembayaran belum diselesaikan. Pencarian tutor belum dimulai.',
-                            'type' => 'warning',
-                            'target_url' => '/student/history',
-                        ]);
+                        Notification::updateOrCreate(
+                            ['unique_key' => "package-payment-expired:{$lockedOrder->id}:{$lockedOrder->user_id}"],
+                            [
+                                'user_id' => $lockedOrder->user_id,
+                                'title' => 'Batas pembayaran paket berakhir',
+                                'message' => 'Tagihan paket kedaluwarsa karena pembayaran belum diselesaikan. Pencarian tutor belum dimulai.',
+                                'type' => 'warning',
+                                'target_url' => '/student/history',
+                                'is_read' => false,
+                            ]
+                        );
                         $count++;
                     }, 3);
                 }

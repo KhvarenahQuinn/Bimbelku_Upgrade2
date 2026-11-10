@@ -209,15 +209,19 @@ class AdminController extends Controller
                 $user->tokens()->delete();
             }
 
-            Notification::create([
-                'user_id' => $user->id,
-                'title' => $validated['status'] === 'active' ? 'Akun tutor disetujui' : 'Verifikasi tutor ditolak',
-                'message' => $validated['status'] === 'active'
-                    ? 'Akun Anda telah diverifikasi dan dapat menerima permintaan belajar.'
-                    : 'Verifikasi belum disetujui. Alasan: '.trim((string) ($validated['notes'] ?? '')),
-                'type' => $validated['status'] === 'active' ? 'success' : 'warning',
-                'target_url' => '/guru/saya',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "tutor-verification:{$profile->id}:{$validated['status']}"],
+                [
+                    'user_id' => $user->id,
+                    'title' => $validated['status'] === 'active' ? 'Akun tutor disetujui' : 'Verifikasi tutor ditolak',
+                    'message' => $validated['status'] === 'active'
+                        ? 'Akun Anda telah diverifikasi dan dapat menerima permintaan belajar.'
+                        : 'Verifikasi belum disetujui. Alasan: '.trim((string) ($validated['notes'] ?? '')),
+                    'type' => $validated['status'] === 'active' ? 'success' : 'warning',
+                    'target_url' => '/guru/saya',
+                    'is_read' => false,
+                ]
+            );
         }, 3);
 
         if ($validated['status'] === 'rejected') {
@@ -607,13 +611,17 @@ class AdminController extends Controller
             $result = $packageCheckoutService->activatePaidPackage($order, $request->user());
             $surplus = $reconciliation->creditSurplusToWallet($order->fresh(), $request->user());
             if ($surplus > 0) {
-                Notification::create([
-                    'user_id' => $order->user_id,
-                    'title' => 'Kelebihan pembayaran masuk ke saldo',
-                    'message' => 'Kelebihan Rp'.number_format($surplus, 0, ',', '.').' telah masuk ke Saldo BimbelKu.',
-                    'type' => 'success',
-                    'target_url' => '/student/history',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "payment-surplus-credited:{$order->id}:{$order->user_id}"],
+                    [
+                        'user_id' => $order->user_id,
+                        'title' => 'Kelebihan pembayaran masuk ke saldo',
+                        'message' => 'Kelebihan Rp'.number_format($surplus, 0, ',', '.').' telah masuk ke Saldo BimbelKu.',
+                        'type' => 'success',
+                        'target_url' => '/student/history',
+                        'is_read' => false,
+                    ]
+                );
             }
 
             return response()->json([
@@ -645,13 +653,17 @@ class AdminController extends Controller
                 ? $reconciliation->creditSurplusToWallet($order->fresh(), $request->user())
                 : 0.0;
             if ($surplus > 0) {
-                Notification::create([
-                    'user_id' => $order->user_id,
-                    'title' => 'Kelebihan pembayaran masuk ke saldo',
-                    'message' => 'Kelebihan Rp'.number_format($surplus, 0, ',', '.').' telah masuk ke Saldo BimbelKu.',
-                    'type' => 'success',
-                    'target_url' => '/student/history',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "payment-surplus-credited:{$order->id}:{$order->user_id}"],
+                    [
+                        'user_id' => $order->user_id,
+                        'title' => 'Kelebihan pembayaran masuk ke saldo',
+                        'message' => 'Kelebihan Rp'.number_format($surplus, 0, ',', '.').' telah masuk ke Saldo BimbelKu.',
+                        'type' => 'success',
+                        'target_url' => '/student/history',
+                        'is_read' => false,
+                    ]
+                );
             }
 
             return response()->json([

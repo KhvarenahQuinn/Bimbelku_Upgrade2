@@ -268,13 +268,17 @@ class TeacherAssignmentService
                 ],
             ]);
 
-            Notification::create([
-                'user_id' => $teacher->id,
-                'title' => 'Penetapan kelas oleh admin',
-                'message' => "Admin menetapkan Anda untuk {$lockedRequest->subject_name}. Buka jadwal dan ruang kelas untuk memeriksa detail.",
-                'type' => 'info',
-                'target_url' => '/guru/kelas',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "teacher-assignment:{$manualOffer->id}:{$teacher->id}"],
+                [
+                    'user_id' => $teacher->id,
+                    'title' => 'Penetapan kelas oleh admin',
+                    'message' => "Admin menetapkan Anda untuk {$lockedRequest->subject_name}. Buka jadwal dan ruang kelas untuk memeriksa detail.",
+                    'type' => 'info',
+                    'target_url' => '/guru/kelas',
+                    'is_read' => false,
+                ]
+            );
 
             return [
                 'assignment' => $assignment,

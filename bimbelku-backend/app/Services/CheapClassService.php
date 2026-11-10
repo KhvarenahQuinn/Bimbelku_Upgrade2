@@ -689,13 +689,17 @@ class CheapClassService
                 $class->update(['status' => 'registration_closed']);
             }
 
-            Notification::create([
-                'user_id' => $student->id,
-                'title' => 'Kursi Kelas Kelompok ditahan',
-                'message' => 'Selesaikan pembayaran sebelum '.$seatExpiresAt->translatedFormat('d M Y, H:i').' WIB agar kursi tetap aman.',
-                'type' => 'info',
-                'target_url' => '/payment',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "cheap-class-seat-held:{$enrollment->id}:{$student->id}"],
+                [
+                    'user_id' => $student->id,
+                    'title' => 'Kursi Kelas Kelompok ditahan',
+                    'message' => 'Selesaikan pembayaran sebelum '.$seatExpiresAt->translatedFormat('d M Y, H:i').' WIB agar kursi tetap aman.',
+                    'type' => 'info',
+                    'target_url' => '/payment',
+                    'is_read' => false,
+                ]
+            );
 
             return [$enrollment->fresh('cheapClass'), $order->fresh()];
         }, 3);
@@ -775,13 +779,17 @@ class CheapClassService
         }, 3);
 
         if ($path) {
-            User::query()->where('role', 'admin')->pluck('id')->each(fn (int $adminId) => Notification::create([
-                'user_id' => $adminId,
-                'title' => 'Bukti Kelas Kelompok masuk',
-                'message' => "Tagihan {$order->order_id} menunggu verifikasi.",
-                'type' => 'info',
-                'target_url' => '/admin/finance?tab=payments',
-            ]));
+            User::query()->where('role', 'admin')->pluck('id')->each(fn (int $adminId) => Notification::updateOrCreate(
+                ['unique_key' => "cheap-class-proof-received:{$order->id}:{$adminId}"],
+                [
+                    'user_id' => $adminId,
+                    'title' => 'Bukti Kelas Kelompok masuk',
+                    'message' => "Tagihan {$order->order_id} menunggu verifikasi.",
+                    'type' => 'info',
+                    'target_url' => '/admin/finance?tab=payments',
+                    'is_read' => false,
+                ]
+            ));
         }
     }
 
@@ -817,13 +825,17 @@ class CheapClassService
                         'verified_by' => $admin?->id,
                     ]);
                     $enrollment->update(['status' => 'cancelled']);
-                    Notification::create([
-                        'user_id' => $lockedOrder->user_id,
-                        'title' => 'Pembatalan Kelas Kelompok selesai',
-                        'message' => 'Bukti transfer tidak disetujui admin sehingga pembatalan selesai tanpa proses refund.',
-                        'type' => 'info',
-                        'target_url' => '/student/history',
-                    ]);
+                    Notification::updateOrCreate(
+                        ['unique_key' => "cheap-class-cancel-no-refund:{$lockedOrder->id}:{$lockedOrder->user_id}"],
+                        [
+                            'user_id' => $lockedOrder->user_id,
+                            'title' => 'Pembatalan Kelas Kelompok selesai',
+                            'message' => 'Bukti transfer tidak disetujui admin sehingga pembatalan selesai tanpa proses refund.',
+                            'type' => 'info',
+                            'target_url' => '/student/history',
+                            'is_read' => false,
+                        ]
+                    );
 
                     return ['message' => 'Bukti ditolak dan pembatalan kelas diselesaikan tanpa refund.'];
                 }
@@ -841,15 +853,19 @@ class CheapClassService
                 if (! $canResubmit) {
                     $this->reopenRegistrationIfSeatAvailable($class);
                 }
-                Notification::create([
-                    'user_id' => $lockedOrder->user_id,
-                    'title' => $canResubmit ? 'Bukti pembayaran ditolak' : 'Bukti pembayaran tidak dapat dilanjutkan',
-                    'message' => $canResubmit
-                        ? 'Bukti perlu dikirim ulang sebelum batas kursi berakhir: '.$reason
-                        : 'Bukti ditolak setelah masa pembayaran berakhir: '.$reason,
-                    'type' => 'warning',
-                    'target_url' => '/student/history',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "cheap-class-proof-rejected:{$lockedOrder->id}:{$lockedOrder->verified_at?->timestamp}"],
+                    [
+                        'user_id' => $lockedOrder->user_id,
+                        'title' => $canResubmit ? 'Bukti pembayaran ditolak' : 'Bukti pembayaran tidak dapat dilanjutkan',
+                        'message' => $canResubmit
+                            ? 'Bukti perlu dikirim ulang sebelum batas kursi berakhir: '.$reason
+                            : 'Bukti ditolak setelah masa pembayaran berakhir: '.$reason,
+                        'type' => 'warning',
+                        'target_url' => '/student/history',
+                        'is_read' => false,
+                    ]
+                );
 
                 return ['message' => $canResubmit ? 'Pembayaran ditolak. Murid masih dapat mengirim ulang.' : 'Pembayaran ditolak dan kursi berakhir.'];
             }
@@ -878,13 +894,17 @@ class CheapClassService
                     'Pembayaran Kelas Kelompok belum selesai diverifikasi sebelum sesi pertama dimulai'
                 );
                 $enrollment->update(['status' => 'refund_pending']);
-                Notification::create([
-                    'user_id' => $lockedOrder->user_id,
-                    'title' => 'Pembayaran terlambat diverifikasi',
-                    'message' => 'Sesi pertama sudah dimulai sebelum kelas dikonfirmasi. Dana masuk antrean refund penuh.',
-                    'type' => 'warning',
-                    'target_url' => '/student/history',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "cheap-class-late-verification-refund:{$lockedOrder->id}:{$lockedOrder->user_id}"],
+                    [
+                        'user_id' => $lockedOrder->user_id,
+                        'title' => 'Pembayaran terlambat diverifikasi',
+                        'message' => 'Sesi pertama sudah dimulai sebelum kelas dikonfirmasi. Dana masuk antrean refund penuh.',
+                        'type' => 'warning',
+                        'target_url' => '/student/history',
+                        'is_read' => false,
+                    ]
+                );
 
                 return [
                     'message' => 'Pembayaran valid, tetapi sesi pertama sudah dimulai. Refund penuh masuk antrean admin.',
@@ -900,13 +920,17 @@ class CheapClassService
                     'Kelas Kelompok dibatalkan sistem sebelum bukti pembayaran selesai diperiksa'
                 );
                 $enrollment->update(['status' => 'refund_pending']);
-                Notification::create([
-                    'user_id' => $lockedOrder->user_id,
-                    'title' => 'Pembayaran masuk antrean refund',
-                    'message' => 'Bukti transfer dinyatakan valid setelah kelas dibatalkan. Dana dikembalikan penuh melalui proses refund admin.',
-                    'type' => 'warning',
-                    'target_url' => '/student/history',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "cheap-class-cancelled-payment-refund:{$lockedOrder->id}:{$lockedOrder->user_id}"],
+                    [
+                        'user_id' => $lockedOrder->user_id,
+                        'title' => 'Pembayaran masuk antrean refund',
+                        'message' => 'Bukti transfer dinyatakan valid setelah kelas dibatalkan. Dana dikembalikan penuh melalui proses refund admin.',
+                        'type' => 'warning',
+                        'target_url' => '/student/history',
+                        'is_read' => false,
+                    ]
+                );
 
                 return [
                     'message' => 'Pembayaran valid pada kelas yang sudah dibatalkan. Refund penuh masuk antrean admin.',
@@ -926,13 +950,17 @@ class CheapClassService
                     'Pembayaran Kelas Kelompok melebihi kapasitas maksimum kelas'
                 );
                 $enrollment->update(['status' => 'refund_pending']);
-                Notification::create([
-                    'user_id' => $lockedOrder->user_id,
-                    'title' => 'Pembayaran dikembalikan karena kuota penuh',
-                    'message' => 'Transfer dinyatakan valid, tetapi kapasitas kelas sudah penuh. Dana masuk antrean refund penuh.',
-                    'type' => 'warning',
-                    'target_url' => '/student/history',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "cheap-class-over-capacity-refund:{$lockedOrder->id}:{$lockedOrder->user_id}"],
+                    [
+                        'user_id' => $lockedOrder->user_id,
+                        'title' => 'Pembayaran dikembalikan karena kuota penuh',
+                        'message' => 'Transfer dinyatakan valid, tetapi kapasitas kelas sudah penuh. Dana masuk antrean refund penuh.',
+                        'type' => 'warning',
+                        'target_url' => '/student/history',
+                        'is_read' => false,
+                    ]
+                );
 
                 return [
                     'message' => 'Pembayaran valid, tetapi kuota maksimum sudah terisi. Refund penuh masuk antrean admin.',
@@ -941,13 +969,17 @@ class CheapClassService
 
             $enrollment->update(['status' => 'confirmed', 'confirmed_at' => now()]);
 
-            Notification::create([
-                'user_id' => $lockedOrder->user_id,
-                'title' => 'Pembayaran Kelas Kelompok diterima',
-                'message' => 'Pembayaran diterima. Kelas akan dikonfirmasi setelah pendaftaran ditutup dan kuota minimum terpenuhi.',
-                'type' => 'success',
-                'target_url' => '/student/kelas-murah',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "cheap-class-payment-received:{$lockedOrder->id}:{$lockedOrder->user_id}"],
+                [
+                    'user_id' => $lockedOrder->user_id,
+                    'title' => 'Pembayaran Kelas Kelompok diterima',
+                    'message' => 'Pembayaran diterima. Kelas akan dikonfirmasi setelah pendaftaran ditutup dan kuota minimum terpenuhi.',
+                    'type' => 'success',
+                    'target_url' => '/student/kelas-murah',
+                    'is_read' => false,
+                ]
+            );
 
             // Kuota maksimum menutup pendaftaran lebih cepat. Ketika bukti
             // terakhir sudah diverifikasi, kelas tidak perlu menunggu sampai
@@ -1092,21 +1124,29 @@ class CheapClassService
                 }
                 $class->update(['status' => 'confirmed', 'confirmed_at' => now()]);
                 foreach ($paid as $enrollment) {
-                    Notification::create([
-                        'user_id' => $enrollment->student_id,
-                        'title' => 'Kelas Kelompok dikonfirmasi',
-                        'message' => 'Kuota minimum terpenuhi. Tutor dan tautan Zoom kini dapat dibuka pada Kelas Kelompok.',
-                        'type' => 'success',
-                        'target_url' => '/student/kelas-murah',
-                    ]);
+                    Notification::updateOrCreate(
+                        ['unique_key' => "cheap-class-confirmed:{$class->id}:{$enrollment->student_id}"],
+                        [
+                            'user_id' => $enrollment->student_id,
+                            'title' => 'Kelas Kelompok dikonfirmasi',
+                            'message' => 'Kuota minimum terpenuhi. Tutor dan tautan Zoom kini dapat dibuka pada Kelas Kelompok.',
+                            'type' => 'success',
+                            'target_url' => '/student/kelas-murah',
+                            'is_read' => false,
+                        ]
+                    );
                 }
-                Notification::create([
-                    'user_id' => $class->teacher_id,
-                    'title' => 'Kelas Kelompok dikonfirmasi',
-                    'message' => "Kelas {$this->subjectSummary($class)} sudah dikonfirmasi. Lengkapi tautan Zoom sebelum sesi dimulai.",
-                    'type' => 'success',
-                    'target_url' => '/guru/kelas-murah',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "cheap-class-confirmed-teacher:{$class->id}:{$class->teacher_id}"],
+                    [
+                        'user_id' => $class->teacher_id,
+                        'title' => 'Kelas Kelompok dikonfirmasi',
+                        'message' => "Kelas {$this->subjectSummary($class)} sudah dikonfirmasi. Lengkapi tautan Zoom sebelum sesi dimulai.",
+                        'type' => 'success',
+                        'target_url' => '/guru/kelas-murah',
+                        'is_read' => false,
+                    ]
+                );
 
                 return;
             }
@@ -1153,13 +1193,17 @@ class CheapClassService
                     $order?->update(['status' => 'cancelled']);
                     $enrollment->update(['status' => 'cancelled', 'cancelled_at' => now()]);
                 }
-                Notification::create([
-                    'user_id' => $enrollment->student_id,
-                    'title' => 'Kelas Kelompok dibatalkan',
-                    'message' => $reason,
-                    'type' => 'warning',
-                    'target_url' => '/student/history',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "cheap-class-cancelled:{$lockedClass->id}:{$enrollment->id}"],
+                    [
+                        'user_id' => $enrollment->student_id,
+                        'title' => 'Kelas Kelompok dibatalkan',
+                        'message' => $reason,
+                        'type' => 'warning',
+                        'target_url' => '/student/history',
+                        'is_read' => false,
+                    ]
+                );
             }
             $lockedClass->update([
                 'status' => 'cancelled',
@@ -1496,13 +1540,17 @@ class CheapClassService
                         ) {
                             $class->update(['status' => 'open']);
                         }
-                        Notification::create([
-                            'user_id' => $locked->student_id,
-                            'title' => 'Kursi Kelas Kelompok dilepas',
-                            'message' => 'Bukti pembayaran belum masuk sebelum batas satu jam berakhir.',
-                            'type' => 'warning',
-                            'target_url' => '/student/kelas-murah',
-                        ]);
+                        Notification::updateOrCreate(
+                            ['unique_key' => "cheap-class-seat-released:{$locked->id}:{$locked->student_id}"],
+                            [
+                                'user_id' => $locked->student_id,
+                                'title' => 'Kursi Kelas Kelompok dilepas',
+                                'message' => 'Bukti pembayaran belum masuk sebelum batas satu jam berakhir.',
+                                'type' => 'warning',
+                                'target_url' => '/student/kelas-murah',
+                                'is_read' => false,
+                            ]
+                        );
                         $count++;
                     }, 3);
                 }

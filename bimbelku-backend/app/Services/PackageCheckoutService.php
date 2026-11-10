@@ -216,13 +216,17 @@ class PackageCheckoutService
                         'package_subject_id' => $updatedRequest->package_subject_id,
                     ],
                 ]);
-                Notification::create([
-                    'user_id' => $preferred->id,
-                    'title' => 'Permintaan perpanjangan tutor',
-                    'message' => "Murid lama ingin melanjutkan {$lockedRequest->subject_name}. Periksa seluruh jadwal paket.",
-                    'type' => 'info',
-                    'target_url' => '/guru/permintaan',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "package-renewal-offer:{$offer->id}:{$preferred->id}"],
+                    [
+                        'user_id' => $preferred->id,
+                        'title' => 'Permintaan perpanjangan tutor',
+                        'message' => "Murid lama ingin melanjutkan {$lockedRequest->subject_name}. Periksa seluruh jadwal paket.",
+                        'type' => 'info',
+                        'target_url' => '/guru/permintaan',
+                        'is_read' => false,
+                    ]
+                );
 
                 return $offer;
             }, 3)
@@ -312,13 +316,17 @@ class PackageCheckoutService
                 'status' => 'cancelled',
                 'responded_at' => now(),
             ]);
-            $closedTeacherIds->each(fn (int $teacherId) => Notification::create([
-                'user_id' => $teacherId,
-                'title' => 'Permintaan sudah diambil tutor lain',
-                'message' => "Permintaan {$request->subject_name} sudah diterima tutor lain. Tidak ada tindakan yang perlu dilakukan.",
-                'type' => 'info',
-                'target_url' => '/guru/permintaan?scope=history',
-            ]));
+            $closedTeacherIds->each(fn (int $teacherId) => Notification::updateOrCreate(
+                ['unique_key' => "booking-offer-closed:{$request->id}:{$teacherId}"],
+                [
+                    'user_id' => $teacherId,
+                    'title' => 'Permintaan sudah diambil tutor lain',
+                    'message' => "Permintaan {$request->subject_name} sudah diterima tutor lain. Tidak ada tindakan yang perlu dilakukan.",
+                    'type' => 'info',
+                    'target_url' => '/guru/permintaan?scope=history',
+                    'is_read' => false,
+                ]
+            ));
             $request->update([
                 'status' => 'teacher_selected',
                 'matched_teacher_id' => $teacher->id,
@@ -344,13 +352,17 @@ class PackageCheckoutService
             $allAccepted = $package->subjects->every(fn (PackageSubject $item) => $item->status === 'accepted');
             if (! $allAccepted) {
                 $package->update(['status' => 'teacher_pending']);
-                Notification::create([
-                    'user_id' => $package->student_id,
-                    'title' => 'Tutor paket ditemukan',
-                    'message' => "{$teacher->name} menerima {$subject->subject_name}. Pencarian mapel lain masih berjalan.",
-                    'type' => 'success',
-                    'target_url' => '/student/packages',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "package-subject-matched:{$subject->id}:{$package->student_id}"],
+                    [
+                        'user_id' => $package->student_id,
+                        'title' => 'Tutor paket ditemukan',
+                        'message' => "{$teacher->name} menerima {$subject->subject_name}. Pencarian mapel lain masih berjalan.",
+                        'type' => 'success',
+                        'target_url' => '/student/packages',
+                        'is_read' => false,
+                    ]
+                );
 
                 return ['package' => $package->fresh('subjects.assignedTeacher'), 'package_activated' => false];
             }
@@ -420,13 +432,17 @@ class PackageCheckoutService
                         'status' => 'pending',
                     ]
                 );
-                Notification::create([
-                    'user_id' => $package->student_id,
-                    'title' => 'Pembayaran paket masuk antrean refund',
-                    'message' => 'Bukti diterima setelah sesi pertama dimulai. Dana dikembalikan penuh dan voucher tersedia kembali.',
-                    'type' => 'warning',
-                    'target_url' => '/student/history',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "package-late-payment-refund:{$lockedOrder->id}:{$package->student_id}"],
+                    [
+                        'user_id' => $package->student_id,
+                        'title' => 'Pembayaran paket masuk antrean refund',
+                        'message' => 'Bukti diterima setelah sesi pertama dimulai. Dana dikembalikan penuh dan voucher tersedia kembali.',
+                        'type' => 'warning',
+                        'target_url' => '/student/history',
+                        'is_read' => false,
+                    ]
+                );
 
                 return [];
             }
@@ -493,13 +509,17 @@ class PackageCheckoutService
                 ->where('status', 'reserved')
                 ->update(['status' => 'used', 'used_at' => now(), 'order_id' => $lockedOrder->id]);
 
-            Notification::create([
-                'user_id' => $package->student_id,
-                'title' => 'Pembayaran diterima',
-                'message' => "Pembayaran {$package->package_code} diterima. Sistem mulai mencari tutor untuk setiap mata pelajaran.",
-                'type' => 'success',
-                'target_url' => '/student/packages',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "package-payment-received:{$lockedOrder->id}:{$package->student_id}"],
+                [
+                    'user_id' => $package->student_id,
+                    'title' => 'Pembayaran diterima',
+                    'message' => "Pembayaran {$package->package_code} diterima. Sistem mulai mencari tutor untuk setiap mata pelajaran.",
+                    'type' => 'success',
+                    'target_url' => '/student/packages',
+                    'is_read' => false,
+                ]
+            );
 
             return $package->subjects->pluck('id')->all();
         }, 3);
@@ -541,13 +561,17 @@ class PackageCheckoutService
                     $subject->sessions()->update(['status' => 'payment_rejected']);
                     $subject->bookingRequest?->update(['status' => 'payment_rejected']);
                 });
-            Notification::create([
-                'user_id' => $lockedOrder->user_id,
-                'title' => 'Pembayaran paket ditolak',
-                'message' => 'Bukti pembayaran ditolak: '.$reason,
-                'type' => 'warning',
-                'target_url' => '/student/packages',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "package-payment-rejected:{$lockedOrder->id}:{$lockedOrder->user_id}"],
+                [
+                    'user_id' => $lockedOrder->user_id,
+                    'title' => 'Pembayaran paket ditolak',
+                    'message' => 'Bukti pembayaran ditolak: '.$reason,
+                    'type' => 'warning',
+                    'target_url' => '/student/packages',
+                    'is_read' => false,
+                ]
+            );
         }, 3);
     }
 
@@ -632,13 +656,17 @@ class PackageCheckoutService
 
         $package->update(['status' => 'awaiting_payment', 'payment_due_at' => $paymentDueAt]);
 
-        Notification::create([
-            'user_id' => $package->student_id,
-            'title' => 'Tagihan paket tersedia',
-            'message' => "Periksa dan bayar paket {$package->package_code}. Pencarian tutor dimulai setelah pembayaran diterima.",
-            'type' => 'success',
-            'target_url' => '/student/packages',
-        ]);
+        Notification::updateOrCreate(
+            ['unique_key' => "package-invoice:{$order->id}:{$package->student_id}"],
+            [
+                'user_id' => $package->student_id,
+                'title' => 'Tagihan paket tersedia',
+                'message' => "Periksa dan bayar paket {$package->package_code}. Pencarian tutor dimulai setelah pembayaran diterima.",
+                'type' => 'success',
+                'target_url' => '/student/packages',
+                'is_read' => false,
+            ]
+        );
 
         return $order->fresh(['booking', 'learningPackage']);
     }
@@ -760,25 +788,33 @@ class PackageCheckoutService
             ->whereIn('status', ['requested', 'tutor_accepted'])
             ->update(['status' => 'completed']);
 
-        Notification::create([
-            'user_id' => $package->student_id,
-            'title' => 'Semua tutor ditemukan',
-            'message' => "Paket {$package->package_code} aktif. Seluruh sesi sudah masuk ke Kelas Saya.",
-            'type' => 'success',
-            'target_url' => '/student/my-classes',
-        ]);
+        Notification::updateOrCreate(
+            ['unique_key' => "package-active:{$package->id}:{$package->student_id}"],
+            [
+                'user_id' => $package->student_id,
+                'title' => 'Semua tutor ditemukan',
+                'message' => "Paket {$package->package_code} aktif. Seluruh sesi sudah masuk ke Kelas Saya.",
+                'type' => 'success',
+                'target_url' => '/student/my-classes',
+                'is_read' => false,
+            ]
+        );
 
         $package->subjects
             ->groupBy('assigned_teacher_id')
             ->each(function ($subjects, $teacherId) use ($package) {
                 $subjectNames = $subjects->pluck('subject_name')->filter()->unique()->join(', ');
-                Notification::create([
-                    'user_id' => (int) $teacherId,
-                    'title' => 'Kelas baru aktif',
-                    'message' => "Pembayaran paket {$package->package_code} sudah diterima. Jadwal {$subjectNames} kini tersedia di Kelas Saya.",
-                    'type' => 'success',
-                    'target_url' => '/guru/kelas',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "package-class-active:{$package->id}:{$teacherId}"],
+                    [
+                        'user_id' => (int) $teacherId,
+                        'title' => 'Kelas baru aktif',
+                        'message' => "Pembayaran paket {$package->package_code} sudah diterima. Jadwal {$subjectNames} kini tersedia di Kelas Saya.",
+                        'type' => 'success',
+                        'target_url' => '/guru/kelas',
+                        'is_read' => false,
+                    ]
+                );
             });
     }
 

@@ -86,13 +86,17 @@ class TeacherMatchingService
                     'after_state' => ['status' => 'no_teacher', 'search_radius_km' => (int) $bookingRequest->search_radius_km],
                     'metadata' => $failure,
                 ]);
-                Notification::create([
-                    'user_id' => $bookingRequest->student_id,
-                    'title' => 'Batas pencarian tutor berakhir',
-                    'message' => $failure['message'],
-                    'type' => 'warning',
-                    'target_url' => '/student/packages',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "matching-exhausted:{$bookingRequest->id}:{$bookingRequest->student_id}"],
+                    [
+                        'user_id' => $bookingRequest->student_id,
+                        'title' => 'Batas pencarian tutor berakhir',
+                        'message' => $failure['message'],
+                        'type' => 'warning',
+                        'target_url' => '/student/packages',
+                        'is_read' => false,
+                    ]
+                );
             }
             $bookingRequest->packageSubject?->update(['status' => 'no_teacher']);
             $this->updateRequestGroup($bookingRequest, [
@@ -230,24 +234,32 @@ class TeacherMatchingService
             ]);
 
             if ($firstWaitingNotice) {
-                Notification::create([
-                    'user_id' => $bookingRequest->student_id,
-                    'title' => 'Masih mencari tutor',
-                    'message' => 'Belum ada tutor yang tersedia. Sistem akan memeriksa kandidat baru secara otomatis dan admin sudah diberi tahu.',
-                    'type' => 'warning',
-                    'target_url' => '/student/packages',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "matching-waiting:{$bookingRequest->id}:{$bookingRequest->student_id}"],
+                    [
+                        'user_id' => $bookingRequest->student_id,
+                        'title' => 'Masih mencari tutor',
+                        'message' => 'Belum ada tutor yang tersedia. Sistem akan memeriksa kandidat baru secara otomatis dan admin sudah diberi tahu.',
+                        'type' => 'warning',
+                        'target_url' => '/student/packages',
+                        'is_read' => false,
+                    ]
+                );
                 User::query()
                     ->where('role', 'admin')
                     ->where('status', 'active')
                     ->pluck('id')
-                    ->each(fn (int $adminId) => Notification::create([
-                        'user_id' => $adminId,
-                        'title' => 'Pencarian tutor membutuhkan perhatian',
-                        'message' => "Permintaan #{$bookingRequest->id} belum memiliki kandidat tutor yang tersedia.",
-                        'type' => 'warning',
-                        'target_url' => '/admin/tutor-searches',
-                    ]));
+                    ->each(fn (int $adminId) => Notification::updateOrCreate(
+                        ['unique_key' => "matching-admin-attention:{$bookingRequest->id}:{$adminId}"],
+                        [
+                            'user_id' => $adminId,
+                            'title' => 'Pencarian tutor membutuhkan perhatian',
+                            'message' => "Permintaan #{$bookingRequest->id} belum memiliki kandidat tutor yang tersedia.",
+                            'type' => 'warning',
+                            'target_url' => '/admin/tutor-searches',
+                            'is_read' => false,
+                        ]
+                    ));
             }
 
             return null;
@@ -347,13 +359,17 @@ class TeacherMatchingService
         }
 
         $offers->each(function (TeacherOffer $offer) use ($bookingRequest, $expiresAt) {
-            Notification::create([
-                'user_id' => $offer->teacher_id,
-                'title' => 'Permintaan bimbel baru',
-                'message' => "Permintaan {$bookingRequest->subject_name} menunggu jawaban sampai {$expiresAt->translatedFormat('d M Y, H:i')} WIB. Terima sebelum batas waktu jika jadwal ini sesuai.",
-                'type' => 'info',
-                'target_url' => '/guru/permintaan',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "booking-offer:{$offer->id}:{$offer->teacher_id}"],
+                [
+                    'user_id' => $offer->teacher_id,
+                    'title' => 'Permintaan bimbel baru',
+                    'message' => "Permintaan {$bookingRequest->subject_name} menunggu jawaban sampai {$expiresAt->translatedFormat('d M Y, H:i')} WIB. Terima sebelum batas waktu jika jadwal ini sesuai.",
+                    'type' => 'info',
+                    'target_url' => '/guru/permintaan',
+                    'is_read' => false,
+                ]
+            );
         });
 
         return $offers->first();
@@ -1212,13 +1228,17 @@ class TeacherMatchingService
             return;
         }
 
-        Notification::create([
-            'user_id' => $offer->teacher_id,
-            'title' => 'Penerimaan murid dibatasi',
-            'message' => "Permintaan tidak dijawab. Penawaran baru dihentikan selama {$result['hours']} jam.",
-            'type' => 'warning',
-            'target_url' => '/guru/permintaan',
-        ]);
+        Notification::updateOrCreate(
+            ['unique_key' => "teacher-acceptance-limited:{$offer->id}:{$offer->teacher_id}"],
+            [
+                'user_id' => $offer->teacher_id,
+                'title' => 'Penerimaan murid dibatasi',
+                'message' => "Permintaan tidak dijawab. Penawaran baru dihentikan selama {$result['hours']} jam.",
+                'type' => 'warning',
+                'target_url' => '/guru/permintaan',
+                'is_read' => false,
+            ]
+        );
     }
 
     private function matchingFailureContext(BookingRequest $bookingRequest, Collection $alreadyOffered): array

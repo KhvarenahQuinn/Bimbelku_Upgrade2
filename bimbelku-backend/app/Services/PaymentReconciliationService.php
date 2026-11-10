@@ -106,15 +106,19 @@ class PaymentReconciliationService
                         'seat_expires_at' => $lockedOrder->top_up_due_at,
                     ]);
                 }
-                Notification::create([
-                    'user_id' => $lockedOrder->user_id,
-                    'title' => 'Pembayaran masih kurang',
-                    'message' => 'Dana masuk Rp'.number_format($receivedTotal, 0, ',', '.')
-                        .' telah dicatat. Tambahkan Rp'.number_format($outstanding, 0, ',', '.')
-                        .' sebelum '.$lockedOrder->top_up_due_at->format('d/m/Y H:i').'.',
-                    'type' => 'warning',
-                    'target_url' => '/payment',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "payment-underpaid:{$lockedOrder->id}:{$lockedOrder->user_id}"],
+                    [
+                        'user_id' => $lockedOrder->user_id,
+                        'title' => 'Pembayaran masih kurang',
+                        'message' => 'Dana masuk Rp'.number_format($receivedTotal, 0, ',', '.')
+                            .' telah dicatat. Tambahkan Rp'.number_format($outstanding, 0, ',', '.')
+                            .' sebelum '.$lockedOrder->top_up_due_at->format('d/m/Y H:i').'.',
+                        'type' => 'warning',
+                        'target_url' => '/payment',
+                        'is_read' => false,
+                    ]
+                );
             }
 
             return compact('result', 'outstanding', 'surplus') + [
@@ -170,14 +174,18 @@ class PaymentReconciliationService
             ]);
             $lockedOrder->learningPackage?->update(['status' => 'partially_paid']);
             $lockedOrder->cheapClassEnrollment?->update(['status' => 'partially_paid']);
-            Notification::create([
-                'user_id' => $lockedOrder->user_id,
-                'title' => 'Bukti tambahan ditolak',
-                'message' => 'Dana yang sebelumnya sudah diterima tetap tercatat. Unggah bukti baru untuk melunasi sisa Rp'
-                    .number_format((float) $lockedOrder->payment_outstanding_amount, 0, ',', '.').'. Alasan: '.$reason,
-                'type' => 'warning',
-                'target_url' => '/payment',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "payment-proof-rejected:{$lockedOrder->id}:{$submission?->id}:{$lockedOrder->user_id}"],
+                [
+                    'user_id' => $lockedOrder->user_id,
+                    'title' => 'Bukti tambahan ditolak',
+                    'message' => 'Dana yang sebelumnya sudah diterima tetap tercatat. Unggah bukti baru untuk melunasi sisa Rp'
+                        .number_format((float) $lockedOrder->payment_outstanding_amount, 0, ',', '.').'. Alasan: '.$reason,
+                    'type' => 'warning',
+                    'target_url' => '/payment',
+                    'is_read' => false,
+                ]
+            );
 
             return true;
         }, 3);
@@ -202,14 +210,18 @@ class PaymentReconciliationService
                 'payment_outstanding_amount' => 0,
                 'top_up_due_at' => null,
             ]);
-            Notification::create([
-                'user_id' => $lockedOrder->user_id,
-                'title' => 'Batas top-up berakhir',
-                'message' => 'Dana parsial Rp'.number_format($amount, 0, ',', '.')
-                    .' dikembalikan ke Saldo BimbelKu dan dapat digunakan untuk pembayaran berikutnya.',
-                'type' => 'warning',
-                'target_url' => '/student/history',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "payment-topup-expired:{$lockedOrder->id}:{$lockedOrder->user_id}"],
+                [
+                    'user_id' => $lockedOrder->user_id,
+                    'title' => 'Batas top-up berakhir',
+                    'message' => 'Dana parsial Rp'.number_format($amount, 0, ',', '.')
+                        .' dikembalikan ke Saldo BimbelKu dan dapat digunakan untuk pembayaran berikutnya.',
+                    'type' => 'warning',
+                    'target_url' => '/student/history',
+                    'is_read' => false,
+                ]
+            );
 
             return true;
         }, 3);

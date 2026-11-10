@@ -114,6 +114,9 @@ const ATTENTION_GROUPS: Partial<Record<AttentionRole, Record<string, string>>> =
   },
   teacher: {
     teacher_new_offer: "teacher-offers",
+    teacher_class_changed: "teacher-classes",
+    teacher_schedule_changed: "teacher-schedule",
+    teacher_class_cancelled: "teacher-classes",
     teacher_payout_changed: "teacher-wallet",
     teacher_payout_failed: "teacher-wallet",
   },
