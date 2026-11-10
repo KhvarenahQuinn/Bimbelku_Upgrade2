@@ -608,24 +608,33 @@ class TeacherController extends Controller
         }, 3);
 
         if ($result['changed']) {
-            Notification::create([
-                'user_id' => $user->id,
-                'title' => 'Rekening pencairan diubah',
-                'message' => 'Pencairan ditahan sementara untuk melindungi saldo setelah perubahan rekening.',
-                'type' => 'warning',
-                'target_url' => '/guru/rekening',
-            ]);
+            $bankChangeKey = 'teacher-bank-changed:'.$user->id.':'.$result['payout_hold_until'];
+            Notification::updateOrCreate(
+                ['unique_key' => $bankChangeKey],
+                [
+                    'user_id' => $user->id,
+                    'title' => 'Rekening pencairan diubah',
+                    'message' => 'Pencairan ditahan sementara untuk melindungi saldo setelah perubahan rekening.',
+                    'type' => 'warning',
+                    'target_url' => '/guru/rekening',
+                    'is_read' => false,
+                ]
+            );
             User::query()
                 ->where('role', 'admin')
                 ->where('status', 'active')
                 ->pluck('id')
-                ->each(fn ($adminId) => Notification::create([
-                    'user_id' => $adminId,
-                    'title' => 'Perubahan rekening tutor',
-                    'message' => "Rekening pencairan {$user->name} berubah. Pencairan ditahan sementara.",
-                    'type' => 'warning',
-                    'target_url' => '/admin/finance?tab=payouts',
-                ]));
+                ->each(fn ($adminId) => Notification::updateOrCreate(
+                    ['unique_key' => 'teacher-bank-changed-admin:'.$bankChangeKey.':'.$adminId],
+                    [
+                        'user_id' => $adminId,
+                        'title' => 'Perubahan rekening tutor',
+                        'message' => "Rekening pencairan {$user->name} berubah. Pencairan ditahan sementara.",
+                        'type' => 'warning',
+                        'target_url' => '/admin/finance?tab=payouts',
+                        'is_read' => false,
+                    ]
+                ));
         }
 
         return response()->json([

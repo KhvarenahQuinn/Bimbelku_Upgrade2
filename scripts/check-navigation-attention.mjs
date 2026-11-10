@@ -54,4 +54,17 @@ expect(
 expect(matching.includes("Permintaan bimbel baru") && matching.includes("'/guru/permintaan'"), "permintaan baru menyalakan indikator Permintaan Bimbel tutor");
 expect(checkout.includes("Pembayaran diterima") && checkout.includes("'/student/packages'"), "pembayaran paket menyalakan indikator Proses Pesanan tanpa memerahkan Jadwal Belajar");
 
+expect(
+  helper.includes("teacher_class_changed") && helper.includes("teacher-classes"),
+  "key perubahan kelas tutor dipetakan ke menu Kelas Saya",
+);
+expect(
+  helper.includes("student_refund_status_changed") && helper.includes("student-history"),
+  "key refund murid dipetakan ke Riwayat Pembayaran",
+);
+expect(
+  notificationController.includes("whereNull('invalidated_at')"),
+  "notifikasi tidak valid tidak dihitung sebagai unread",
+);
+
 console.log("Navigation attention Revisi 7 lulus pemeriksaan source-level.");

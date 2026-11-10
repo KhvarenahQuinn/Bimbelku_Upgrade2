@@ -337,13 +337,17 @@ class RefundService
             }
 
             // Notify cancelled tutors
-            $teacherIds->filter()->unique()->each(fn (int $teacherId) => Notification::create([
-                'user_id' => $teacherId,
-                'title' => 'Permintaan paket dibatalkan',
-                'message' => "Murid membatalkan pencarian paket {$package->package_code}. Penawaran tidak lagi aktif.",
-                'type' => 'info',
-                'target_url' => '/guru/permintaan',
-            ]));
+            $teacherIds->filter()->unique()->each(fn (int $teacherId) => Notification::updateOrCreate(
+                ['unique_key' => "package-search-cancelled:{$package->id}:{$teacherId}"],
+                [
+                    'user_id' => $teacherId,
+                    'title' => 'Permintaan paket dibatalkan',
+                    'message' => "Murid membatalkan pencarian paket {$package->package_code}. Penawaran tidak lagi aktif.",
+                    'type' => 'info',
+                    'target_url' => '/guru/permintaan',
+                    'is_read' => false,
+                ]
+            ));
 
             $message = match (true) {
                 $isWallet => 'Pencarian dihentikan. Refund dana berhasil ditambahkan langsung ke Saldo BimbelKu.',

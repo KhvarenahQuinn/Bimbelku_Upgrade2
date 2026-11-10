@@ -72,13 +72,17 @@ class TeacherReplacementService
                 ]);
             }
             User::query()->where('role', 'admin')->where('status', 'active')->pluck('id')->each(
-                fn (int $adminId) => Notification::create([
-                    'user_id' => $adminId,
-                    'title' => 'Pengajuan ganti guru',
-                    'message' => "{$student->name} mengajukan penggantian tutor {$lockedSubject->subject_name}.",
-                    'type' => 'warning',
-                    'target_url' => '/admin/cases',
-                ])
+                fn (int $adminId) => Notification::updateOrCreate(
+                    ['unique_key' => "replacement-request:{$replacement->id}:{$adminId}"],
+                    [
+                        'user_id' => $adminId,
+                        'title' => 'Pengajuan ganti guru',
+                        'message' => "{$student->name} mengajukan penggantian tutor {$lockedSubject->subject_name}.",
+                        'type' => 'warning',
+                        'target_url' => '/admin/cases',
+                        'is_read' => false,
+                    ]
+                )
             );
 
             return $replacement->fresh(['sessions', 'oldTeacher']);
@@ -144,15 +148,19 @@ class TeacherReplacementService
                 'review_notes' => $notes,
                 'search_started_at' => now(),
             ]);
-            Notification::create([
-                'user_id' => $locked->student_id,
-                'title' => 'Penggantian guru disetujui',
-                'message' => $needsReschedule
-                    ? 'Sesi tersisa dibekukan. Ubah jadwal karena sesi terdekat kurang dari 24 jam.'
-                    : 'Sesi tersisa dibekukan dan pencarian guru pengganti dimulai.',
-                'type' => 'info',
-                'target_url' => '/student/packages',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "replacement-approved:{$locked->id}:{$locked->student_id}"],
+                [
+                    'user_id' => $locked->student_id,
+                    'title' => 'Penggantian guru disetujui',
+                    'message' => $needsReschedule
+                        ? 'Sesi tersisa dibekukan. Ubah jadwal karena sesi terdekat kurang dari 24 jam.'
+                        : 'Sesi tersisa dibekukan dan pencarian guru pengganti dimulai.',
+                    'type' => 'info',
+                    'target_url' => '/student/packages',
+                    'is_read' => false,
+                ]
+            );
 
             return ['replacement' => $locked->fresh(), 'booking_request' => $request, 'needs_reschedule' => $needsReschedule];
         }, 3);
@@ -169,7 +177,17 @@ class TeacherReplacementService
                 'review_notes' => $notes,
             ]);
             $locked->sessions()->update(['status' => 'cancelled']);
-            Notification::create(['user_id' => $locked->student_id, 'title' => 'Pengajuan ganti guru diperiksa', 'message' => 'Pengajuan tidak disetujui. Lihat catatan admin di detail paket.', 'type' => 'warning', 'target_url' => '/student/my-classes']);
+            Notification::updateOrCreate(
+                ['unique_key' => "replacement-rejected:{$locked->id}:{$locked->student_id}"],
+                [
+                    'user_id' => $locked->student_id,
+                    'title' => 'Pengajuan ganti guru diperiksa',
+                    'message' => 'Pengajuan tidak disetujui. Lihat catatan admin di detail paket.',
+                    'type' => 'warning',
+                    'target_url' => '/student/my-classes',
+                    'is_read' => false,
+                ]
+            );
 
             return $locked->fresh();
         }, 3);
@@ -392,7 +410,17 @@ class TeacherReplacementService
                 'new_teacher_id' => $teacher->id,
                 'completed_at' => now(),
             ]);
-            Notification::create(['user_id' => $replacement->student_id, 'title' => 'Guru pengganti ditemukan', 'message' => "{$teacher->name} akan melanjutkan sesi {$replacement->subject->subject_name} yang tersisa.", 'type' => 'success', 'target_url' => '/student/my-classes']);
+            Notification::updateOrCreate(
+                ['unique_key' => "replacement-completed:{$replacement->id}:{$replacement->student_id}"],
+                [
+                    'user_id' => $replacement->student_id,
+                    'title' => 'Guru pengganti ditemukan',
+                    'message' => "{$teacher->name} akan melanjutkan sesi {$replacement->subject->subject_name} yang tersisa.",
+                    'type' => 'success',
+                    'target_url' => '/student/my-classes',
+                    'is_read' => false,
+                ]
+            );
 
             return ['replacement' => $replacement->fresh(), 'package_activated' => false, 'replacement_completed' => true];
         }, 3);

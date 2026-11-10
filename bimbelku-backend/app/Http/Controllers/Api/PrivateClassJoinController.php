@@ -105,13 +105,17 @@ class PrivateClassJoinController extends Controller
 
             abort_unless($package->classJoins()->where('status', 'pending')->count() < 20, 422, 'Antrean permintaan bergabung sudah penuh. Coba lagi nanti.');
             $join = $package->classJoins()->create(['student_id' => $request->user()->id, 'status' => 'pending']);
-            Notification::create([
-                'user_id' => $package->student_id,
-                'title' => 'Permintaan bergabung kelas',
-                'message' => $request->user()->name.' meminta bergabung ke paket '.$package->package_code.'. Periksa dan setujui di Proses Pesanan.',
-                'type' => 'info',
-                'target_url' => '/student/packages',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "private-class-join-request:{$join->id}:{$package->student_id}"],
+                [
+                    'user_id' => $package->student_id,
+                    'title' => 'Permintaan bergabung kelas',
+                    'message' => $request->user()->name.' meminta bergabung ke paket '.$package->package_code.'. Periksa dan setujui di Proses Pesanan.',
+                    'type' => 'info',
+                    'target_url' => '/student/packages',
+                    'is_read' => false,
+                ]
+            );
 
             return $join;
         });
@@ -138,15 +142,19 @@ class PrivateClassJoinController extends Controller
             }
             $approved = $validated['decision'] === 'approve';
             $join->update(['status' => $approved ? 'approved' : 'rejected', 'decided_at' => now()]);
-            Notification::create([
-                'user_id' => $join->student_id,
-                'title' => $approved ? 'Kamu bergabung ke kelas privat' : 'Permintaan bergabung ditolak',
-                'message' => $approved
-                    ? 'Pemesan menyetujui permintaanmu. Jadwal kelas sekarang ada di Kelas Saya. Absen dan konfirmasi sesi dilakukan pemesan.'
-                    : 'Pemesan tidak menyetujui permintaan bergabung ke paket '.$package->package_code.'.',
-                'type' => $approved ? 'success' : 'info',
-                'target_url' => '/student/my-classes',
-            ]);
+            Notification::updateOrCreate(
+                ['unique_key' => "private-class-join-decision:{$join->id}:{$join->student_id}"],
+                [
+                    'user_id' => $join->student_id,
+                    'title' => $approved ? 'Kamu bergabung ke kelas privat' : 'Permintaan bergabung ditolak',
+                    'message' => $approved
+                        ? 'Pemesan menyetujui permintaanmu. Jadwal kelas sekarang ada di Kelas Saya. Absen dan konfirmasi sesi dilakukan pemesan.'
+                        : 'Pemesan tidak menyetujui permintaan bergabung ke paket '.$package->package_code.'.',
+                    'type' => $approved ? 'success' : 'info',
+                    'target_url' => '/student/my-classes',
+                    'is_read' => false,
+                ]
+            );
         });
 
         return response()->json(['message' => $validated['decision'] === 'approve' ? 'Peserta disetujui dan jadwalnya sudah terhubung.' : 'Permintaan ditolak.']);

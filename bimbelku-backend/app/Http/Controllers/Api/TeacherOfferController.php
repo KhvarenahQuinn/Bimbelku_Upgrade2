@@ -237,13 +237,17 @@ class TeacherOfferController extends Controller
                 $package?->subjects()->each(function ($subject) {
                     $subject->sessions()->whereNotIn('status', ['completed', 'cancelled'])->update(['status' => 'cancelled']);
                 });
-                Notification::create([
-                    'user_id' => $bookingRequest->student_id,
-                    'title' => 'Perpanjangan dibatalkan',
-                    'message' => 'Tutor pilihanmu menolak perpanjangan. Permintaan ini dibatalkan dan tidak dialihkan ke tutor lain.',
-                    'type' => 'warning',
-                    'target_url' => '/student/my-classes?tab=history',
-                ]);
+                Notification::updateOrCreate(
+                    ['unique_key' => "renewal-cancelled:{$bookingRequest->id}:{$bookingRequest->student_id}"],
+                    [
+                        'user_id' => $bookingRequest->student_id,
+                        'title' => 'Perpanjangan dibatalkan',
+                        'message' => 'Tutor pilihanmu menolak perpanjangan. Permintaan ini dibatalkan dan tidak dialihkan ke tutor lain.',
+                        'type' => 'warning',
+                        'target_url' => '/student/my-classes?tab=history',
+                        'is_read' => false,
+                    ]
+                );
 
                 return ['expired' => false, 'renewal_cancelled' => true];
             }
