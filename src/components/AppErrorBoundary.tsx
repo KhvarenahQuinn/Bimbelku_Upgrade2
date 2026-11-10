@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from "react";
+import { clearBrowserSession } from "@/lib/session";
 
 type AppErrorBoundaryProps = {
   children: ReactNode;
@@ -37,8 +38,7 @@ export default class AppErrorBoundary extends Component<
   };
 
   private goToLogin = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    clearBrowserSession();
     sessionStorage.removeItem("bimbelku_payment_order");
     window.location.assign("/login");
   };

@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { canAdmin, permissionForAdminPath } from "@/lib/adminPermissions";
+import { clearBrowserSession } from "@/lib/session";
 
 interface PrivateRouteProps {
   allowedRoles?: string[];
@@ -20,13 +21,14 @@ export default function PrivateRoute({ allowedRoles }: PrivateRouteProps) {
   try {
     user = userString ? JSON.parse(userString) : null;
   } catch {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    clearBrowserSession();
   }
 
   if (!token || !user) {
     const returnTo = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={`/login?redirect=${encodeURIComponent(returnTo)}`} replace />;
+    const isAdminPath = location.pathname === "/admin" || location.pathname.startsWith("/admin/");
+    const loginPath = isAdminPath ? "/admin/login" : "/login";
+    return <Navigate to={`${loginPath}?redirect=${encodeURIComponent(returnTo)}`} replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role || "")) {

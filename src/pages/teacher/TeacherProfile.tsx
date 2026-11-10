@@ -1,4 +1,5 @@
 import { notify } from "@/lib/notify";
+import { clearBrowserSession } from "@/lib/session";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -292,8 +293,7 @@ export default function TeacherProfile() {
       const response = await http.post("/teacher/profile", formData);
       notify.success(response.data.message);
       if (response.data.reverification_required) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
+        clearBrowserSession();
         navigate("/login", { replace: true });
         return;
       }
@@ -360,8 +360,7 @@ export default function TeacherProfile() {
       });
       notify.success(response.data.message);
       if (response.data.reverification_required) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
+        clearBrowserSession();
         navigate("/login", { replace: true });
         return;
       }

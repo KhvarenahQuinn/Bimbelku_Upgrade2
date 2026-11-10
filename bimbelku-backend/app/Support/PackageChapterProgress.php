@@ -59,6 +59,7 @@ final class PackageChapterProgress
     private static function chapterName(?string $chapter): string
     {
         $value = trim((string) ($chapter ?: 'Materi belajar'));
+
         return $value !== '' ? $value : 'Materi belajar';
     }
 }

@@ -1,4 +1,5 @@
 import { notify } from "@/lib/notify";
+import { formatSearchAge } from "@/lib/duration";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -65,10 +66,12 @@ interface SearchItem {
   matching_attempts: number;
   search_started_at?: string | null;
   search_expires_at?: string | null;
+  search_window_minutes?: number | null;
   teacher_response_deadline?: string | null;
   next_matching_at?: string | null;
   active_offer_count: number;
   search_age_minutes: number;
+  search_age_seconds?: number | null;
   needs_attention: boolean;
   attention_reason?: string | null;
   can_synchronize: boolean;
@@ -139,6 +142,7 @@ interface ManualCandidate {
 
 interface SearchDetail extends SearchItem {
   available_candidate_count: number;
+  automatic_candidate_count?: number | null;
   manual_candidate_count: number;
   operation_history: OperationHistory[];
   schedule: {
@@ -209,13 +213,16 @@ const formatDateTime = (value?: string | null) => {
   }).format(new Date(value));
 };
 
-const formatDuration = (minutes: number) => {
-  if (minutes < 60) return `${minutes} menit`;
-  const hours = Math.floor(minutes / 60);
-  const remaining = minutes % 60;
-  if (hours < 24) return remaining ? `${hours} jam ${remaining} menit` : `${hours} jam`;
-  const days = Math.floor(hours / 24);
-  return `${days} hari ${hours % 24} jam`;
+const formatBoundedSearchAge = (
+  seconds?: number | null,
+  minutes?: number | null,
+  windowMinutes = 60,
+) => {
+  const maxSeconds = Math.max(1, windowMinutes) * 60;
+  const boundedSeconds = seconds != null ? Math.min(Math.max(0, seconds), maxSeconds) : seconds;
+  const boundedMinutes = minutes != null ? Math.min(Math.max(0, minutes), windowMinutes) : minutes;
+
+  return formatSearchAge(boundedSeconds, boundedMinutes);
 };
 
 export default function TutorSearchMonitoring() {
@@ -645,7 +652,9 @@ export default function TutorSearchMonitoring() {
                   <div className="grid grid-cols-2 gap-2 sm:min-w-72">
                     <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm">
                       <p className="text-xs font-bold text-slate-300">Kandidat otomatis</p>
-                      <p className="mt-1 text-2xl font-black">{detail.available_candidate_count}</p>
+                      <p className="mt-1 text-2xl font-black">
+                        {detail.automatic_candidate_count ?? detail.available_candidate_count}
+                      </p>
                     </div>
                     <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm">
                       <p className="text-xs font-bold text-slate-300">Layak ditetapkan</p>
@@ -668,7 +677,7 @@ export default function TutorSearchMonitoring() {
                   <InfoBox icon={CalendarClock} label="Jadwal" value={formatDateTime(detail.scheduled_at)} />
                   <InfoBox icon={detail.learning_mode === "online" ? Wifi : MapPin} label="Mode" value={detail.learning_mode === "online" ? "Online" : `Offline · ${detail.search_radius_km} km`} />
                   <InfoBox icon={UserRound} label="Jenis" value="Privat" />
-                  <InfoBox icon={Clock3} label="Lama pencarian" value={formatDuration(detail.search_age_minutes)} />
+                  <InfoBox icon={Clock3} label="Lama pencarian" value={formatBoundedSearchAge(detail.search_age_seconds, detail.search_age_minutes, detail.search_window_minutes ?? 60)} />
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-2">
@@ -727,6 +736,19 @@ export default function TutorSearchMonitoring() {
                               {operation.action === "teacher_assigned_manually" && (
                                 <p className="mt-2 text-xs font-black text-emerald-700">
                                   Tutor: {String(operation.metadata?.teacher_name ?? "Tutor")}
+                                </p>
+                              )}
+                              {operation.action === "offers_dispatched" && (
+                                <p className="mt-2 text-xs font-black text-indigo-700">
+                                  {String(operation.metadata?.offer_count ?? 0)} tutor menerima penawaran
+                                  {operation.metadata?.offer_expires_at
+                                    ? ` · jawab sebelum ${formatDateTime(String(operation.metadata.offer_expires_at))}`
+                                    : ""}
+                                </p>
+                              )}
+                              {operation.action === "offer_expired" && (
+                                <p className="mt-2 text-xs font-black text-amber-700">
+                                  Penawaran tutor ditutup karena batas waktu.
                                 </p>
                               )}
                             </div>
@@ -1053,7 +1075,7 @@ function SearchCard({ item, onOpen }: { item: SearchItem; onOpen: () => void }) 
         <div className="grid gap-2 sm:grid-cols-3 xl:w-[27rem]">
           <MiniStat label="Penawaran aktif" value={item.active_offer_count ? `${item.active_offer_count} tutor dihubungi` : "Belum ada"} />
           <MiniStat label="Batas jawaban" value={formatDateTime(item.teacher_response_deadline)} />
-          <MiniStat label="Lama mencari" value={formatDuration(item.search_age_minutes)} />
+          <MiniStat label="Lama mencari" value={formatBoundedSearchAge(item.search_age_seconds, item.search_age_minutes, item.search_window_minutes ?? 60)} />
         </div>
         <button
           type="button"

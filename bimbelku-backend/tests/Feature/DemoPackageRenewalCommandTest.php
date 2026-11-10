@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\CurriculumChapter;
+use App\Models\CurriculumSubject;
 use App\Models\LearningPackage;
 use App\Models\PackagePlan;
 use App\Models\TeacherOffer;
@@ -42,11 +44,11 @@ class DemoPackageRenewalCommandTest extends TestCase
             ->assertJsonPath('data.0.can_renew', true);
 
         $subject = $source->subjects->firstOrFail();
-        $newChapter = \App\Models\CurriculumChapter::query()
+        $newChapter = CurriculumChapter::query()
             ->where('curriculum_subject_id', $subject->curriculum_subject_id)
             ->where('title', 'Fungsi dan Persamaan Kuadrat')
             ->firstOrFail();
-        $duplicateNamedSubject = \App\Models\CurriculumSubject::query()->create([
+        $duplicateNamedSubject = CurriculumSubject::query()->create([
             'name' => 'Matematika',
             'normalized_name' => 'matematika-regression-duplicate',
             'group_name' => 'Regresi',
@@ -56,7 +58,7 @@ class DemoPackageRenewalCommandTest extends TestCase
             'is_active' => true,
             'curriculum_name' => 'Kurikulum Merdeka',
         ]);
-        $foreignChapter = \App\Models\CurriculumChapter::query()->create([
+        $foreignChapter = CurriculumChapter::query()->create([
             'curriculum_subject_id' => $duplicateNamedSubject->id,
             'education_level' => 'SMP',
             'grade' => 'Kelas 7',

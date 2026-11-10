@@ -26,16 +26,22 @@ class DemoCheapClass extends Command
     protected $description = 'Menyiapkan Kelas Kelompok lokal dari penawaran sebelum pembayaran sampai laporan/verifikasi sesi tanpa menunggu jadwal nyata';
 
     private const STUDENT_EMAIL = 'demo.student@bimbelku.local';
+
     private const SECOND_STUDENT_EMAIL = 'demo.student2@bimbelku.local';
+
     private const TEACHER_EMAIL = 'demo.tutor@bimbelku.local';
+
     private const DEMO_ADMIN_EMAIL = 'demo.admin@bimbelku.local';
+
     private const PASSWORD = 'password';
+
     private const PACKAGE_PREFIX = 'DEMO-KM-';
 
     public function handle(): int
     {
-        if (!app()->environment(['local', 'testing'])) {
+        if (! app()->environment(['local', 'testing'])) {
             $this->error('Command demo hanya boleh dijalankan pada environment local/testing.');
+
             return self::FAILURE;
         }
 
@@ -230,38 +236,44 @@ class DemoCheapClass extends Command
     {
         $class = $this->latestDemoClass();
         $student = User::query()->where('email', self::STUDENT_EMAIL)->first();
-        if (!$class || !$student) {
+        if (! $class || ! $student) {
             $this->error('Belum ada demo pre-payment. Jalankan: php artisan demo:cheap-class pre-payment');
+
             return self::FAILURE;
         }
 
         $enrollment = $class->enrollments()->where('student_id', $student->id)->with('order')->first();
-        if (!$enrollment) {
+        if (! $enrollment) {
             [$enrollment] = app(CheapClassService::class)->join($class, $student);
             $enrollment = $enrollment->fresh('order');
         }
 
         $order = $enrollment->order;
-        if (!$order) {
+        if (! $order) {
             $this->error('Order demo tidak ditemukan setelah kursi dibuat.');
+
             return self::FAILURE;
         }
         if ($order->status === 'paid') {
             $this->warn('Pembayaran murid utama sudah paid.');
+
             return $this->status();
         }
         if ($order->status === 'submitted') {
             $this->warn('Bukti pembayaran demo sudah submitted dan menunggu admin.');
+
             return $this->status();
         }
-        if (!in_array($order->status, ['pending', 'rejected'], true)) {
+        if (! in_array($order->status, ['pending', 'rejected'], true)) {
             $this->error('Order tidak berada pada status yang dapat dikirim: '.$order->status);
+
             return self::FAILURE;
         }
 
         $source = resource_path('demo/cheap-class-payment-proof.png');
-        if (!is_file($source)) {
+        if (! is_file($source)) {
             $this->error('Fixture bukti transfer demo tidak ditemukan: '.$source);
+
             return self::FAILURE;
         }
         $path = 'payment_proofs/demo-cheap-class-'.$order->id.'.png';
@@ -281,6 +293,7 @@ class DemoCheapClass extends Command
 
         $this->info('Bukti transfer demo dikirim. Admin sekarang dapat melihatnya di /admin/pembayaran.');
         $this->comment('Klik Terima pembayaran dari UI admin. Jika perlu shortcut: php artisan demo:cheap-class payment-paid');
+
         return $this->status();
     }
 
@@ -288,8 +301,9 @@ class DemoCheapClass extends Command
     {
         $class = $this->latestDemoClass();
         $student = User::query()->where('email', self::STUDENT_EMAIL)->first();
-        if (!$class || !$student) {
+        if (! $class || ! $student) {
             $this->error('Belum ada demo pre-payment. Jalankan: php artisan demo:cheap-class pre-payment');
+
             return self::FAILURE;
         }
 
@@ -298,51 +312,60 @@ class DemoCheapClass extends Command
             ->whereHas('cheapClassEnrollment', fn ($query) => $query->where('cheap_class_id', $class->id))
             ->latest('id')
             ->first();
-        if (!$order) {
+        if (! $order) {
             $this->error('Murid belum menahan kursi. Klik Gabung Kelas Kelompok atau jalankan payment-submitted dahulu.');
+
             return self::FAILURE;
         }
         if ($order->status === 'paid') {
             $this->warn('Pembayaran sudah paid.');
+
             return $this->status();
         }
         if ($order->status !== 'submitted') {
             $this->error('Pembayaran belum submitted. Jalankan: php artisan demo:cheap-class payment-submitted');
+
             return self::FAILURE;
         }
 
         [$admin] = $this->resolveAdminForDemo();
-        if (!$admin) {
+        if (! $admin) {
             $this->error('Admin demo tidak tersedia.');
+
             return self::FAILURE;
         }
 
         $result = app(CheapClassService::class)->verifyPayment($order, 'paid', '', $admin);
         $this->info($result['message'] ?? 'Pembayaran demo diverifikasi.');
         $this->comment('Berikutnya: php artisan demo:cheap-class session-live');
+
         return $this->status();
     }
 
     private function sessionLive(): int
     {
         $class = $this->latestDemoClass();
-        if (!$class) {
+        if (! $class) {
             $this->error('Belum ada Kelas Kelompok demo.');
+
             return self::FAILURE;
         }
         $class->refresh();
         if ($class->status !== 'confirmed') {
             $this->error('Kelas belum confirmed. Selesaikan/verifikasi pembayaran dahulu. Status: '.$class->status);
+
             return self::FAILURE;
         }
 
         $session = $class->sessions()->orderBy('session_number')->first();
-        if (!$session) {
+        if (! $session) {
             $this->error('Sesi demo tidak ditemukan.');
+
             return self::FAILURE;
         }
         if (in_array($session->status, ['report_required', 'awaiting_admin_verification', 'revision_requested', 'completed'], true)) {
             $this->warn('Sesi sudah melewati tahap live.');
+
             return $this->status();
         }
 
@@ -370,6 +393,7 @@ class DemoCheapClass extends Command
         $this->info('Jadwal sesi demo sekarang aktif. Masuk sebagai tutor lalu tekan "Saya Hadir & Mulai Mengajar".');
         $this->comment('Setelah tutor menekan tombol, cek popup murid dan bergabung dari Kelas Saya.');
         $this->comment('Saat siap menutup sesi: php artisan demo:cheap-class session-ended');
+
         return $this->status();
     }
 
@@ -539,19 +563,22 @@ class DemoCheapClass extends Command
     private function sessionEnded(): int
     {
         $class = $this->latestDemoClass();
-        if (!$class) {
+        if (! $class) {
             $this->error('Belum ada Kelas Kelompok demo. Jalankan: php artisan demo:cheap-class setup');
+
             return self::FAILURE;
         }
 
         $session = $class->sessions()->orderBy('session_number')->first();
-        if (!$session) {
+        if (! $session) {
             $this->error('Sesi demo tidak ditemukan.');
+
             return self::FAILURE;
         }
 
         if (in_array($session->status, ['awaiting_admin_verification', 'revision_requested', 'completed'], true)) {
             $this->warn('Sesi sudah melewati tahap penutupan waktu. Tidak ada waktu yang diubah.');
+
             return $this->status();
         }
 
@@ -575,6 +602,7 @@ class DemoCheapClass extends Command
 
         if ($session?->status !== 'report_required') {
             $this->error('Sesi belum berubah menjadi report_required. Periksa lifecycle Kelas Kelompok.');
+
             return self::FAILURE;
         }
 
@@ -588,8 +616,9 @@ class DemoCheapClass extends Command
     private function status(): int
     {
         $class = $this->latestDemoClass();
-        if (!$class) {
+        if (! $class) {
             $this->warn('Belum ada Kelas Kelompok demo aktif.');
+
             return self::SUCCESS;
         }
 
@@ -624,7 +653,7 @@ class DemoCheapClass extends Command
         $mainEnrollment = $mainStudentId ? $class->enrollments->firstWhere('student_id', $mainStudentId) : null;
         $mainOrder = $mainEnrollment?->order;
 
-        if (in_array($class->status, ['open', 'registration_closed', 'awaiting_verification'], true) && !$mainEnrollment) {
+        if (in_array($class->status, ['open', 'registration_closed', 'awaiting_verification'], true) && ! $mainEnrollment) {
             $this->comment('Berikutnya: murid klik Gabung Kelas Kelompok dari /student/kelas-murah.');
         } elseif ($mainOrder && in_array($mainOrder->status, ['pending', 'rejected'], true)) {
             $this->comment('Berikutnya: tunjukkan /payment lalu upload bukti, atau shortcut payment-submitted.');
@@ -655,6 +684,7 @@ class DemoCheapClass extends Command
         $this->info($count > 0
             ? "{$count} Kelas Kelompok demo dihapus. Akun demo tetap dipertahankan."
             : 'Belum ada Kelas Kelompok demo. Tidak ada yang perlu direset.');
+
         return self::SUCCESS;
     }
 
@@ -793,6 +823,7 @@ class DemoCheapClass extends Command
     private function invalidStage(): int
     {
         $this->error('Stage tidak dikenal. Gunakan: pre-payment, setup, payment-submitted, payment-paid, session-live, session-ended, status, atau reset.');
+
         return self::INVALID;
     }
 }

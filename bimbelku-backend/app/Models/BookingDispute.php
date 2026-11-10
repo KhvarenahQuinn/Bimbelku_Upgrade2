@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class BookingDispute extends Model
 {
     protected $guarded = ['id'];
+
     protected $hidden = ['evidence'];
+
     protected $appends = ['evidence_url', 'has_evidence'];
 
     protected $casts = [
@@ -36,6 +38,6 @@ class BookingDispute extends Model
 
     public function getHasEvidenceAttribute(): bool
     {
-        return !empty($this->evidence);
+        return ! empty($this->evidence);
     }
 }

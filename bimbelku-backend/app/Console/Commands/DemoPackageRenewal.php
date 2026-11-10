@@ -34,15 +34,20 @@ class DemoPackageRenewal extends Command
     protected $description = 'Menyiapkan dan mempercepat demo Paket Belajar selesai -> perpanjang -> tutor menerima -> selesai lagi';
 
     private const STUDENT_EMAIL = 'demo.student@bimbelku.local';
+
     private const TEACHER_EMAIL = 'demo.tutor@bimbelku.local';
+
     private const PASSWORD = 'password';
+
     private const SOURCE_PREFIX = 'DEMO-RENEW-SOURCE-';
+
     private const SUBJECT_NAME = 'Matematika';
 
     public function handle(PackageCheckoutService $checkoutService): int
     {
-        if (!app()->environment(['local', 'testing'])) {
+        if (! app()->environment(['local', 'testing'])) {
             $this->error('Command demo hanya boleh dijalankan pada environment local/testing.');
+
             return self::FAILURE;
         }
 
@@ -65,7 +70,7 @@ class DemoPackageRenewal extends Command
             $this->archiveActiveRenewals($student->id);
 
             $plan = PackagePlan::query()->where('is_active', true)->where('session_count', 4)->first();
-            if (!$plan) {
+            if (! $plan) {
                 $plan = PackagePlan::create([
                     'name' => 'Demo Perpanjangan 4 Sesi',
                     'slug' => 'demo-renewal-four-session',
@@ -191,7 +196,7 @@ class DemoPackageRenewal extends Command
                     'education_level' => 'SMP',
                     'grade' => 'Kelas 7',
                     'chapter' => 'Persamaan Linear',
-                        'learning_goal' => 'Menguasai Persamaan Linear.',
+                    'learning_goal' => 'Menguasai Persamaan Linear.',
                     'learning_mode' => 'online',
                     'class_type' => 'private',
                     'scheduled_date' => $start->toDateString(),
@@ -271,14 +276,16 @@ class DemoPackageRenewal extends Command
     private function paymentPaid(PackageCheckoutService $checkoutService): int
     {
         $renewal = $this->latestRenewalPackage();
-        if (!$renewal) {
+        if (! $renewal) {
             $this->error('Belum ada Paket 2. Buat perpanjangan lewat UI murid terlebih dahulu.');
+
             return self::FAILURE;
         }
 
         $order = $renewal->orders()->latest()->first();
-        if (!$order) {
+        if (! $order) {
             $this->error('Tagihan Paket 2 belum ditemukan.');
+
             return self::FAILURE;
         }
 
@@ -296,6 +303,7 @@ class DemoPackageRenewal extends Command
             $this->info('Pembayaran Paket 2 memang sudah paid.');
         } else {
             $this->error('Order berada pada status '.$order->status.' dan tidak dapat dipercepat oleh demo ini.');
+
             return self::FAILURE;
         }
 
@@ -311,18 +319,21 @@ class DemoPackageRenewal extends Command
     private function finalSessionReady(): int
     {
         $package = $this->latestRenewalPackage();
-        if (!$package) {
+        if (! $package) {
             $this->error('Belum ada Paket 2.');
+
             return self::FAILURE;
         }
         if ($package->status !== 'active') {
             $this->error('Paket 2 belum aktif. Tutor lama harus menerima permintaan perpanjangan terlebih dahulu. Status sekarang: '.$package->status);
+
             return self::FAILURE;
         }
 
         $sessions = $package->subjects()->with('sessions.booking.participants')->get()->flatMap->sessions->sortBy('sequence')->values();
-        if ($sessions->count() < 1 || $sessions->contains(fn ($session) => !$session->booking)) {
+        if ($sessions->count() < 1 || $sessions->contains(fn ($session) => ! $session->booking)) {
             $this->error('Booking Paket 2 belum lengkap.');
+
             return self::FAILURE;
         }
 
@@ -340,6 +351,7 @@ class DemoPackageRenewal extends Command
                         'student_approved_at' => $finishedAt,
                         'payout_status' => 'cancelled',
                     ]);
+
                     continue;
                 }
 
@@ -387,8 +399,9 @@ class DemoPackageRenewal extends Command
     private function checkoutReady(): int
     {
         $booking = $this->latestRenewalBooking();
-        if (!$booking || !in_array($booking->status, ['confirmed', 'in_progress'], true)) {
+        if (! $booking || ! in_array($booking->status, ['confirmed', 'in_progress'], true)) {
             $this->error('Sesi final Paket 2 belum siap. Jalankan final-session-ready setelah tutor menerima Paket 2.');
+
             return self::FAILURE;
         }
 
@@ -418,8 +431,9 @@ class DemoPackageRenewal extends Command
     private function status(): int
     {
         $source = $this->latestSourcePackage();
-        if (!$source) {
+        if (! $source) {
             $this->warn('Belum ada demo perpanjangan. Jalankan: php artisan demo:package-renewal setup');
+
             return self::SUCCESS;
         }
 
@@ -462,12 +476,14 @@ class DemoPackageRenewal extends Command
     private function resetDemo(): int
     {
         $studentId = User::query()->where('email', self::STUDENT_EMAIL)->value('id');
-        if (!$studentId) {
+        if (! $studentId) {
             $this->info('Belum ada akun demo. Tidak ada yang perlu direset.');
+
             return self::SUCCESS;
         }
         $this->archiveActiveRenewals((int) $studentId);
         $this->info('Paket renewal aktif dinonaktifkan. Riwayat paket demo yang sudah selesai tetap dipertahankan.');
+
         return self::SUCCESS;
     }
 
@@ -581,7 +597,10 @@ class DemoPackageRenewal extends Command
     private function latestSourcePackage(): ?LearningPackage
     {
         $studentId = User::query()->where('email', self::STUDENT_EMAIL)->value('id');
-        if (!$studentId) return null;
+        if (! $studentId) {
+            return null;
+        }
+
         return LearningPackage::query()
             ->where('student_id', $studentId)
             ->where('package_code', 'like', self::SOURCE_PREFIX.'%')
@@ -592,7 +611,10 @@ class DemoPackageRenewal extends Command
     private function latestRenewalPackage(): ?LearningPackage
     {
         $source = $this->latestSourcePackage();
-        if (!$source) return null;
+        if (! $source) {
+            return null;
+        }
+
         return LearningPackage::query()
             ->where('renewal_of_id', $source->id)
             ->with(['orders', 'subjects.sessions.booking', 'subjects.bookingRequest.offers'])
@@ -603,7 +625,9 @@ class DemoPackageRenewal extends Command
     private function latestRenewalBooking(): ?Booking
     {
         $package = $this->latestRenewalPackage();
-        if (!$package) return null;
+        if (! $package) {
+            return null;
+        }
 
         return PackageSession::query()
             ->whereHas('subject', fn ($query) => $query->where('learning_package_id', $package->id))
@@ -620,7 +644,9 @@ class DemoPackageRenewal extends Command
             ->where('student_id', $studentId)
             ->where('package_code', 'like', self::SOURCE_PREFIX.'%')
             ->pluck('id');
-        if ($sourceIds->isEmpty()) return;
+        if ($sourceIds->isEmpty()) {
+            return;
+        }
 
         LearningPackage::query()
             ->whereIn('renewal_of_id', $sourceIds)
@@ -638,6 +664,7 @@ class DemoPackageRenewal extends Command
     private function invalidStage(): int
     {
         $this->error('Stage tidak dikenal. Gunakan: setup, status, payment-paid, final-session-ready, checkout-ready, atau reset.');
+
         return self::INVALID;
     }
 }

@@ -10,21 +10,21 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('bookings', function (Blueprint $table) {
-            if (!Schema::hasColumn('bookings', 'session_pin_hash')) {
+            if (! Schema::hasColumn('bookings', 'session_pin_hash')) {
                 $table->string('session_pin_hash', 255)->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'session_pin_expires_at')) {
+            if (! Schema::hasColumn('bookings', 'session_pin_expires_at')) {
                 $table->timestamp('session_pin_expires_at')->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'session_started_at')) {
+            if (! Schema::hasColumn('bookings', 'session_started_at')) {
                 $table->timestamp('session_started_at')->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'session_ended_at')) {
+            if (! Schema::hasColumn('bookings', 'session_ended_at')) {
                 $table->timestamp('session_ended_at')->nullable();
             }
         });
 
-        if (!Schema::hasTable('classroom_messages')) {
+        if (! Schema::hasTable('classroom_messages')) {
             Schema::create('classroom_messages', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('booking_id')->constrained()->cascadeOnDelete();
@@ -35,7 +35,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('learning_plans')) {
+        if (! Schema::hasTable('learning_plans')) {
             Schema::create('learning_plans', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('booking_id')->unique()->constrained()->cascadeOnDelete();
@@ -58,7 +58,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('learning_progress_reports')) {
+        if (! Schema::hasTable('learning_progress_reports')) {
             Schema::create('learning_progress_reports', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('booking_id')->constrained()->cascadeOnDelete();
@@ -83,7 +83,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('session_attendances')) {
+        if (! Schema::hasTable('session_attendances')) {
             Schema::create('session_attendances', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('booking_id')->constrained()->cascadeOnDelete();

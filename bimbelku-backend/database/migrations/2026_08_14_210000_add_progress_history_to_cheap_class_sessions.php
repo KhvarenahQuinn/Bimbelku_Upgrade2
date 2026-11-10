@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('cheap_class_sessions')) {
+        if (! Schema::hasTable('cheap_class_sessions')) {
             return;
         }
 
@@ -22,16 +22,16 @@ return new class extends Migration
         }
 
         Schema::table('cheap_class_sessions', function (Blueprint $table) use ($hasUpdates, $hasNotes, $hasRecordedAt, $hasRecordedBy) {
-            if (!$hasUpdates) {
+            if (! $hasUpdates) {
                 $table->json('progress_updates')->nullable()->after('status');
             }
-            if (!$hasNotes) {
+            if (! $hasNotes) {
                 $table->text('progress_notes')->nullable()->after('progress_updates');
             }
-            if (!$hasRecordedAt) {
+            if (! $hasRecordedAt) {
                 $table->dateTime('progress_recorded_at')->nullable()->after('progress_notes');
             }
-            if (!$hasRecordedBy) {
+            if (! $hasRecordedBy) {
                 $table->foreignId('progress_recorded_by')->nullable()->after('progress_recorded_at')
                     ->constrained('users')->nullOnDelete();
             }
@@ -40,7 +40,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (!Schema::hasTable('cheap_class_sessions')) {
+        if (! Schema::hasTable('cheap_class_sessions')) {
             return;
         }
 
@@ -49,7 +49,7 @@ return new class extends Migration
             ->filter(fn (string $column) => Schema::hasColumn('cheap_class_sessions', $column))
             ->all();
 
-        if (!$hasRecordedBy && $columns === []) {
+        if (! $hasRecordedBy && $columns === []) {
             return;
         }
 

@@ -10,7 +10,7 @@ return new class extends Migration
     {
         if (Schema::hasTable('customer_wallets')) {
             Schema::table('customer_wallets', function (Blueprint $table) {
-                if (!Schema::hasColumn('customer_wallets', 'reserved_balance')) {
+                if (! Schema::hasColumn('customer_wallets', 'reserved_balance')) {
                     $table->decimal('reserved_balance', 15, 2)->default(0)->after('current_balance');
                 }
             });
@@ -18,13 +18,13 @@ return new class extends Migration
 
         if (Schema::hasTable('orders')) {
             Schema::table('orders', function (Blueprint $table) {
-                if (!Schema::hasColumn('orders', 'wallet_reserved_amount')) {
+                if (! Schema::hasColumn('orders', 'wallet_reserved_amount')) {
                     $table->decimal('wallet_reserved_amount', 15, 2)->default(0)->after('amount');
                 }
-                if (!Schema::hasColumn('orders', 'wallet_applied_amount')) {
+                if (! Schema::hasColumn('orders', 'wallet_applied_amount')) {
                     $table->decimal('wallet_applied_amount', 15, 2)->default(0)->after('wallet_reserved_amount');
                 }
-                if (!Schema::hasColumn('orders', 'wallet_reservation_version')) {
+                if (! Schema::hasColumn('orders', 'wallet_reservation_version')) {
                     $table->unsignedInteger('wallet_reservation_version')->default(0)->after('wallet_applied_amount');
                 }
             });
@@ -32,10 +32,10 @@ return new class extends Migration
 
         if (Schema::hasTable('refunds')) {
             Schema::table('refunds', function (Blueprint $table) {
-                if (!Schema::hasColumn('refunds', 'destination_selected_at')) {
+                if (! Schema::hasColumn('refunds', 'destination_selected_at')) {
                     $table->timestamp('destination_selected_at')->nullable()->after('destination_account_number');
                 }
-                if (!Schema::hasColumn('refunds', 'destination_selection_version')) {
+                if (! Schema::hasColumn('refunds', 'destination_selection_version')) {
                     $table->unsignedInteger('destination_selection_version')->default(0)->after('destination_selected_at');
                 }
             });
@@ -43,7 +43,7 @@ return new class extends Migration
 
         if (Schema::hasTable('customer_wallet_transactions')) {
             Schema::table('customer_wallet_transactions', function (Blueprint $table) {
-                if (!Schema::hasColumn('customer_wallet_transactions', 'order_id')) {
+                if (! Schema::hasColumn('customer_wallet_transactions', 'order_id')) {
                     $table->foreignId('order_id')
                         ->nullable()
                         ->after('refund_id')

@@ -10,6 +10,7 @@ class TeacherProfile extends Model
     use HasFactory;
 
     protected $table = 'teacher_profiles';
+
     protected $hidden = [
         'cv_file',
         'identity_document',
@@ -59,5 +60,4 @@ class TeacherProfile extends Model
     {
         return $this->hasMany(TeacherSubject::class, 'teacher_profile_id');
     }
-
 }

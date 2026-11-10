@@ -110,7 +110,6 @@ class StageSixCFinanceOperationsTest extends TestCase
             ->assertJsonCount(1, 'transactions');
     }
 
-
     public function test_paid_refund_cannot_be_processed_again_with_a_different_key(): void
     {
         $admin = $this->authorizedAdmin();

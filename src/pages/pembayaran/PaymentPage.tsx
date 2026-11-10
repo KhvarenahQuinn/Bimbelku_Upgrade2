@@ -147,6 +147,9 @@ const describePaymentIssue = (error: unknown): PaymentIssue => {
   if (details.code === "wallet_balance_changed") {
     return { title: "Saldo berubah", message: details.message, tone: "amber", code: details.code };
   }
+  if (details.code === "wallet_full_payment_required") {
+    return { title: "Saldo belum mencukupi", message: details.message, tone: "amber", code: details.code };
+  }
   if (details.code === "wallet_not_supported") {
     return { title: "Saldo belum tersedia", message: details.message, tone: "amber", code: details.code };
   }
@@ -187,6 +190,9 @@ export default function PaymentPage() {
   const [senderAccountNumber, setSenderAccountNumber] = useState("");
   const [proof, setProof] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
+  const gatewayActionLock = useRef(false);
+  const walletActionLock = useRef(false);
   const [submitIssue, setSubmitIssue] = useState<PaymentIssue | null>(null);
   const [now, setNow] = useState(Date.now());
   const [paymentMethod, setPaymentMethod] = useState<"qris" | "bank">("bank");
@@ -196,6 +202,7 @@ export default function PaymentPage() {
   const [walletQuote, setWalletQuote] = useState<WalletQuote | null>(null);
   const [useWallet, setUseWallet] = useState(false);
   const [paymentPinConfigured, setPaymentPinConfigured] = useState<boolean | null>(null);
+  const [accountHasPassword, setAccountHasPassword] = useState(true);
   const [paymentPin, setPaymentPin] = useState("");
   const [pinPassword, setPinPassword] = useState("");
   const [pinConfirmation, setPinConfirmation] = useState("");
@@ -403,9 +410,10 @@ export default function PaymentPage() {
         setUseWallet(false);
       }
       try {
-        const pinResponse = await http.get<{ configured: boolean }>("/student/payment-pin/status");
+        const pinResponse = await http.get<{ configured: boolean; has_password?: boolean }>("/student/payment-pin/status");
         if (!isCurrent()) return;
         setPaymentPinConfigured(Boolean(pinResponse.data?.configured));
+        setAccountHasPassword(pinResponse.data?.has_password !== false);
       } catch {
         if (!isCurrent()) return;
         // Akun lama tetap dapat memakai transfer jika endpoint PIN belum tersedia.
@@ -497,13 +505,19 @@ export default function PaymentPage() {
       && settings?.account_name?.trim(),
   );
   const qrisPaymentReady = Boolean(settings?.qris_available && qrisObjectUrl && !qrisLoadFailed);
-  const walletUsable = Boolean(walletQuote?.supported && (walletQuote?.usable_amount || 0) > 0);
-  const walletAmount = useWallet && walletUsable ? Math.min(Number(walletQuote?.usable_amount || 0), Number(order?.price || 0)) : 0;
+  const walletSupported = Boolean(walletQuote?.supported);
+  const walletBalance = Number(walletQuote?.usable_amount || 0);
+  const walletAvailable = Boolean(walletSupported && walletBalance > 0.009);
+  const walletUsable = Boolean(walletAvailable && walletBalance + 0.009 >= Number(order?.price || 0));
+  const walletAmount = useWallet && walletAvailable
+    ? Math.min(walletBalance, Number(order?.price || 0))
+    : 0;
   const isTopUp = order?.reconciliationStatus === "underpaid" && Number(order?.outstandingAmount || 0) > 0;
   const externalDue = isTopUp
     ? Number(order?.outstandingAmount || 0)
     : Math.max(0, Number(order?.price || 0) - walletAmount);
-  const walletOnly = Boolean(useWallet && walletAmount > 0 && externalDue < 0.01);
+  const walletOnly = Boolean(useWallet && walletUsable && walletAmount > 0 && externalDue < 0.01);
+  const walletFullCoverage = Boolean(walletSupported && !isTopUp && walletUsable);
   const paymentDestinationReady = walletOnly || bankPaymentReady || qrisPaymentReady;
   const paymentExpired = Boolean(order?.paymentDueAt && secondsLeft === 0);
 
@@ -517,7 +531,7 @@ export default function PaymentPage() {
   };
 
   const setupPaymentPin = async () => {
-    if (pinPassword.length === 0) {
+    if (accountHasPassword && pinPassword.length === 0) {
       notify.error("Masukkan password akun terlebih dahulu.");
       return;
     }
@@ -528,7 +542,7 @@ export default function PaymentPage() {
     setSettingPin(true);
     try {
       await http.post("/student/payment-pin", {
-        current_password: pinPassword,
+        ...(accountHasPassword ? { current_password: pinPassword } : {}),
         pin: paymentPin,
         pin_confirmation: pinConfirmation,
       });
@@ -584,7 +598,7 @@ export default function PaymentPage() {
   };
   const upload = async (event: FormEvent) => {
     event.preventDefault();
-    if (!order) return;
+    if (!order || submitLock.current) return;
     const isCurrent = capturePaymentScope();
     if (useWallet) {
       if (!paymentPinConfigured) {
@@ -635,6 +649,7 @@ export default function PaymentPage() {
     }
     setSubmitIssue(null);
     setSubmitting(true);
+    submitLock.current = true;
     try {
       const response = await http.post(`/orders/${order.orderId}/pay`, payload);
       if (!isCurrent()) return;
@@ -658,6 +673,7 @@ export default function PaymentPage() {
         void checkStatus(order.orderId, false);
       }
     } finally {
+      submitLock.current = false;
       if (isCurrent()) setSubmitting(false);
     }
   };
@@ -702,23 +718,45 @@ export default function PaymentPage() {
   };
 
   const openXenditCheckout = async () => {
-    if (!order || submitting) return;
+    if (!order || submitting || gatewayActionLock.current) return;
     const isCurrent = capturePaymentScope();
     if (designPreview) {
-      setEmbeddedSession({ sessionId: "visual-only", componentsKey: "visual-only", amount: order.price });
+      setEmbeddedSession({ sessionId: "visual-only", componentsKey: "visual-only", amount: externalDue });
       setCheckoutOpen(true);
       return;
     }
+    if (useWallet && walletOnly) {
+      await payWithWallet();
+      return;
+    }
+    if (useWallet) {
+      if (paymentPinConfigured !== true) {
+        notify.error("Buat PIN pembayaran terlebih dahulu.");
+        return;
+      }
+      if (!/^\d{6}$/.test(paymentPin)) {
+        notify.error("Masukkan PIN pembayaran 6 angka.");
+        return;
+      }
+    }
+    gatewayActionLock.current = true;
     setSubmitting(true);
     setSubmitIssue(null);
     try {
       const mode = window.location.protocol === "https:" ? "components" : "payment_link";
-      const response = await http.post(`/orders/${order.orderId}/xendit-session`, { mode });
+      const response = await http.post(`/orders/${order.orderId}/xendit-session`, {
+        mode,
+        ...(useWallet ? {
+          use_wallet: true,
+          wallet_expected_amount: walletAmount,
+          payment_pin: paymentPin,
+        } : {}),
+      });
       if (!isCurrent()) return;
       const data = response.data?.data;
       const key = data?.components_sdk_key;
       if (data?.mode === "COMPONENTS" && typeof key === "string" && key.length > 0) {
-        setEmbeddedSession({ sessionId: String(data.session_id), componentsKey: key, amount: Number(data.amount || order.price) });
+        setEmbeddedSession({ sessionId: String(data.session_id), componentsKey: key, amount: Number(data.xendit_amount ?? data.amount ?? externalDue) });
         setCheckoutOpen(true);
         setLegacyCheckoutUrl(null);
       } else if (typeof data?.checkout_url === "string" && data.checkout_url.startsWith("https://")) {
@@ -739,6 +777,59 @@ export default function PaymentPage() {
       });
       notify.error(details.message);
     } finally {
+      gatewayActionLock.current = false;
+      if (isCurrent()) setSubmitting(false);
+    }
+  };
+
+  const payWithWallet = async () => {
+    if (!order || submitting || walletActionLock.current) return;
+    if (!walletFullCoverage) {
+      notify.error("Saldo BimbelKu belum mencukupi seluruh tagihan. Pilih metode pembayaran lain.");
+      return;
+    }
+    if (paymentPinConfigured !== true) {
+      notify.error("Buat PIN pembayaran terlebih dahulu.");
+      return;
+    }
+    if (!/^\d{6}$/.test(paymentPin)) {
+      notify.error("Masukkan PIN pembayaran 6 angka.");
+      return;
+    }
+
+    const isCurrent = capturePaymentScope();
+    walletActionLock.current = true;
+    setSubmitting(true);
+    setSubmitIssue(null);
+    try {
+      const payload = new FormData();
+      payload.append("use_wallet", "1");
+      payload.append("wallet_expected_amount", String(Number(walletQuote?.usable_amount || 0)));
+      payload.append("payment_pin", paymentPin);
+      const response = await http.post(`/orders/${order.orderId}/pay`, payload);
+      if (!isCurrent()) return;
+      notify.success(response.data.message);
+      setUseWallet(false);
+      setPaymentPin("");
+      await checkStatus(order.orderId, false);
+    } catch (error) {
+      if (!isCurrent()) return;
+      const issue = describePaymentIssue(error);
+      setSubmitIssue(issue);
+      if (issue.tone === "amber") notify.warning(issue.message);
+      else notify.error(issue.message);
+      if (["wallet_balance_changed", "wallet_full_payment_required"].includes(issue.code || "")) {
+        try {
+          const walletResponse = await http.get<WalletQuote>(`/student/orders/${order.orderId}/wallet-quote`);
+          if (!isCurrent()) return;
+          setWalletQuote(walletResponse.data);
+        } catch { /* status check below remains the fallback */ }
+      }
+      if (["payment_expired", "invoice_not_payable", "package_not_payable", "session_inactive", "wallet_balance_changed", "wallet_full_payment_required"].includes(issue.code || "")) {
+        void checkStatus(order.orderId, false);
+      }
+    } finally {
+      walletActionLock.current = false;
       if (isCurrent()) setSubmitting(false);
     }
   };
@@ -826,7 +917,7 @@ export default function PaymentPage() {
   }
 
   if (state === "refund_pending" || state === "refunded") {
-    return <StudentLayout title="Pembayaran"><Result icon={RefreshCw} color="amber" title={state === "refunded" ? "Refund selesai" : "Refund sedang diproses"} text={state === "refunded" ? "Pengembalian dana sudah selesai. Tujuan refund, bukti transfer, atau mutasi Saldo BimbelKu dapat dilihat pada riwayat transaksi." : "Pembayaranmu masuk antrean refund. Buka riwayat transaksi untuk memilih apakah dana dikembalikan ke rekening/e-wallet atau Saldo BimbelKu."} action={state === "refunded" ? "Lihat riwayat transaksi" : "Pilih tujuan refund"} onClick={() => navigate("/student/history")} /></StudentLayout>;
+    return <StudentLayout title="Pembayaran"><Result icon={RefreshCw} color="amber" title={state === "refunded" ? "Refund selesai" : "Refund sedang diproses"} text={state === "refunded" ? "Pengembalian dana sudah selesai. Tujuan refund dan mutasi Saldo BimbelKu dapat dilihat pada riwayat transaksi." : "Pembayaranmu masuk antrean refund. Buka riwayat transaksi untuk memilih tujuan: Saldo BimbelKu atau metode pembayaran asal. Pembayaran via Xendit (QRIS, e-wallet, VA) dikembalikan otomatis ke metode asal."} action={state === "refunded" ? "Lihat riwayat transaksi" : "Pilih tujuan refund"} onClick={() => navigate("/student/history")} /></StudentLayout>;
   }
 
   if (state === "expired" || state === "cancelled" || !order || !settings) {
@@ -887,9 +978,66 @@ export default function PaymentPage() {
             </section>
             <section className="min-w-0 rounded-[1.75rem] border border-[#e3ebef] bg-white p-5 shadow-[0_20px_50px_-36px_rgba(13,35,54,.26)] sm:p-8">
               <div className="flex items-start gap-3"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#fff0e6] text-[#bb5526]"><WalletCards size={21} /></div><div><p className="text-xs font-black uppercase tracking-[.14em] text-[#ba5527]">Cara bayar</p><h2 className="mt-1 text-xl font-black text-[#102b3f]">Pilih metode pembayaran</h2></div></div>
-              <p className="mt-4 text-sm leading-6 text-slate-600">Buka pilihan metode, pilih salah satu, lalu konfirmasi. Instruksi berikutnya akan menyesuaikan QRIS, bank, atau e-wallet yang tersedia untuk tagihanmu. Data kartu atau akun pembayaran tidak disimpan oleh BimbelKu.</p>
+              <p className="mt-4 text-sm leading-6 text-slate-600">Pilih salah satu cara bayar. Saldo BimbelKu dapat dipakai sebagian: sisa tagihan dibayar otomatis lewat Xendit. Data kartu atau akun pembayaran tidak disimpan oleh BimbelKu.</p>
               <div className="mt-6 space-y-3">
-                <button type="button" disabled={submitting || paymentExpired || !settings.xendit_configured} onClick={() => void openXenditCheckout()} className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-slate-200 p-4 text-left transition hover:border-[#d45e27] hover:bg-[#fff8f3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d45e27] disabled:cursor-not-allowed disabled:opacity-50"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#fff0e6] text-[#bb5526]"><CreditCard size={20} /></div><div className="min-w-0"><p className="font-bold text-slate-900">{submitting ? "Menyiapkan metode…" : "Pilih metode pembayaran"}</p><p className="text-xs leading-5 text-slate-500">{window.location.protocol === "https:" || designPreview ? "Buka pilihan yang aktif untuk tagihan ini" : "Buka pilihan pembayaran aman untuk tagihan ini"}</p></div>{submitting ? <Loader2 size={18} className="ml-auto shrink-0 animate-spin text-[#d45e27]" /> : <ArrowRight size={18} className="ml-auto shrink-0 text-[#d45e27]" />}</button>
+                {walletSupported && !isTopUp && (
+                  <div className={`rounded-xl border p-4 ${useWallet ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="flex items-center gap-2 font-black text-slate-900"><WalletCards size={18} className="text-emerald-700" />Saldo BimbelKu</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-600">{walletUsable ? "Saldo mencukupi seluruh tagihan. Bayar penuh tanpa Xendit." : "Saldo dapat dipakai sebagian. Sisa tagihan dibayar lewat Xendit."}</p>
+                      </div>
+                      <p className="shrink-0 font-black text-emerald-700">{rupiah(walletQuote.balance)}</p>
+                    </div>
+                    {walletAvailable ? (
+                      <>
+                        <button type="button" disabled={submitting || paymentExpired} onClick={() => setUseWallet((current) => !current)} className={`mt-3 flex min-h-12 w-full items-center justify-between rounded-xl border px-3 text-left text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${useWallet ? "border-emerald-400 bg-white text-emerald-800" : "border-emerald-300 bg-white text-emerald-800"}`}>
+                          <span>{walletUsable ? `Bayar penuh dengan saldo (${rupiah(walletBalance)})` : `Pakai saldo ${rupiah(Math.min(walletBalance, Number(order.price || 0)))}, sisanya via Xendit`}</span>
+                          <span className={`grid h-5 w-5 place-items-center rounded-md border ${useWallet ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300"}`}>{useWallet ? <Check size={13} /> : null}</span>
+                        </button>
+                        {useWallet && (
+                          <div className="mt-3 space-y-2">
+                            {paymentPinConfigured !== true ? (
+                              <>
+                                <p className="text-xs font-semibold leading-5 text-emerald-900">Buat PIN pembayaran sekali untuk mengamankan pemakaian saldo.</p>
+                                {accountHasPassword ? (
+                                  <Input type="password" autoComplete="current-password" placeholder="Password akun" className="h-11 rounded-xl bg-white" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} />
+                                ) : (
+                                  <div className="rounded-xl border border-emerald-200 bg-white p-3 text-xs leading-5 text-emerald-900">
+                                    <p className="font-black">Akun Google belum punya password.</p>
+                                    <p className="mt-1">Kamu bisa membuat PIN langsung di sini. Untuk membuat password akun, buka Pengaturan.</p>
+                                    <button type="button" onClick={() => navigate("/student/settings")} className="mt-2 font-black text-emerald-700 underline">Buka Pengaturan</button>
+                                  </div>
+                                )}
+                                <Input inputMode="numeric" maxLength={6} placeholder="PIN baru (6 angka)" className="h-11 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} />
+                                <Input inputMode="numeric" maxLength={6} placeholder="Ulangi PIN baru" className="h-11 rounded-xl bg-white" value={pinConfirmation} onChange={(event) => setPinConfirmation(event.target.value.replace(/\D/g, "").slice(0, 6))} />
+                                <Button type="button" disabled={settingPin} onClick={() => void setupPaymentPin()} className="h-11 w-full rounded-xl bg-emerald-700 font-black text-white hover:bg-emerald-800">{settingPin ? <Loader2 size={16} className="mr-2 animate-spin" /> : null}Simpan PIN</Button>
+                              </>
+                            ) : (
+                              <>
+                                <Label className="font-black text-emerald-900">PIN pembayaran</Label>
+                                <Input type="password" inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="h-12 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Masukkan 6 angka" />
+                                <div className="rounded-xl bg-white p-3 text-xs">
+                                  <div className="flex items-center justify-between gap-3"><span className="font-bold text-slate-500">Dari saldo</span><span className="font-black text-emerald-700">{rupiah(walletAmount)}</span></div>
+                                  {externalDue > 0.01 && <div className="mt-1 flex items-center justify-between gap-3"><span className="font-bold text-slate-500">Sisa via Xendit</span><span className="font-black text-[#bb5526]">{rupiah(externalDue)}</span></div>}
+                                </div>
+                                <Button type="button" disabled={submitting || paymentPin.length !== 6} onClick={() => void (walletOnly ? payWithWallet() : openXenditCheckout())} className="h-12 w-full rounded-xl bg-emerald-700 font-black text-white hover:bg-emerald-800">
+                                  {submitting ? <Loader2 size={18} className="mr-2 animate-spin" /> : <WalletCards size={18} className="mr-2" />}
+                                  {walletOnly ? `Bayar ${rupiah(walletAmount)} dengan saldo` : `Lanjut bayar sisa ${rupiah(externalDue)} via Xendit`}
+                                </Button>
+                              </>
+                            )}
+                            <button type="button" onClick={() => { setUseWallet(false); setPaymentPin(""); }} className="w-full text-xs font-black text-slate-600 underline">Pilih metode lain</button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="mt-3 rounded-xl bg-white p-3 text-xs font-semibold leading-5 text-slate-600">Saldo belum tersedia untuk tagihan ini. Gunakan QRIS, VA, atau e-wallet lewat Xendit.</p>
+                    )}
+                  </div>
+                )}
+                <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-400"><span className="h-px flex-1 bg-slate-200" />atau<span className="h-px flex-1 bg-slate-200" /></div>
+                {!useWallet && <button type="button" disabled={submitting || paymentExpired || !settings.xendit_configured} onClick={() => void openXenditCheckout()} className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-slate-200 p-4 text-left transition hover:border-[#d45e27] hover:bg-[#fff8f3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d45e27] disabled:cursor-not-allowed disabled:opacity-50"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#fff0e6] text-[#bb5526]"><CreditCard size={20} /></div><div className="min-w-0"><p className="font-bold text-slate-900">{submitting ? "Menyiapkan metode…" : "Lanjut ke Xendit"}</p><p className="text-xs leading-5 text-slate-500">Pilih QRIS, VA, atau e-wallet di halaman pembayaran aman</p></div>{submitting ? <Loader2 size={18} className="ml-auto shrink-0 animate-spin text-[#d45e27]" /> : <ArrowRight size={18} className="ml-auto shrink-0 text-[#d45e27]" />}</button>}
                 <div className="flex items-start gap-3 rounded-xl bg-[#f4f7fa] p-4 text-sm leading-6 text-slate-600"><CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-600" />Status diperbarui otomatis setelah pembayaran berhasil. Kamu tidak perlu mengunggah bukti transfer.</div>
               </div>
               {legacyCheckoutUrl && <><a href={legacyCheckoutUrl} target="_blank" rel="noopener noreferrer" className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#d45e27] px-4 text-sm font-black text-white hover:bg-[#b84b1b]">Lanjutkan ke halaman pembayaran<ArrowRight size={17} /></a><p className="mt-2 text-center text-xs leading-5 text-slate-500">Di HTTP lokal, pilihan metode dibuka di halaman pembayaran aman. Setelah selesai, kembali ke sini lalu periksa status tagihan. Tautan ini membuka sesi tagihan yang sama.</p></>}
@@ -976,16 +1124,21 @@ export default function PaymentPage() {
                     <p className="shrink-0 text-base font-black text-indigo-700">{rupiah(walletQuote.balance)}</p>
                   </div>
                   {walletQuote.reserved_balance > 0 && <p className="mt-2 text-xs font-bold text-amber-700">{rupiah(walletQuote.reserved_balance)} sedang dialokasikan ke tagihan lain.</p>}
-                  <button
-                    type="button"
-                    disabled={!walletUsable}
-                    onClick={() => setUseWallet((current) => !current)}
-                    className={`mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border px-3 text-left text-sm font-black transition ${useWallet && walletUsable ? "border-indigo-400 bg-white text-indigo-800" : "border-slate-200 bg-white text-slate-700"} disabled:cursor-not-allowed disabled:opacity-55`}
-                  >
-                    <span>{walletUsable ? `Pakai ${rupiah(walletQuote.usable_amount)} dari saldo` : "Saldo belum tersedia"}</span>
-                    <span className={`grid h-5 w-5 place-items-center rounded-md border ${useWallet && walletUsable ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300"}`}>{useWallet && walletUsable ? <Check size={13} /> : null}</span>
-                  </button>
-                  {useWallet && walletUsable && <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-xl bg-white p-3"><p className="font-bold text-slate-500">Dari saldo</p><p className="mt-1 font-black text-indigo-700">{rupiah(walletAmount)}</p></div><div className="rounded-xl bg-white p-3"><p className="font-bold text-slate-500">Sisa bayar</p><p className="mt-1 font-black text-slate-900">{rupiah(externalDue)}</p></div></div>}
+                  {walletUsable ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setUseWallet((current) => !current)}
+                        className={`mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border px-3 text-left text-sm font-black transition ${useWallet ? "border-indigo-400 bg-white text-indigo-800" : "border-slate-200 bg-white text-slate-700"}`}
+                      >
+                        <span>Bayar penuh dengan saldo ({rupiah(walletQuote.usable_amount)})</span>
+                        <span className={`grid h-5 w-5 place-items-center rounded-md border ${useWallet ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300"}`}>{useWallet ? <Check size={13} /> : null}</span>
+                      </button>
+                      {useWallet && <div className="mt-3 rounded-xl bg-white p-3 text-xs"><p className="font-bold text-slate-500">Dari saldo</p><p className="mt-1 font-black text-indigo-700">{rupiah(walletAmount)}</p><p className="mt-1 text-emerald-700">Saldo menutup seluruh tagihan. Tidak perlu transfer.</p></div>}
+                    </>
+                  ) : (
+                    <p className="mt-3 rounded-xl bg-white p-3 text-xs font-semibold leading-5 text-slate-600">Saldo belum mencukupi seluruh tagihan. Pembayaran saldo hanya tersedia bila saldo menutup penuh; gunakan QRIS atau transfer bank untuk tagihan ini.</p>
+                  )}
                 </div>
               )}
               <div className="rounded-2xl border border-slate-100 p-4">
@@ -1086,8 +1239,12 @@ export default function PaymentPage() {
             <p className="text-xs font-black uppercase tracking-[.2em] text-indigo-500">Konfirmasi pembayaran</p><h2 className="mt-2 text-2xl font-black text-slate-900">{walletOnly ? "Bayar dengan Saldo BimbelKu" : reason ? "Unggah bukti pengganti" : "Kirim bukti pembayaran"}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{walletOnly ? "Saldo akan dipotong oleh backend dan pembayaran diproses otomatis tanpa pemeriksaan bukti transfer." : walletAmount > 0 ? `Transfer hanya sisa tagihan sebesar ${rupiah(externalDue)}, lalu unggah buktinya.` : "Pastikan nama pengirim, tujuan pembayaran, waktu, dan nominal terlihat jelas."}</p>
             {useWallet && paymentPinConfigured === false && <div className="mt-7 rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <p className="font-black text-amber-900">Buat atau reset PIN pembayaran</p>
-              <p className="mt-1 text-xs leading-5 text-amber-800">Akun lama cukup membuat PIN sekali. Tidak ada SMS atau biaya tambahan.</p>
-              <Input type="password" autoComplete="current-password" placeholder="Password akun" className="mt-3 h-11 rounded-xl bg-white" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} />
+              <p className="mt-1 text-xs leading-5 text-amber-800">{accountHasPassword ? "Akun lama cukup membuat PIN sekali. Tidak ada SMS atau biaya tambahan." : "Akun Google belum memiliki password lokal. Kamu bisa membuat PIN langsung di sini, atau membuat password dulu melalui Profil."}</p>
+              {accountHasPassword ? (
+                <Input type="password" autoComplete="current-password" placeholder="Password akun" className="mt-3 h-11 rounded-xl bg-white" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} />
+              ) : (
+                <button type="button" onClick={() => navigate("/student/profile")} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-900 underline">Buat password akun di Profil</button>
+              )}
               <Input inputMode="numeric" maxLength={6} placeholder="PIN baru (6 angka)" className="mt-2 h-11 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} />
               <Input inputMode="numeric" maxLength={6} placeholder="Ulangi PIN baru" className="mt-2 h-11 rounded-xl bg-white" value={pinConfirmation} onChange={(event) => setPinConfirmation(event.target.value.replace(/\D/g, "").slice(0, 6))} />
               <Button type="button" disabled={settingPin} onClick={() => void setupPaymentPin()} className="mt-3 h-11 w-full rounded-xl bg-amber-600 font-black hover:bg-amber-700">{settingPin ? <Loader2 size={16} className="mr-2 animate-spin" /> : null}Simpan PIN dan lanjut</Button>{paymentPinConfigured === true && pinResetRequested && <button type="button" className="mt-3 w-full text-xs font-black text-amber-800 underline" onClick={() => { setPinResetRequested(false); setPaymentPin(""); setPinPassword(""); setPinConfirmation(""); }}>Kembali ke masukkan PIN</button>}

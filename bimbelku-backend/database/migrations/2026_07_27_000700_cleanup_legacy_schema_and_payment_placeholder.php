@@ -66,7 +66,7 @@ return new class extends Migration
 
     private function dropColumnsIfPresent(string $table, array $columns): void
     {
-        if (!Schema::hasTable($table)) {
+        if (! Schema::hasTable($table)) {
             return;
         }
 

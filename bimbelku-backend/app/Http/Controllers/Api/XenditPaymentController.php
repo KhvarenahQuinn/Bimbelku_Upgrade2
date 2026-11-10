@@ -6,32 +6,125 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\PaymentGatewayEvent;
 use App\Services\CheapClassService;
+use App\Services\CustomerWalletService;
 use App\Services\GatewayPaymentSettlementService;
 use App\Services\PackageCheckoutService;
 use App\Services\XenditPaymentService;
 use App\Services\XenditWebhookService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 
 class XenditPaymentController extends Controller
 {
-    public function createSession(Request $request, Order $order, XenditPaymentService $xendit)
-    {
-        $validated = $request->validate(['mode' => 'sometimes|in:components,payment_link']);
+    public function createSession(
+        Request $request,
+        Order $order,
+        XenditPaymentService $xendit,
+        CustomerWalletService $wallets
+    ) {
+        $validated = $request->validate([
+            'mode' => 'sometimes|in:components,payment_link',
+            'use_wallet' => ['sometimes', 'boolean'],
+            'wallet_expected_amount' => ['nullable', 'numeric', 'min:0'],
+            'payment_pin' => ['nullable', 'digits:6'],
+        ]);
         abort_unless((int) $order->user_id === (int) $request->user()->id, 403);
         abort_unless(in_array($order->status, ['pending', 'rejected', 'partially_paid'], true), 422, 'Tagihan ini sudah tidak dapat dibayar.');
         abort_if($order->learningPackage?->payment_due_at && ! $order->learningPackage->payment_due_at->isFuture(), 422, 'Batas pembayaran paket sudah berakhir.');
         abort_if($order->cheapClassEnrollment?->seat_expires_at && ! $order->cheapClassEnrollment->seat_expires_at->isFuture(), 422, 'Batas pembayaran kursi sudah berakhir.');
 
+        $useWallet = (bool) ($validated['use_wallet'] ?? false)
+            || (float) $order->wallet_reserved_amount > 0;
+        $walletAmount = 0.0;
+
+        if ($useWallet) {
+            // A top-up keeps the hold authorized on the first attempt, so the
+            // PIN is not requested again for the same reservation.
+            $reusesExistingHold = $order->status === 'partially_paid'
+                && (float) $order->wallet_reserved_amount > 0;
+            if (! $reusesExistingHold) {
+                if (blank($request->user()->payment_pin_hash)) {
+                    return response()->json([
+                        'message' => 'Buat PIN pembayaran terlebih dahulu untuk menggunakan Saldo BimbelKu.',
+                        'code' => 'payment_pin_setup_required',
+                    ], 409);
+                }
+                if (! Hash::check((string) ($validated['payment_pin'] ?? ''), (string) $request->user()->payment_pin_hash)) {
+                    return response()->json([
+                        'message' => 'PIN pembayaran tidak sesuai.',
+                        'code' => 'payment_pin_invalid',
+                    ], 422);
+                }
+            }
+
+            $quote = $wallets->quoteForOrder($order, (int) $request->user()->id);
+            if (! $quote['supported']) {
+                return response()->json([
+                    'message' => 'Saldo BimbelKu belum tersedia untuk jenis tagihan lama ini.',
+                    'code' => 'wallet_not_supported',
+                ], 422);
+            }
+            if (! $reusesExistingHold && $quote['usable_amount'] + 0.009 >= $quote['external_due']) {
+                return response()->json([
+                    'message' => 'Saldo BimbelKu menutupi seluruh tagihan. Selesaikan pembayaran memakai saldo tanpa Xendit.',
+                    'code' => 'wallet_covers_full_invoice',
+                ], 422);
+            }
+
+            try {
+                $expected = array_key_exists('wallet_expected_amount', $validated)
+                    ? round((float) $validated['wallet_expected_amount'], 2)
+                    : null;
+                $walletAmount = $wallets->reserveForPayment($order, (int) $request->user()->id, $expected, (int) $request->user()->id);
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $exception) {
+                return response()->json([
+                    'message' => $exception->getMessage() ?: 'Saldo BimbelKu belum dapat dialokasikan.',
+                    'code' => 'wallet_reservation_failed',
+                ], $exception->getStatusCode() ?: 422);
+            } catch (\Illuminate\Validation\ValidationException $exception) {
+                return response()->json([
+                    'message' => collect($exception->errors())->flatten()->first() ?: 'Saldo BimbelKu belum dapat dialokasikan.',
+                    'code' => 'wallet_reservation_failed',
+                    'errors' => $exception->errors(),
+                ], 422);
+            } catch (Throwable $exception) {
+                report($exception);
+
+                return response()->json([
+                    'message' => 'Saldo BimbelKu belum dapat dialokasikan. Coba lagi beberapa saat lagi.',
+                    'code' => 'wallet_reservation_failed',
+                ], 503);
+            }
+            $order->refresh();
+        }
+
         try {
             $mode = ($validated['mode'] ?? 'payment_link') === 'components' ? 'COMPONENTS' : 'PAYMENT_LINK';
+            $session = $xendit->createSession($order, $request->user(), $mode, $request->header('Origin'));
+            $fresh = $order->fresh();
 
-            return response()->json(['data' => $xendit->createSession($order, $request->user(), $mode, $request->header('Origin'))])
-                ->header('Cache-Control', 'no-store');
+            return response()->json(['data' => [
+                ...$session,
+                'wallet_amount' => round((float) $fresh->wallet_reserved_amount, 2),
+                'xendit_amount' => $xendit->externalDue($fresh),
+            ]])->header('Cache-Control', 'no-store');
         } catch (RuntimeException $exception) {
+            // A definitive creation failure cannot be settled later, so the
+            // hold must return to the student's spendable balance now. An
+            // uncertain request keeps the hold until the provider confirms.
+            $fresh = $order->fresh();
+            if ($useWallet && blank($fresh->gateway_session_id) && $fresh->gateway_status === 'SESSION_FAILED') {
+                try {
+                    $wallets->releaseReserved($fresh, null, 'gateway_session_failed');
+                } catch (Throwable $releaseError) {
+                    report($releaseError);
+                }
+            }
+
             return response()->json([
                 'message' => $exception->getMessage(),
                 'code' => $xendit->configured() ? 'xendit_unavailable' : 'xendit_not_configured',
@@ -164,8 +257,9 @@ class XenditPaymentController extends Controller
             || in_array($status, ['COMPLETED', 'SUCCEEDED', 'PAID', 'CAPTURED'], true);
 
         if (! $successful) {
+            $sessionFailure = $status === 'FAILED' && str_starts_with($eventType, 'payment_session.');
             $gatewayStatus = in_array($status, ['EXPIRED', 'CANCELED', 'CANCELLED', 'FAILED'], true) ? $status : ($status ?: 'EVENT_RECEIVED');
-            $updated = $xendit->recordSessionStatus($order, $gatewayStatus, $data);
+            $updated = $xendit->recordSessionStatus($order, $gatewayStatus, $data, $sessionFailure);
             $event->update(['status' => $updated ? 'processed' : 'ignored', 'processed_at' => now(),
                 'error' => $updated ? null : 'Notifikasi lama/status nonfinal tidak boleh menimpa status checkout atau penerimaan dana.']);
 

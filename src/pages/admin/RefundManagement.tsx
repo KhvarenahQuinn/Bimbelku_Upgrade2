@@ -1,5 +1,5 @@
 import { notify } from "@/lib/notify";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowDownToLine,
   CheckCircle2,
@@ -12,6 +12,7 @@ import {
   Search,
   WalletCards,
   X,
+  XCircle,
 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
@@ -37,10 +38,14 @@ type RefundItem = {
   payment_provider?: string | null;
   gateway_status?: string | null;
   gateway_failure_code?: string | null;
+  gateway_failure_message?: string | null;
   gateway_refund_id?: string | null;
   gateway_submitted_at?: string | null;
   gateway_processed_at?: string | null;
   last_reconciled_at?: string | null;
+  stage?: string | null;
+  stage_label?: string | null;
+  status_message?: string | null;
   destination_selected_at?: string | null;
   destination_selection_version?: number;
   bank_destination: {
@@ -62,6 +67,7 @@ type RefundResponse = {
   summary: {
     pending_count: number;
     pending_amount: number;
+    failed_count?: number;
     bank_paid_30_days: number;
     wallet_credited_30_days: number;
     wallet_liability: number;
@@ -108,7 +114,7 @@ export default function RefundManagement({ embedded = false }: { embedded?: bool
     }
   };
 
-  const load = async (silent = false) => {
+  const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const response = await http.get<RefundResponse>("/admin/finance/refunds");
@@ -118,13 +124,26 @@ export default function RefundManagement({ embedded = false }: { embedded?: bool
     } finally {
       if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+
     void load();
-    const timer = window.setInterval(() => void load(true), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
+    const timer = window.setInterval(refresh, 15_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("bimbelku:data-changed", refresh);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("bimbelku:data-changed", refresh);
+    };
+  }, [load]);
 
   const filteredRows = useMemo(() => {
     const source = tab === "pending" ? data?.pending || [] : data?.history || [];
@@ -220,8 +239,9 @@ export default function RefundManagement({ embedded = false }: { embedded?: bool
   return (
     <FinanceSectionFrame embedded={embedded} title="Refund & Saldo BimbelKu" subtitle="Refund otomatis dipantau sistem; admin menangani kegagalan dan refund manual">
       <div className="space-y-6 pb-16">
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <Metric icon={Clock3} label="Menunggu" value={String(data?.summary.pending_count || 0)} detail={rupiah(data?.summary.pending_amount || 0)} tone="amber" />
+          <Metric icon={XCircle} label="Gagal" value={String(data?.summary.failed_count || 0)} detail="Perlu coba ulang atau pemeriksaan" tone="rose" />
           <Metric icon={Landmark} label="Transfer 30 hari" value={rupiah(data?.summary.bank_paid_30_days || 0)} detail="Hanya bagian yang semula dibayar lewat transfer" tone="emerald" />
           <Metric icon={WalletCards} label="Kredit saldo 30 hari" value={rupiah(data?.summary.wallet_credited_30_days || 0)} detail="Termasuk pengembalian bagian saldo dari refund campuran" tone="indigo" />
           <Metric icon={CreditCard} label="Total kewajiban saldo" value={rupiah(data?.summary.wallet_liability || 0)} detail="Saldo tersedia + saldo tertahan" tone="slate" />
@@ -266,7 +286,7 @@ export default function RefundManagement({ embedded = false }: { embedded?: bool
                     ) : item.destination_method === "bimbelku_balance" ? (
                       <><p className="mt-1 text-sm font-black text-indigo-700">Saldo BimbelKu</p><p className="mt-1 text-xs text-slate-500">Tidak dapat ditarik tunai.</p></>
                     ) : item.destination_method === "xendit_original" ? (
-                      <><p className="mt-1 text-sm font-black text-sky-700">Metode pembayaran asal</p><p className="mt-1 text-xs text-slate-500">Diproses otomatis oleh sistem{item.gateway_status ? ` · ${item.gateway_status}` : ""}.</p><p className="mt-1 break-all text-[11px] text-slate-400">Ref: {item.gateway_refund_id || "belum diterima"}</p><p className="mt-1 text-[11px] text-slate-400">Dikirim {dateTime(item.gateway_submitted_at)} · diperiksa {dateTime(item.last_reconciled_at)}</p>{item.gateway_failure_code && <p className="mt-1 text-xs font-bold text-rose-700">Alasan: {item.gateway_failure_code}</p>}</>
+                      <><p className="mt-1 text-sm font-black text-sky-700">Metode pembayaran asal</p><p className="mt-1 text-xs text-slate-500">Diproses otomatis oleh sistem{item.gateway_status ? ` · ${item.gateway_status}` : ""}.</p><p className="mt-1 break-all text-[11px] text-slate-400">Ref: {item.gateway_refund_id || "belum diterima"}</p><p className="mt-1 text-[11px] text-slate-400">Dikirim {dateTime(item.gateway_submitted_at)} · diperiksa {dateTime(item.last_reconciled_at)}</p>{item.status_message && <p className={`mt-1 text-xs leading-5 ${["failed", "needs_review"].includes(item.stage || "") ? "font-bold text-rose-700" : "text-slate-500"}`}>{item.status_message}</p>}</>
                     ) : (
                       <><p className="mt-1 text-sm font-bold text-slate-700">{item.bank_destination.bank_name || "Rekening/e-wallet"}</p><p className="mt-1 break-all text-xs text-slate-500">{item.bank_destination.account_name || "-"} · {item.bank_destination.account_number || "-"}</p>{item.wallet_funded_amount > 0 && <p className="mt-1 text-xs font-bold leading-5 text-indigo-600">Admin transfer {rupiah(item.external_funded_amount)} · {rupiah(item.wallet_funded_amount)} otomatis kembali ke saldo.</p>}</>
                     )}

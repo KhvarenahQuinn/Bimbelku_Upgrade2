@@ -2,18 +2,13 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Sanctum\HasApiTokens;
-
-use App\Models\TeacherSubject;
-use App\Models\TeacherProfile;
-use App\Models\TeacherAvailability;
-use App\Models\Classroom;
-use App\Models\Rating;
 
 class User extends Authenticatable
 {
@@ -32,6 +27,7 @@ class User extends Authenticatable
         'email_verification_required_at',
         'phone',
         'password',
+        'has_password',
         'payment_pin_hash',
         'profile_cover',
         'profile_cover_use_default',
@@ -41,8 +37,8 @@ class User extends Authenticatable
         'admin_permissions',
         'admin_permissions_updated_by',
         'admin_permissions_updated_at',
-        'status', 
-        'school_name', 
+        'status',
+        'school_name',
         'student_education_level',
         'grade',
         'learning_needs',
@@ -86,13 +82,12 @@ class User extends Authenticatable
         'consent_user_agent',
     ];
 
-
     protected function dateOfBirth(): Attribute
     {
         return Attribute::make(
             set: fn ($value) => ($value === null || $value === '')
                 ? null
-                : \Carbon\Carbon::parse($value)->toDateString(),
+                : Carbon::parse($value)->toDateString(),
         );
     }
 
@@ -102,6 +97,7 @@ class User extends Authenticatable
         'email_verification_required_at' => 'datetime',
         'google_onboarding_required_at' => 'datetime',
         'password' => 'hashed',
+        'has_password' => 'boolean',
         'password_updated_at' => 'datetime',
         'terms_accepted_at' => 'datetime',
         'privacy_accepted_at' => 'datetime',
@@ -114,7 +110,6 @@ class User extends Authenticatable
         'admin_permissions' => 'array',
         'admin_permissions_updated_at' => 'datetime',
     ];
-
 
     public function isPrimaryAdmin(): bool
     {
@@ -181,7 +176,7 @@ class User extends Authenticatable
     public function enrolledClasses()
     {
         return $this->belongsToMany(Classroom::class, 'class_students', 'student_id', 'classroom_id')
-                    ->withPivot('joined_at');
+            ->withPivot('joined_at');
     }
 
     // Relasi Ketersediaan Jadwal
@@ -199,12 +194,12 @@ class User extends Authenticatable
     public function subjects()
     {
         return $this->hasManyThrough(
-            TeacherSubject::class,   
-            TeacherProfile::class,   
-            'user_id',               
-            'teacher_profile_id',    
-            'id',                    
-            'id'                     
+            TeacherSubject::class,
+            TeacherProfile::class,
+            'user_id',
+            'teacher_profile_id',
+            'id',
+            'id'
         );
     }
 

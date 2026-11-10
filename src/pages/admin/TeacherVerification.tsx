@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { openProtectedFile } from "@/components/ProtectedImage";
 import http, { getApiError } from "@/lib/http";
+import { isFilePreviewOpen } from "@/lib/filePreview";
 import { whatsappHref } from "@/lib/websiteContent";
 
 interface Teacher {
@@ -163,8 +164,28 @@ export default function TeacherVerification() {
         </div>
       </div>
 
-      <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-h-[92dvh] overflow-y-auto rounded-[2rem] sm:max-w-2xl">
+      <Dialog
+        open={Boolean(selected)}
+        onOpenChange={(open) => {
+          if (!open && isFilePreviewOpen()) return;
+          if (!open) setSelected(null);
+        }}
+      >
+        <DialogContent
+          className="max-h-[92dvh] overflow-y-auto rounded-[2rem] sm:max-w-2xl"
+          onEscapeKeyDown={(event) => {
+            if (isFilePreviewOpen()) event.preventDefault();
+          }}
+          onPointerDownOutside={(event) => {
+            if (isFilePreviewOpen()) event.preventDefault();
+          }}
+          onInteractOutside={(event) => {
+            if (isFilePreviewOpen()) event.preventDefault();
+          }}
+          onFocusOutside={(event) => {
+            if (isFilePreviewOpen()) event.preventDefault();
+          }}
+        >
           {selected && <>
             <DialogHeader><DialogTitle className="text-2xl">{rejecting ? "Tolak verifikasi tutor" : selected.name}</DialogTitle><DialogDescription>{selected.email} · {selected.subject} · {(selected.levels || []).join(", ")}</DialogDescription></DialogHeader>
             {rejecting ? <div className="space-y-4"><div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm leading-6 text-rose-800">Jelaskan dokumen, seleksi, atau hasil tes yang belum memenuhi standar. Alasan dikirim kepada tutor.</div><Textarea className="min-h-36 rounded-xl" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Alasan penolakan yang jelas" /><div className="flex gap-2"><Button variant="outline" className="flex-1 rounded-xl" onClick={() => setRejecting(false)}>Kembali</Button><Button className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700" onClick={() => decide("rejected")} disabled={processing}><XCircle size={16} className="mr-2" />Tolak</Button></div></div> : <>

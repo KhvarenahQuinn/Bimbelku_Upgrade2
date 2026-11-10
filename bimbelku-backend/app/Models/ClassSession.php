@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class ClassSession extends Model
 {
     use HasFactory;
-    
+
     // Guarded id artinya semua kolom lain (termasuk start_time) boleh diisi
     protected $guarded = ['id'];
 

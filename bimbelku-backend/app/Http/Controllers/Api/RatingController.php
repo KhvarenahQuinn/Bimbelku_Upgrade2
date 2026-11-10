@@ -11,7 +11,6 @@ use Illuminate\Support\Facades\DB;
 
 class RatingController extends Controller
 {
-
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -26,14 +25,14 @@ class RatingController extends Controller
             ->where('student_id', $student->id)
             ->first();
 
-        if (!$participant && $booking->student_id !== $student->id) {
+        if (! $participant && $booking->student_id !== $student->id) {
             return response()->json(['message' => 'Anda bukan peserta sesi ini.'], 403);
         }
 
         if ($booking->status !== 'completed') {
             return response()->json(['message' => 'Ulasan hanya dapat dikirim setelah sesi selesai.'], 422);
         }
-        if (!$participant || $participant->status !== 'approved') {
+        if (! $participant || $participant->status !== 'approved') {
             return response()->json([
                 'message' => 'Ulasan hanya tersedia bagi murid yang mengikuti dan menyetujui penyelesaian sesi.',
             ], 422);
@@ -73,7 +72,6 @@ class RatingController extends Controller
                 'rating' => $validated['rating'],
                 'review' => $validated['review'] ?? null,
             ]);
-
 
             return $record;
         });

@@ -22,12 +22,12 @@ return new class extends Migration
         Schema::table('tickets', function (Blueprint $table) {
             // Kita drop kolom lama karena isinya pindah ke ticket_replies
             // (Note: Data lama akan hilang, ini untuk fresh start fitur chat)
-            $table->dropColumn(['message', 'reply', 'attachment']); 
-            
+            $table->dropColumn(['message', 'reply', 'attachment']);
+
             // Update enum status biar ada 'closed'
             // Di MySQL murni harus alter native, di Laravel helper kita pakai string dulu biar aman atau modify enum
             // Cara aman & cepat: Kita ubah kolom status jadi string saja biar fleksibel
-            $table->string('status')->default('open')->change(); 
+            $table->string('status')->default('open')->change();
         });
     }
 

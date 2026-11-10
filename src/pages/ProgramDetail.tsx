@@ -8,6 +8,7 @@ import StudentPackageLink from "@/components/StudentPackageLink";
 import SubjectDetailContent, { type SubjectPage, type SubjectTestimonial, type SubjectTutor } from "@/components/SubjectDetailContent";
 import { useWebsiteContent } from "@/components/WebsiteContentProvider";
 import { getCached } from "@/lib/http";
+import { imageFetchPriority } from "@/lib/imagePriority";
 import { type CatalogSubject, packagePath, programPath, programSlug, programSummary, supportedLevels } from "@/lib/publicPrograms";
 import { whatsappHref } from "@/lib/websiteContent";
 import SeoHead from "@/components/SeoHead";
@@ -199,7 +200,7 @@ export default function ProgramDetail() {
               <aside className="relative min-h-[430px] overflow-hidden rounded-3xl bg-[#14213D] shadow-2xl ring-1 ring-white/20">
                 <picture className="absolute inset-0 block h-full w-full">
                   {heroImage === "/hero-bimbelku-character-v2.webp" && <source media="(max-width: 639px)" srcSet="/hero-bimbelku-character-mobile-optimized.webp" type="image/webp" />}
-                  <img src={heroImage} alt={`Suasana belajar ${program.name}`} loading="eager" decoding="async" fetchPriority="high" className="h-full w-full object-cover object-center" />
+                  <img src={heroImage} alt={`Suasana belajar ${program.name}`} loading="eager" decoding="async" {...imageFetchPriority("high")} className="h-full w-full object-cover object-center" />
                 </picture>
                 <div className="absolute inset-0 bg-gradient-to-t from-[#071A2D] via-[#071A2D]/20 to-transparent" aria-hidden="true" />
                 <div className="absolute left-5 top-5 max-w-[72%] rounded-3xl bg-white/95 p-5 text-[#14213D] shadow-xl sm:left-7 sm:top-7 sm:p-6 lg:backdrop-blur">

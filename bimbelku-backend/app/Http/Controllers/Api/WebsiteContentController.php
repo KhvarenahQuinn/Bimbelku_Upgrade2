@@ -3,14 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\CurriculumSubject;
 use App\Models\PackageSession;
 use App\Models\Rating;
-use App\Models\CurriculumSubject;
 use App\Models\TeacherProfile;
 use App\Models\WebsiteSection;
 use App\Models\WebsiteSetting;
-use App\Models\WebsiteTrustItem;
 use App\Models\WebsiteTestimonial;
+use App\Models\WebsiteTrustItem;
 use App\Support\PublicMedia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -90,7 +90,9 @@ class WebsiteContentController extends Controller
 
         try {
             foreach (self::MEDIA_FIELDS as $input => $column) {
-                if (! $request->hasFile($input)) continue;
+                if (! $request->hasFile($input)) {
+                    continue;
+                }
                 $file = $request->file($input);
                 $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
                 $newPaths[$column] = $file->storeAs('website', $input.'_'.Str::uuid().'.'.$extension, 'public');
@@ -98,7 +100,9 @@ class WebsiteContentController extends Controller
 
             DB::transaction(function () use ($settings, $newPaths, &$oldPaths): void {
                 $locked = WebsiteSetting::query()->lockForUpdate()->findOrFail($settings->id);
-                foreach ($newPaths as $column => $path) $oldPaths[] = $locked->{$column};
+                foreach ($newPaths as $column => $path) {
+                    $oldPaths[] = $locked->{$column};
+                }
                 $locked->forceFill($newPaths)->save();
             }, 3);
         } catch (\Throwable $exception) {
@@ -175,6 +179,7 @@ class WebsiteContentController extends Controller
                     ?? $groupByName->get(mb_strtolower(trim((string) $subject->name)))
                     ?? 'Bidang lainnya';
             })->unique()->values();
+
             return [
                 'id' => $profile->id,
                 'name' => $profile->public_display_name ?: $profile->user?->name,
@@ -385,7 +390,7 @@ class WebsiteContentController extends Controller
                 foreach ($data['testimonials'] ?? [] as $index => $testimonialData) {
                     $testimonial = filled($testimonialData['id'] ?? null)
                         ? WebsiteTestimonial::query()->lockForUpdate()->findOrFail($testimonialData['id'])
-                        : new WebsiteTestimonial();
+                        : new WebsiteTestimonial;
 
                     $attributes = collect($testimonialData)->except([
                         'id', 'photo', 'proof', 'consent_confirmed', 'verified',

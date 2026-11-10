@@ -12,7 +12,7 @@ return new class extends Migration
         $this->upgradeTemplateTable();
         $this->upgradeClassTable();
 
-        if (!Schema::hasTable('cheap_class_sessions')) {
+        if (! Schema::hasTable('cheap_class_sessions')) {
             Schema::create('cheap_class_sessions', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('cheap_class_id')->constrained()->cascadeOnDelete();
@@ -59,26 +59,26 @@ return new class extends Migration
 
     private function upgradeTemplateTable(): void
     {
-        if (!Schema::hasTable('cheap_class_templates')) {
+        if (! Schema::hasTable('cheap_class_templates')) {
             return;
         }
-        if (!Schema::hasColumn('cheap_class_templates', 'curriculum_chapter_id')) {
+        if (! Schema::hasColumn('cheap_class_templates', 'curriculum_chapter_id')) {
             Schema::table('cheap_class_templates', function (Blueprint $table) {
                 $table->foreignId('curriculum_chapter_id')->nullable()
                     ->after('curriculum_subject_id')->constrained('curriculum_chapters')->nullOnDelete();
             });
         }
-        if (!Schema::hasColumn('cheap_class_templates', 'session_count')) {
+        if (! Schema::hasColumn('cheap_class_templates', 'session_count')) {
             Schema::table('cheap_class_templates', function (Blueprint $table) {
                 $table->unsignedSmallInteger('session_count')->default(1)->after('duration_minutes');
             });
         }
-        if (!Schema::hasColumn('cheap_class_templates', 'price_per_session')) {
+        if (! Schema::hasColumn('cheap_class_templates', 'price_per_session')) {
             Schema::table('cheap_class_templates', function (Blueprint $table) {
                 $table->decimal('price_per_session', 12, 2)->nullable()->after('price_per_student');
             });
         }
-        if (!Schema::hasColumn('cheap_class_templates', 'custom_price_per_student')) {
+        if (! Schema::hasColumn('cheap_class_templates', 'custom_price_per_student')) {
             Schema::table('cheap_class_templates', function (Blueprint $table) {
                 $table->decimal('custom_price_per_student', 12, 2)->nullable()->after('price_per_session');
             });
@@ -87,26 +87,26 @@ return new class extends Migration
 
     private function upgradeClassTable(): void
     {
-        if (!Schema::hasTable('cheap_classes')) {
+        if (! Schema::hasTable('cheap_classes')) {
             return;
         }
-        if (!Schema::hasColumn('cheap_classes', 'curriculum_chapter_id')) {
+        if (! Schema::hasColumn('cheap_classes', 'curriculum_chapter_id')) {
             Schema::table('cheap_classes', function (Blueprint $table) {
                 $table->foreignId('curriculum_chapter_id')->nullable()
                     ->after('curriculum_subject_id')->constrained('curriculum_chapters')->nullOnDelete();
             });
         }
-        if (!Schema::hasColumn('cheap_classes', 'session_count')) {
+        if (! Schema::hasColumn('cheap_classes', 'session_count')) {
             Schema::table('cheap_classes', function (Blueprint $table) {
                 $table->unsignedSmallInteger('session_count')->default(1)->after('ends_at');
             });
         }
-        if (!Schema::hasColumn('cheap_classes', 'price_per_session')) {
+        if (! Schema::hasColumn('cheap_classes', 'price_per_session')) {
             Schema::table('cheap_classes', function (Blueprint $table) {
                 $table->decimal('price_per_session', 12, 2)->nullable()->after('price_per_student');
             });
         }
-        if (!Schema::hasColumn('cheap_classes', 'custom_price_per_student')) {
+        if (! Schema::hasColumn('cheap_classes', 'custom_price_per_student')) {
             Schema::table('cheap_classes', function (Blueprint $table) {
                 $table->decimal('custom_price_per_student', 12, 2)->nullable()->after('price_per_session');
             });

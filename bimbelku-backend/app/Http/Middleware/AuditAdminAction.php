@@ -4,16 +4,19 @@ namespace App\Http\Middleware;
 
 use App\Services\AdminAuditService;
 use Closure;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class AuditAdminAction
 {
-    public function __construct(private readonly AdminAuditService $audit)
-    {
-    }
+    public function __construct(private readonly AdminAuditService $audit) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -68,19 +71,19 @@ class AuditAdminAction
 
     private function statusForException(\Throwable $exception): int
     {
-        if ($exception instanceof \Illuminate\Validation\ValidationException) {
+        if ($exception instanceof ValidationException) {
             return (int) $exception->status;
         }
-        if ($exception instanceof \Illuminate\Http\Exceptions\HttpResponseException) {
+        if ($exception instanceof HttpResponseException) {
             return $exception->getResponse()->getStatusCode();
         }
-        if ($exception instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+        if ($exception instanceof HttpExceptionInterface) {
             return $exception->getStatusCode();
         }
-        if ($exception instanceof \Illuminate\Auth\AuthenticationException) {
+        if ($exception instanceof AuthenticationException) {
             return 401;
         }
-        if ($exception instanceof \Illuminate\Auth\Access\AuthorizationException) {
+        if ($exception instanceof AuthorizationException) {
             return 403;
         }
 

@@ -14,13 +14,13 @@ class AdminRatingController extends Controller
     {
         // Load relasi student (pemberi) dan teacher (penerima)
         $ratings = Rating::with(['student', 'teacher'])
-                         ->orderBy('created_at', 'desc')
-                         ->limit(300)
-                         ->get();
+            ->orderBy('created_at', 'desc')
+            ->limit(300)
+            ->get();
 
         return response()->json([
             'status' => 'success',
-            'data' => $ratings->map(function($r) {
+            'data' => $ratings->map(function ($r) {
                 return [
                     'id' => $r->id,
                     'rating' => $r->rating,
@@ -30,19 +30,18 @@ class AdminRatingController extends Controller
                     'student_email' => $r->student ? $r->student->email : '-',
                     'teacher_name' => $r->teacher ? $r->teacher->name : 'User Terhapus',
                 ];
-            })
+            }),
         ]);
     }
 
     // 2. Hapus Rating (Moderasi)
     public function destroy(Request $request, int $id)
     {
-        DB::transaction(function () use ($request, $id) {
+        DB::transaction(function () use ($id) {
             $rating = Rating::query()->lockForUpdate()->find($id);
-            if (!$rating) {
+            if (! $rating) {
                 abort(404, 'Data ulasan tidak ditemukan.');
             }
-
 
             $rating->delete();
         });

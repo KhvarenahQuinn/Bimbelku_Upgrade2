@@ -62,7 +62,11 @@ class XenditPaymentService
             if (! in_array($locked->status, ['pending', 'rejected', 'partially_paid'], true)) {
                 throw new RuntimeException('Tagihan ini sudah tidak dapat dibayar.');
             }
-            if (filled($locked->gateway_session_id)) {
+            // A session in a terminal state cannot be resumed. Fall through so
+            // the identity is cleared and the reference is rotated before a
+            // fresh provider session is requested.
+            $terminalSession = in_array($locked->gateway_status, ['EXPIRED', 'CANCELED', 'CANCELLED', 'FAILED'], true);
+            if (filled($locked->gateway_session_id) && ! $terminalSession) {
                 return ['existing' => true, 'order' => $locked, 'reference' => $locked->gateway_reference_id];
             }
             if ($locked->gateway_creation_uncertain) {
@@ -86,15 +90,28 @@ class XenditPaymentService
             // Rotate its reference so a corrected retry cannot collide with the
             // provider's old idempotency/customer reference. Ambiguous in-flight
             // requests are held until provider evidence supplies a session ID.
+            //
+            // Pay with the LOCAL transaction code (PKG-.../INV-KM-...) as the
+            // reference_id: it is the value visible in the Xendit dashboard
+            // 'Reference' filter, not just a description line. Rotation after
+            // a definitive rejection appends a random suffix so retries still
+            // do not collide with the provider's previous reference.
+            $localReference = filled($locked->order_id) ? (string) $locked->order_id : 'BKU-'.$locked->id;
             $rejectedWithoutSession = $locked->gateway_status === 'SESSION_FAILED'
                 && ! $locked->gateway_creation_uncertain
                 && blank($locked->gateway_session_id);
-            $reference = $rejectedWithoutSession || blank($locked->gateway_reference_id)
-                ? 'BKU-'.$locked->id.'-'.Str::upper(Str::random(12))
-                : $locked->gateway_reference_id;
+            // A session already declared expired/cancelled cannot be resumed.
+            // Clear its identity and rotate the reference so a fresh provider
+            // session can be created instead of colliding with the old one.
+            $terminalWithoutLiveSession = $terminalSession;
+            $reference = $rejectedWithoutSession || $terminalWithoutLiveSession
+                ? $localReference.'-'.Str::upper(Str::random(6))
+                : (filled($locked->gateway_reference_id) ? $locked->gateway_reference_id : $localReference);
             $locked->forceFill([
-                'payment_provider' => 'xendit',
+                'payment_provider' => (float) $locked->wallet_reserved_amount > 0 ? 'wallet_plus_xendit' : 'xendit',
                 'gateway_reference_id' => $reference,
+                'gateway_session_id' => $terminalWithoutLiveSession ? null : $locked->gateway_session_id,
+                'gateway_checkout_url' => $terminalWithoutLiveSession ? null : $locked->gateway_checkout_url,
                 'gateway_status' => 'CREATING',
                 'gateway_expires_at' => $sessionDeadline,
                 'gateway_expected_amount' => $this->externalDue($locked),
@@ -221,6 +238,13 @@ class XenditPaymentService
                 'gateway_expires_at' => $expiresAt,
                 'gateway_creation_uncertain' => false,
             ])->save();
+            // Some account configurations already return the payment request
+            // id at session creation; capture it because Xendit does not
+            // document that field as optional/conditional.
+            $requestId = data_get($data, 'payment_request_id') ?? data_get($data, 'payment_request.id');
+            if (filled($requestId) && blank($current->xendit_payment_request_id)) {
+                $current->forceFill(['xendit_payment_request_id' => (string) $requestId])->save();
+            }
 
             return $current->fresh();
         }, 3);
@@ -260,10 +284,10 @@ class XenditPaymentService
     }
 
     /** Update lifecycle only for the current session, never downgrade a receipt. */
-    public function recordSessionStatus(Order $order, string $status, array $data = []): bool
+    public function recordSessionStatus(Order $order, string $status, array $data = [], bool $terminalFailure = false): bool
     {
-        return Cache::lock('gateway-order-settlement:'.$order->id, 180)->block(15, function () use ($order, $status, $data) {
-            return DB::transaction(function () use ($order, $status, $data) {
+        return Cache::lock('gateway-order-settlement:'.$order->id, 180)->block(15, function () use ($order, $status, $data, $terminalFailure) {
+            return DB::transaction(function () use ($order, $status, $data, $terminalFailure) {
                 $current = Order::query()->lockForUpdate()->findOrFail($order->id);
                 $sessionId = $data['payment_session_id'] ?? $data['session_id'] ?? data_get($data, 'payment_session.id') ?? $order->gateway_session_id;
                 $reference = $data['reference_id'] ?? data_get($data, 'payment_session.reference_id') ?? $order->gateway_reference_id;
@@ -275,10 +299,14 @@ class XenditPaymentService
                     || in_array($current->status, ['paid', 'refund_pending', 'refunded'], true)) {
                     return false;
                 }
-                if (! in_array($status, ['ACTIVE', 'EXPIRED', 'CANCELED', 'CANCELLED'], true)) {
+                $terminalStatuses = ['ACTIVE', 'EXPIRED', 'CANCELED', 'CANCELLED'];
+                if ($terminalFailure) {
+                    $terminalStatuses[] = 'FAILED';
+                }
+                if (! in_array($status, $terminalStatuses, true)) {
                     return false;
                 }
-                if (in_array($current->gateway_status, ['EXPIRED', 'CANCELED', 'CANCELLED'], true) && $current->gateway_status !== $status) {
+                if (in_array($current->gateway_status, ['EXPIRED', 'CANCELED', 'CANCELLED', 'FAILED'], true) && $current->gateway_status !== $status) {
                     return false;
                 }
                 $updates = ['gateway_status' => $status];
@@ -287,6 +315,15 @@ class XenditPaymentService
                     $updates['gateway_creation_uncertain'] = false;
                 }
                 $current->forceFill($updates)->save();
+
+                // Session expiry/cancellation/failure is terminal for this
+                // attempt and must not leave a wallet hold stranded. The balance
+                // returns to spendable funds immediately; a retry may reserve again.
+                $releasesHold = in_array($status, ['EXPIRED', 'CANCELED', 'CANCELLED'], true)
+                    || ($terminalFailure && $status === 'FAILED');
+                if ($releasesHold) {
+                    app(CustomerWalletService::class)->releaseReserved($current, null, 'gateway_status:'.$status);
+                }
 
                 return true;
             }, 3);

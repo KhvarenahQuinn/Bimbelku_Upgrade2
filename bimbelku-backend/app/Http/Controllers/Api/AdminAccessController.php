@@ -38,13 +38,13 @@ class AdminAccessController extends Controller
                 'target_type', 'target_id', 'reason', 'created_at',
             ])
             ->with('actor:id,name,email');
-        if (!empty($validated['actor_id'])) {
+        if (! empty($validated['actor_id'])) {
             $query->where('actor_id', $validated['actor_id']);
         }
-        if (!empty($validated['category'])) {
+        if (! empty($validated['category'])) {
             $query->where('category', $validated['category']);
         }
-        if (!empty($validated['permission'])) {
+        if (! empty($validated['permission'])) {
             $query->where('permission_code', $validated['permission']);
         }
         if (($validated['status'] ?? null) === 'success') {
@@ -52,7 +52,7 @@ class AdminAccessController extends Controller
         } elseif (($validated['status'] ?? null) === 'failed') {
             $query->where('response_status', '>=', 400);
         }
-        if (!empty($validated['search'])) {
+        if (! empty($validated['search'])) {
             $term = '%'.str_replace(['%', '_'], ['\\%', '\\_'], trim($validated['search'])).'%';
             $query->where(function ($builder) use ($term) {
                 $builder->where('action', 'like', $term)
@@ -63,10 +63,10 @@ class AdminAccessController extends Controller
                     ->orWhere('reason', 'like', $term);
             });
         }
-        if (!empty($validated['date_from'])) {
+        if (! empty($validated['date_from'])) {
             $query->where('created_at', '>=', Carbon::parse($validated['date_from'])->startOfDay());
         }
-        if (!empty($validated['date_to'])) {
+        if (! empty($validated['date_to'])) {
             $query->where('created_at', '<=', Carbon::parse($validated['date_to'])->endOfDay());
         }
 

@@ -48,7 +48,10 @@ class CustomerWalletService
                 'balance_before' => $before,
                 'balance_after' => $after,
                 'description' => "Kelebihan pembayaran {$lockedOrder->order_id} masuk ke Saldo BimbelKu",
-                'metadata' => ['source' => 'external_transfer'],
+                'metadata' => [
+                    'source' => 'external_transfer',
+                    'gateway_reference_id' => $lockedOrder->gateway_reference_id ?: $lockedOrder->order_id,
+                ],
                 'created_at' => now(),
             ]);
         }, 3);
@@ -88,7 +91,11 @@ class CustomerWalletService
                 'balance_before' => $before,
                 'balance_after' => $after,
                 'description' => "Dana parsial {$lockedOrder->order_id} dikembalikan ke Saldo BimbelKu",
-                'metadata' => ['reason' => 'top_up_expired', 'source' => 'external_transfer'],
+                'metadata' => [
+                    'reason' => 'top_up_expired',
+                    'source' => 'external_transfer',
+                    'gateway_reference_id' => $lockedOrder->gateway_reference_id ?: $lockedOrder->order_id,
+                ],
                 'created_at' => now(),
             ]);
         }, 3);
@@ -112,7 +119,7 @@ class CustomerWalletService
         try {
             return DB::transaction(function () use ($refund, $actorId, $eventKey, $creditAmount) {
                 $lockedRefund = Refund::query()->lockForUpdate()->findOrFail($refund->id);
-                if ($lockedRefund->status !== 'pending') {
+                if (! in_array($lockedRefund->status, ['pending', 'failed'], true)) {
                     $existing = CustomerWalletTransaction::query()->where('event_key', $eventKey)->first();
                     if ($existing) {
                         return $existing;
@@ -222,6 +229,7 @@ class CustomerWalletService
                 if ($expectedAmount !== null && abs($existingReserved - $this->money($expectedAmount)) > 0.009) {
                     abort(409, 'Saldo yang tersedia berubah. Muat ulang pembayaran sebelum melanjutkan.');
                 }
+
                 return $existingReserved;
             }
 
@@ -360,6 +368,33 @@ class CustomerWalletService
                 'wallet_applied_amount' => $this->money($lockedOrder->wallet_applied_amount + $amount),
             ])->save();
 
+            $version = max(1, (int) $lockedOrder->wallet_reservation_version);
+            $eventKey = "order:{$lockedOrder->id}:wallet_capture";
+            $existing = CustomerWalletTransaction::query()->where('event_key', $eventKey)->first();
+            if (! $existing) {
+                $this->createTransaction([
+                    'customer_wallet_id' => $wallet->id,
+                    'user_id' => $lockedOrder->user_id,
+                    'refund_id' => null,
+                    'order_id' => $lockedOrder->id,
+                    'actor_id' => $lockedOrder->user_id,
+                    'event_key' => $eventKey,
+                    'type' => 'payment_capture',
+                    'direction' => 'debit',
+                    'amount' => $amount,
+                    'balance_before' => $this->money($wallet->current_balance),
+                    'balance_after' => $this->money($wallet->current_balance),
+                    'description' => "Saldo BimbelKu diterapkan ke tagihan {$lockedOrder->order_id}",
+                    'metadata' => [
+                        'reservation_version' => $version,
+                        'journal_event_key' => "order:{$lockedOrder->id}:payment_received",
+                        'reference_type' => Order::class,
+                        'reference_id' => $lockedOrder->id,
+                    ],
+                    'created_at' => now(),
+                ]);
+            }
+
             return $amount;
         }, 3);
     }
@@ -460,6 +495,21 @@ class CustomerWalletService
             503,
             'Saldo BimbelKu sementara dikunci karena pemeriksaan integritas diperlukan. Hubungi admin jika masalah berlanjut.'
         );
+
+        // Rows injected outside the service cannot produce a valid APP_KEY
+        // signature. Refuse to move money on top of a tampered ledger.
+        $signature = app(\App\Support\WalletLedgerSignature::class);
+        CustomerWalletTransaction::query()
+            ->where('customer_wallet_id', $wallet->id)
+            ->orderBy('id')
+            ->get()
+            ->each(function (CustomerWalletTransaction $transaction) use ($signature): void {
+                abort_if(
+                    blank($transaction->getAttributes()['checksum'] ?? null) || ! $signature->verify($transaction),
+                    503,
+                    'Ledger Saldo BimbelKu gagal diverifikasi. Hubungi admin sebelum melakukan pembayaran.'
+                );
+            });
     }
 
     private function saveWallet(CustomerWallet $wallet, float $available, float $reserved): void

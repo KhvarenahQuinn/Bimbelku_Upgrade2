@@ -9,13 +9,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('classroom_messages', function (Blueprint $table) {
-            if (!Schema::hasColumn('classroom_messages', 'message_type')) {
+            if (! Schema::hasColumn('classroom_messages', 'message_type')) {
                 $table->string('message_type', 20)->default('user')->after('body');
             }
-            if (!Schema::hasColumn('classroom_messages', 'system_event_key')) {
+            if (! Schema::hasColumn('classroom_messages', 'system_event_key')) {
                 $table->string('system_event_key', 120)->nullable()->after('message_type');
             }
-            if (!Schema::hasColumn('classroom_messages', 'metadata')) {
+            if (! Schema::hasColumn('classroom_messages', 'metadata')) {
                 $table->json('metadata')->nullable()->after('system_event_key');
             }
         });

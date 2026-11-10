@@ -20,16 +20,14 @@ class BookingObserver
                 $package = $packageSession->subject->package;
                 $completed = $package->subjects
                     ->flatMap->sessions
-                    ->filter(fn (PackageSession $session) =>
-                        $session->booking?->status === 'completed'
+                    ->filter(fn (PackageSession $session) => $session->booking?->status === 'completed'
                             || ($session->booking_id === $booking->id && $booking->status === 'completed')
                     )
                     ->count();
                 $package->update(['used_sessions' => $completed]);
                 if ($booking->status === 'completed') {
                     $subjectCompleted = $packageSession->subject->sessions
-                        ->every(fn (PackageSession $session) =>
-                            $session->booking?->status === 'completed'
+                        ->every(fn (PackageSession $session) => $session->booking?->status === 'completed'
                                 || $session->booking_id === $booking->id
                         );
                     if ($subjectCompleted) {

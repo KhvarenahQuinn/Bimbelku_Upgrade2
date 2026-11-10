@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('settings')) {
+        if (! Schema::hasTable('settings')) {
             return;
         }
 
@@ -24,7 +24,7 @@ return new class extends Migration
             );
         }
 
-        if (!Schema::hasTable('teacher_offers') || !Schema::hasTable('booking_requests')) {
+        if (! Schema::hasTable('teacher_offers') || ! Schema::hasTable('booking_requests')) {
             return;
         }
 
@@ -44,7 +44,7 @@ return new class extends Migration
                             'teacher_response_deadline',
                         ]);
 
-                    if (!$bookingRequest || !$offer->offered_at) {
+                    if (! $bookingRequest || ! $offer->offered_at) {
                         continue;
                     }
 
@@ -86,7 +86,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (!Schema::hasTable('settings')) {
+        if (! Schema::hasTable('settings')) {
             return;
         }
 

@@ -5,6 +5,7 @@ import StudentPackageLink from "@/components/StudentPackageLink";
 
 import caraMemesanTutorBanner from "@/assets/banners/cara-memesan-tutor.webp";
 import { getCached } from "@/lib/http";
+import { imageFetchPriority } from "@/lib/imagePriority";
 
 export type DynamicBanner = {
   id: number;
@@ -171,7 +172,7 @@ export default function DynamicBannerCarousel({ audience = "student" }: { audien
           src={bannerImage}
           alt=""
           loading={index === 0 ? "eager" : "lazy"}
-          fetchPriority={index === 0 ? "high" : "auto"}
+          {...imageFetchPriority(index === 0 ? "high" : "auto")}
           decoding="async"
           draggable={false}
           className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-[1.025]"

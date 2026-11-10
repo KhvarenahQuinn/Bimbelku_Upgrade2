@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\BookingParticipant;
 use App\Models\BookingRequest;
 use App\Models\LearningPackage;
+use App\Models\MatchingOperationLog;
 use App\Models\Notification;
 use App\Models\Order;
 use App\Models\PackageRenewal;
@@ -15,10 +16,10 @@ use App\Models\PaymentSetting;
 use App\Models\Promotion;
 use App\Models\PromotionClaim;
 use App\Models\Refund;
-use App\Models\Setting;
 use App\Models\TeacherOffer;
 use App\Models\TeacherProfile;
 use App\Models\User;
+use App\Support\PaymentWindow;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -27,6 +28,7 @@ class PackageCheckoutService
     public function __construct(
         private readonly TeacherMatchingService $matchingService,
         private readonly PackageEarningsAllocation $earningsAllocation,
+        private readonly ScheduleReleaseService $scheduleRelease,
     ) {}
 
     public function calculateDiscount(
@@ -146,8 +148,8 @@ class PackageCheckoutService
         }
 
         $preferred = $subject->preferredTeacher;
-        if ($preferred && $this->preferredTeacherCanReceive($preferred, $request, $subject)) {
-            return DB::transaction(function () use ($preferred, $request) {
+        $offer = $preferred && $this->preferredTeacherCanReceive($preferred, $request, $subject)
+            ? DB::transaction(function () use ($preferred, $request) {
                 $lockedRequest = BookingRequest::query()->lockForUpdate()->findOrFail($request->id);
                 if (! in_array($lockedRequest->status, ['matching', 'no_teacher'], true)) {
                     return $lockedRequest->offers()
@@ -161,22 +163,58 @@ class PackageCheckoutService
                     return null;
                 }
 
-                $offer = TeacherOffer::create([
-                    'booking_request_id' => $lockedRequest->id,
-                    'teacher_id' => $preferred->id,
-                    'status' => 'pending',
-                    'distance_km' => null,
-                    'offered_at' => now(),
-                    'expires_at' => $expiresAt,
-                ]);
+                $offer = TeacherOffer::updateOrCreate(
+                    [
+                        'booking_request_id' => $lockedRequest->id,
+                        'teacher_id' => $preferred->id,
+                    ],
+                    [
+                        'status' => 'pending',
+                        'distance_km' => null,
+                        'offered_at' => now(),
+                        'expires_at' => $expiresAt,
+                        'reminder_sent_at' => null,
+                        'responded_at' => null,
+                        'rejection_reason' => null,
+                    ]
+                );
+                $beforeStatus = $lockedRequest->status;
                 $lockedRequest->update([
                     'matched_teacher_id' => $preferred->id,
                     'status' => 'teacher_pending',
                     'teacher_response_deadline' => $expiresAt,
+                    'next_matching_at' => null,
                     // The row is already protected by lockForUpdate(), so use a real integer here.
                     // Passing DB::raw() through an Eloquent model update leaves an Expression
                     // object on the model and clashes with BookingRequest's integer cast.
                     'matching_attempts' => (int) $lockedRequest->matching_attempts + 1,
+                ]);
+                $updatedRequest = $lockedRequest->refresh();
+                $this->matchingService->syncPackageMatchingStatus($updatedRequest);
+
+                MatchingOperationLog::create([
+                    'booking_request_id' => $updatedRequest->id,
+                    'actor_id' => null,
+                    'action' => 'offers_dispatched',
+                    'reason' => 'Penawaran dikirim ke tutor pilihan pada paket perpanjangan.',
+                    'before_state' => [
+                        'status' => $beforeStatus,
+                        'search_radius_km' => (int) $updatedRequest->search_radius_km,
+                    ],
+                    'after_state' => [
+                        'status' => $updatedRequest->status,
+                        'matched_teacher_id' => $preferred->id,
+                        'teacher_response_deadline' => $expiresAt->toIso8601String(),
+                        'search_expires_at' => $this->matchingService->searchDeadline($updatedRequest)->toIso8601String(),
+                        'package_status' => $updatedRequest->packageSubject?->package?->status,
+                    ],
+                    'metadata' => [
+                        'source' => 'preferred_teacher',
+                        'offer_id' => $offer->id,
+                        'teacher_id' => $preferred->id,
+                        'offer_count' => 1,
+                        'package_subject_id' => $updatedRequest->package_subject_id,
+                    ],
                 ]);
                 Notification::create([
                     'user_id' => $preferred->id,
@@ -187,10 +225,15 @@ class PackageCheckoutService
                 ]);
 
                 return $offer;
-            }, 3);
-        }
+            }, 3)
+            : $this->matchingService->dispatchNextOffer($request);
 
-        return $this->matchingService->dispatchNextOffer($request);
+        // dispatchNextOffer() already syncs package requests, but the preferred
+        // tutor branch above updates the request directly. Sync once here so
+        // both paths leave subject and package on teacher_pending/no_teacher.
+        $this->matchingService->syncPackageMatchingStatus($request->fresh());
+
+        return $offer;
     }
 
     public function acceptPackageOffer(TeacherOffer $teacherOffer, User $teacher): array
@@ -353,6 +396,9 @@ class PackageCheckoutService
                         $session->update(['status' => 'refund_pending']);
                     }
                 }
+                // Slot jadwal dilepas segera; murid tidak boleh tetap terblokir
+                // oleh paket yang sudah masuk antrean refund.
+                $this->scheduleRelease->releasePackage($package, 'refund_pending');
                 $package->promotionClaims()
                     ->where('status', 'reserved')
                     ->update([
@@ -399,14 +445,46 @@ class PackageCheckoutService
             ]);
             foreach ($package->subjects as $subject) {
                 $subject->update(['status' => 'matching', 'assigned_teacher_id' => null]);
-                $subject->bookingRequest?->update([
+                $bookingRequest = $subject->bookingRequest;
+                $beforeStatus = $bookingRequest?->status;
+                $bookingRequest?->update([
                     'status' => 'matching',
                     'matched_teacher_id' => null,
+                    'teacher_response_deadline' => null,
+                    'next_matching_at' => null,
                     'payment_due_at' => null,
                     'search_radius_km' => $package->learning_mode === 'offline' ? 3 : null,
                     'search_started_at' => now(),
                     'search_expires_at' => now()->addHours($this->matchingService->maximumSearchHours()),
                 ]);
+
+                if ($bookingRequest) {
+                    $updatedRequest = $bookingRequest->refresh();
+                    MatchingOperationLog::create([
+                        'booking_request_id' => $updatedRequest->id,
+                        'actor_id' => $admin?->id,
+                        'action' => 'matching_started',
+                        'reason' => 'Pembayaran paket diverifikasi dan mesin pencocokan dijalankan.',
+                        'before_state' => [
+                            'status' => $beforeStatus,
+                            'search_radius_km' => (int) $updatedRequest->search_radius_km,
+                        ],
+                        'after_state' => [
+                            'status' => $updatedRequest->status,
+                            'search_radius_km' => (int) $updatedRequest->search_radius_km,
+                            'search_started_at' => $updatedRequest->search_started_at?->toIso8601String(),
+                            'search_expires_at' => $this->matchingService->searchDeadline($updatedRequest)->toIso8601String(),
+                            'package_status' => $package->status,
+                        ],
+                        'metadata' => [
+                            'source' => 'package_payment_verified',
+                            'package_id' => $package->id,
+                            'package_subject_id' => $subject->id,
+                            'search_window_minutes' => $this->matchingService->searchWindowMinutes(),
+                        ],
+                    ]);
+                }
+
                 foreach ($subject->sessions as $session) {
                     $session->update(['status' => 'planned', 'booking_id' => null]);
                 }
@@ -430,22 +508,19 @@ class PackageCheckoutService
             return 'refund_pending';
         }
 
-        $noTeacher = false;
         PackageSubject::query()
             ->whereIn('id', $subjectIds)
             ->with('bookingRequest')
             ->get()
-            ->each(function (PackageSubject $subject) use (&$noTeacher) {
+            ->each(function (PackageSubject $subject) {
                 if (! $this->dispatchSubject($subject)) {
                     $subject->update(['status' => 'no_teacher']);
-                    $noTeacher = true;
                 }
             });
-        LearningPackage::query()->whereKey($order->learning_package_id)->update([
-            'status' => $noTeacher ? 'no_teacher' : 'matching',
-        ]);
 
-        return $noTeacher ? 'no_teacher' : 'matching';
+        $package = LearningPackage::query()->findOrFail($order->learning_package_id);
+
+        return $this->matchingService->syncPackageStatus($package);
     }
 
     public function rejectPackagePayment(Order $order, string $reason, ?User $admin = null): void
@@ -494,7 +569,7 @@ class PackageCheckoutService
             ->sortBy('scheduled_start_at')
             ->first()
             ?->scheduled_start_at;
-        $paymentDueAt = now()->addMinutes(\App\Support\PaymentWindow::MINUTES);
+        $paymentDueAt = now()->addMinutes(PaymentWindow::MINUTES);
         if ($firstSessionAt) {
             $usesPreferredTutors = $package->renewal_of_id
                 && $package->subjects->isNotEmpty()
@@ -767,6 +842,7 @@ class PackageCheckoutService
                         'payment_submitted',
                         'active',
                     ])))
+            ->whereNotIn('status', ['cancelled', 'payment_expired', 'completed', 'refund_pending', 'refunded'])
             ->where('scheduled_start_at', '<', $end)
             ->where('scheduled_end_at', '>', $start)
             ->exists();

@@ -127,7 +127,6 @@ class StageFourAccountFlowTest extends TestCase
         ]);
     }
 
-
     public function test_student_registration_profile_fields_are_saved_and_returned_after_login(): void
     {
         $response = $this->postJson('/api/register', [
@@ -199,6 +198,20 @@ class StageFourAccountFlowTest extends TestCase
         $teacher = User::query()->where('email', 'tutor.tahap4@example.com')->firstOrFail();
         $profile = $teacher->teacherProfile()->firstOrFail();
         $this->assertSame('S.Pd.', $profile->public_degree);
+
+        // Ringkasan WhatsApp hanya berisi data yang aman dibagikan.
+        $response
+            ->assertJsonPath('application_code', 'TUTOR-'.$teacher->id)
+            ->assertJsonPath('registration_summary.application_code', 'TUTOR-'.$teacher->id)
+            ->assertJsonPath('registration_summary.name', 'Tutor Tahap Empat')
+            ->assertJsonPath('registration_summary.whatsapp', '081234567899')
+            ->assertJsonPath('registration_summary.subject', 'Matematika')
+            ->assertJsonPath('registration_summary.degree', 'S.Pd.')
+            ->assertJsonPath('registration_summary.levels', ['SD', 'SMP'])
+            ->assertJsonMissingPath('registration_summary.email')
+            ->assertJsonMissingPath('registration_summary.password')
+            ->assertJsonMissingPath('registration_summary.identity_document')
+            ->assertJsonMissingPath('registration_summary.live_selfie');
 
         Storage::disk('local')->assertExists($profile->identity_document);
         Storage::disk('local')->assertExists($profile->live_selfie);
@@ -296,7 +309,6 @@ class StageFourAccountFlowTest extends TestCase
         );
     }
 
-
     public function test_student_can_save_a_personal_cover_without_changing_password(): void
     {
         Storage::fake('public');
@@ -382,6 +394,87 @@ class StageFourAccountFlowTest extends TestCase
         $student->refresh();
         $this->assertTrue(Hash::check('password456', $student->password));
         $this->assertNotNull($student->password_updated_at);
+    }
+
+    public function test_profile_exposes_has_password_flag_for_google_accounts(): void
+    {
+        $student = User::factory()->create([
+            'role' => 'student',
+            'status' => 'active',
+            'google_id' => 'google-123',
+            'password' => Hash::make('random-internal-secret'),
+            'has_password' => false,
+        ]);
+        Sanctum::actingAs($student);
+
+        $this->getJson('/api/user')
+            ->assertOk()
+            ->assertJsonPath('has_password', false);
+    }
+
+    public function test_google_account_can_set_initial_password_without_current_password(): void
+    {
+        $student = User::factory()->create([
+            'role' => 'student',
+            'status' => 'active',
+            'google_id' => 'google-456',
+            'password' => Hash::make('random-internal-secret'),
+            'has_password' => false,
+        ]);
+        Sanctum::actingAs($student);
+
+        $this->postJson('/api/user/set-initial-password', [
+            'new_password' => 'password-baru',
+            'new_password_confirmation' => 'password-baru',
+        ])
+            ->assertOk()
+            ->assertJsonPath('has_password', true);
+
+        $student->refresh();
+        $this->assertTrue($student->has_password);
+        $this->assertTrue(Hash::check('password-baru', $student->password));
+        $this->assertNotNull($student->password_updated_at);
+    }
+
+    public function test_account_with_password_still_requires_current_password(): void
+    {
+        $student = User::factory()->create([
+            'role' => 'student',
+            'status' => 'active',
+            'password' => Hash::make('password123'),
+            'has_password' => true,
+        ]);
+        Sanctum::actingAs($student);
+
+        $this->putJson('/api/user/password', [
+            'password' => 'password456',
+            'password_confirmation' => 'password456',
+        ])->assertUnprocessable();
+
+        $this->assertTrue(Hash::check('password123', $student->fresh()->password));
+    }
+
+    public function test_google_account_can_set_payment_pin_without_current_password(): void
+    {
+        $student = User::factory()->create([
+            'role' => 'student',
+            'status' => 'active',
+            'google_id' => 'google-789',
+            'password' => Hash::make('random-internal-secret'),
+            'has_password' => false,
+        ]);
+        Sanctum::actingAs($student);
+
+        $this->getJson('/api/student/payment-pin/status')
+            ->assertOk()
+            ->assertJsonPath('has_password', false);
+
+        $this->postJson('/api/student/payment-pin', [
+            'pin' => '123456',
+            'pin_confirmation' => '123456',
+        ])->assertOk()->assertJsonPath('configured', true);
+
+        $this->assertTrue(Hash::check('123456', $student->fresh()->payment_pin_hash));
     }
 
     public function test_password_reset_updates_the_security_timestamp(): void

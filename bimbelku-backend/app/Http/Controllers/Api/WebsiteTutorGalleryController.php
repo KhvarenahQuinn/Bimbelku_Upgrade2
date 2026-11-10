@@ -52,6 +52,7 @@ class WebsiteTutorGalleryController extends Controller
             ->with('teacherProfile.user')
             ->orderBy('sort_order')->orderBy('id')
             ->paginate((int) ($data['per_page'] ?? 20));
+
         return response()->json($entries->through(fn (WebsiteTutorGallery $entry) => $this->payload($entry)));
     }
 
@@ -74,6 +75,7 @@ class WebsiteTutorGalleryController extends Controller
                 ->orWhere('public_degree', 'like', '%'.$search.'%')
                 ->orWhere('public_credentials', 'like', '%'.$search.'%'));
         }
+
         return response()->json($query->orderBy('id')->limit(20)->get()
             ->map(fn (TeacherProfile $profile) => [
                 'id' => $profile->id,
@@ -88,10 +90,11 @@ class WebsiteTutorGalleryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $this->validated($request);
-        $entry = new WebsiteTutorGallery();
+        $entry = new WebsiteTutorGallery;
         $this->fillEntry($entry, $data, $request);
         $entry->sort_order = (int) (WebsiteTutorGallery::query()->max('sort_order') ?? 0) + 1;
         $entry->save();
+
         return response()->json(['message' => 'Kartu tutor berhasil ditambahkan.', 'entry' => $this->payload($entry->load('teacherProfile'))], 201);
     }
 
@@ -118,6 +121,7 @@ class WebsiteTutorGalleryController extends Controller
             ]);
             $created++;
         }
+
         return response()->json([
             'message' => $created ? $created.' kartu lama diimpor sebagai draf. Isi gelar dan sumber izin sebelum menampilkannya.' : 'Tidak ada foto lama baru yang perlu diimpor.',
             'created' => $created,
@@ -130,6 +134,7 @@ class WebsiteTutorGalleryController extends Controller
         $this->fillEntry($entry, $data, $request);
         $entry->save();
         $request->attributes->set('admin_audit_target_override', $entry);
+
         return response()->json(['message' => 'Kartu tutor berhasil diperbarui.', 'entry' => $this->payload($entry->load('teacherProfile'))]);
     }
 
@@ -137,6 +142,7 @@ class WebsiteTutorGalleryController extends Controller
     {
         $entry->delete();
         $request->attributes->set('admin_audit_target_override', $entry);
+
         return response()->json(['message' => 'Kartu tutor diarsipkan dan tidak lagi tampil.']);
     }
 
@@ -190,6 +196,7 @@ class WebsiteTutorGalleryController extends Controller
     private function payload(WebsiteTutorGallery $entry): array
     {
         $profile = $entry->teacherProfile;
+
         return [
             'id' => $entry->id,
             'teacher_profile_id' => $entry->teacher_profile_id,

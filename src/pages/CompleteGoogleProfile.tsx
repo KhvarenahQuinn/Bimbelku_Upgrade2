@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import http, { getApiError } from "@/lib/http";
 import { notify } from "@/lib/notify";
+import { updateStoredSessionUser } from "@/lib/session";
 
 export default function CompleteGoogleProfile() {
   const navigate = useNavigate();
@@ -18,14 +19,14 @@ export default function CompleteGoogleProfile() {
     setLoading(true);
     try {
       const response = await http.post("/auth/google/complete-profile", { terms_accepted: terms, privacy_accepted: privacy });
-      localStorage.setItem("user", JSON.stringify(response.data.user));
+      updateStoredSessionUser(response.data.user);
       notify.success("Akun Google berhasil disiapkan. Lengkapi profil saat siap.");
       if (redirect) {
         navigate(redirect, { replace: true });
       } else {
         const pending = await http.get("/student/guest-packages/pending").catch(() => null);
         const code = pending?.data?.data?.[0]?.code;
-        navigate(code ? `/pesanan/${encodeURIComponent(code)}` : "/student/profile?welcome=google", { replace: true });
+        navigate(code ? `/pesanan/${encodeURIComponent(code)}` : "/murid?welcome=google", { replace: true });
       }
     } catch (error) { notify.error(getApiError(error, "Akun belum dapat disiapkan.")); }
     finally { setLoading(false); }

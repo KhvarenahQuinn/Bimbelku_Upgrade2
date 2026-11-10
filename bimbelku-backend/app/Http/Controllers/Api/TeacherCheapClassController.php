@@ -32,6 +32,7 @@ class TeacherCheapClassController extends Controller
                 $payload['progress_summary'] = $cheapClasses->chapterProgressSummary($class);
                 $payload['subject_name'] = $cheapClasses->subjectSummary($class);
                 $payload['chapter'] = $cheapClasses->chapterSummary($class);
+
                 return $payload;
             });
 
@@ -48,7 +49,7 @@ class TeacherCheapClassController extends Controller
             'max:500',
             function (string $attribute, mixed $value, \Closure $fail) {
                 $host = mb_strtolower((string) parse_url((string) $value, PHP_URL_HOST));
-                if ($host !== 'zoom.us' && !str_ends_with($host, '.zoom.us')) {
+                if ($host !== 'zoom.us' && ! str_ends_with($host, '.zoom.us')) {
                     $fail('Gunakan tautan Zoom resmi dengan domain zoom.us.');
                 }
             },
@@ -56,6 +57,7 @@ class TeacherCheapClassController extends Controller
         abort_unless($cheapClass->status === 'confirmed', 422, 'Tautan Zoom dapat diisi setelah kelas dikonfirmasi.');
         abort_unless($cheapClass->sessions()->where('ends_at', '>', now())->exists(), 422, 'Seluruh sesi paket sudah berakhir.');
         $cheapClass->update(['meeting_link' => $data['meeting_link']]);
+
         return response()->json(['message' => 'Tautan Zoom Kelas Kelompok disimpan.']);
     }
 
@@ -77,7 +79,7 @@ class TeacherCheapClassController extends Controller
 
             abort_unless($session, 422, 'Belum ada sesi yang dapat dimulai saat ini.');
 
-            $justStarted = !$session->teacher_started_at;
+            $justStarted = ! $session->teacher_started_at;
             if ($justStarted) {
                 $session->update([
                     'status' => 'in_progress',

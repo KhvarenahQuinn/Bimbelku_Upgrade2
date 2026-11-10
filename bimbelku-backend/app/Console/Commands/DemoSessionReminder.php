@@ -27,14 +27,18 @@ class DemoSessionReminder extends Command
     protected $description = 'Menyiapkan Paket Belajar lokal lengkap untuk menguji Session Action Reminder tanpa menunggu aturan booking 24 jam';
 
     private const STUDENT_EMAIL = 'demo.student@bimbelku.local';
+
     private const TEACHER_EMAIL = 'demo.tutor@bimbelku.local';
+
     private const PASSWORD = 'password';
+
     private const PACKAGE_PREFIX = 'DEMO-SESSION-';
 
     public function handle(): int
     {
-        if (!app()->environment(['local', 'testing'])) {
+        if (! app()->environment(['local', 'testing'])) {
             $this->error('Command demo hanya boleh dijalankan pada environment local/testing.');
+
             return self::FAILURE;
         }
 
@@ -256,13 +260,15 @@ class DemoSessionReminder extends Command
     private function checkoutReady(): int
     {
         $booking = $this->latestDemoBooking();
-        if (!$booking) {
+        if (! $booking) {
             $this->error('Belum ada booking demo. Jalankan: php artisan demo:session-reminder setup');
+
             return self::FAILURE;
         }
 
-        if (!in_array($booking->status, ['confirmed', 'in_progress'], true)) {
+        if (! in_array($booking->status, ['confirmed', 'in_progress'], true)) {
             $this->error('Booking demo tidak lagi berada pada sesi aktif. Jalankan setup untuk skenario baru.');
+
             return self::FAILURE;
         }
 
@@ -294,8 +300,9 @@ class DemoSessionReminder extends Command
     private function status(): int
     {
         $booking = $this->latestDemoBooking();
-        if (!$booking) {
+        if (! $booking) {
             $this->warn('Belum ada booking demo terbaru.');
+
             return self::SUCCESS;
         }
 
@@ -333,13 +340,15 @@ class DemoSessionReminder extends Command
     {
         $studentId = User::query()->where('email', self::STUDENT_EMAIL)->value('id');
         $teacherId = User::query()->where('email', self::TEACHER_EMAIL)->value('id');
-        if (!$studentId || !$teacherId) {
+        if (! $studentId || ! $teacherId) {
             $this->info('Belum ada akun demo. Tidak ada yang perlu direset.');
+
             return self::SUCCESS;
         }
 
         DB::transaction(fn () => $this->archivePreviousDemo((int) $studentId, (int) $teacherId));
         $this->info('Skenario demo aktif dinonaktifkan. Akun demo tetap dipertahankan.');
+
         return self::SUCCESS;
     }
 
@@ -443,7 +452,7 @@ class DemoSessionReminder extends Command
     {
         $studentId = User::query()->where('email', self::STUDENT_EMAIL)->value('id');
         $teacherId = User::query()->where('email', self::TEACHER_EMAIL)->value('id');
-        if (!$studentId || !$teacherId) {
+        if (! $studentId || ! $teacherId) {
             return null;
         }
 
@@ -458,6 +467,7 @@ class DemoSessionReminder extends Command
     private function invalidStage(): int
     {
         $this->error('Stage tidak dikenal. Gunakan: setup, checkout-ready, status, atau reset.');
+
         return self::INVALID;
     }
 }

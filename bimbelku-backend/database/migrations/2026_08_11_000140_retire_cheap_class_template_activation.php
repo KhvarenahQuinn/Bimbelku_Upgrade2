@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('cheap_class_templates')) {
+        if (! Schema::hasTable('cheap_class_templates')) {
             return;
         }
 
@@ -20,7 +20,7 @@ return new class extends Migration
             'updated_at' => now(),
         ]);
 
-        if (!Schema::hasTable('cheap_classes')) {
+        if (! Schema::hasTable('cheap_classes')) {
             return;
         }
 

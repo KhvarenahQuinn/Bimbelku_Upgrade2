@@ -7,9 +7,11 @@ use App\Models\CurriculumSubject;
 use App\Models\GuestPackageOrder;
 use App\Models\PackagePlan;
 use App\Services\HourlyRateService;
+use App\Services\LearningProgramSelection;
 use App\Services\PackageCheckoutService;
 use App\Services\PrivateParticipantPricing;
 use App\Support\EducationCatalog;
+use App\Support\LearningFocus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -60,7 +62,7 @@ class GuestPackageOrderController extends Controller
             'subjects.*.learning_goal.string' => 'Target atau materi belajar harus berupa teks.',
             'subjects.*.learning_goal.max' => 'Target atau materi belajar maksimal 1500 karakter per mapel.',
         ]);
-        $data['subjects'] = \App\Support\LearningFocus::normalizeSubjects($data['subjects'], ! empty($data['learning_program_id']), $data['education_level'], $data['grade']);
+        $data['subjects'] = LearningFocus::normalizeSubjects($data['subjects'], ! empty($data['learning_program_id']), $data['education_level'], $data['grade']);
         $count = (int) ($data['participant_count'] ?? 1);
         $pricing->forCount($count);
         $purchaserParticipates = (bool) ($data['purchaser_participates'] ?? true);
@@ -76,8 +78,8 @@ class GuestPackageOrderController extends Controller
         $data['participant_names'] = $participantNames->all();
         abort_unless(EducationCatalog::supports($data['education_level'], $data['grade']), 422, 'Jenjang dan kelas tidak sesuai.');
         $plan = PackagePlan::query()->where('is_active', true)->findOrFail($data['package_plan_id']);
-        if (!empty($data['learning_program_id'])) {
-            app(\App\Services\LearningProgramSelection::class)->validate(
+        if (! empty($data['learning_program_id'])) {
+            app(LearningProgramSelection::class)->validate(
                 (int) $data['learning_program_id'], (int) $plan->id, $data['education_level'], $data['grade'], $data['subjects']
             );
         }
@@ -165,9 +167,25 @@ class GuestPackageOrderController extends Controller
             ->where('expires_at', '>', now())
             ->latest('id')
             ->limit(5)
-            ->get(['code', 'quoted_total_amount', 'expires_at', 'created_at']);
+            ->get(['id', 'code', 'quoted_total_amount', 'expires_at', 'created_at']);
 
-        return response()->json(['data' => $orders]);
+        // Email sudah terverifikasi dan sama, jadi draf aman ditautkan ke akun.
+        // Status tetap "pending" sampai murid menyelesaikan klaim.
+        if ($orders->isNotEmpty()) {
+            GuestPackageOrder::query()
+                ->whereIn('id', $orders->pluck('id'))
+                ->whereNull('student_id')
+                ->update(['student_id' => $student->id]);
+        }
+
+        return response()->json([
+            'data' => $orders->map(fn (GuestPackageOrder $order) => [
+                'code' => $order->code,
+                'quoted_total_amount' => $order->quoted_total_amount,
+                'expires_at' => $order->expires_at,
+                'created_at' => $order->created_at,
+            ])->values(),
+        ]);
     }
 
     public function claim(Request $request, string $code, StudentPackageController $packages, HourlyRateService $rates, PackageCheckoutService $checkout, PrivateParticipantPricing $pricing)
@@ -228,6 +246,7 @@ class GuestPackageOrderController extends Controller
     private function maskedEmail(string $email): string
     {
         [$local, $domain] = explode('@', $email, 2);
+
         return mb_substr($local, 0, 2).'***@'.$domain;
     }
 }

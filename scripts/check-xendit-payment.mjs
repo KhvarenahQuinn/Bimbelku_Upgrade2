@@ -26,7 +26,7 @@ expect(moneyService.includes("/refunds") && moneyService.includes("payment_reque
 expect(moneyService.includes("/v3/payouts") && env.includes("MONEY-OUT"), "payout tutor memakai Xendit Payout v3 dan izin MONEY-OUT didokumentasikan");
 expect(webhookService.includes("refund.succeeded") && webhookService.includes("v3_payout.succeeded"), "webhook refund dan payout mengubah status final");
 expect(admin.includes("createPayout") && !admin.includes("'proof_file' => 'required|image"), "admin tidak lagi mengunggah bukti transfer payout manual");
-expect(refunds.includes("createRefund") && refunds.includes("Refund sedang diproses. Status akhir akan diperbarui secara otomatis."), "refund admin menunggu status final Xendit");
+expect(refunds.includes("createRefund") && refunds.includes("RefundStatusPresenter") && refunds.includes("], 202);"), "refund admin menunggu status final Xendit");
 expect(!page.includes('type="file"') || page.includes('settings.provider === "xendit"'), "Xendit menjadi pengalaman pembayaran utama");
 expect(env.includes("XENDIT_SECRET_KEY=") && env.includes("XENDIT_WEBHOOK_TOKEN="), "konfigurasi server didokumentasikan");
 

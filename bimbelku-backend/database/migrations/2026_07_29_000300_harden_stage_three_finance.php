@@ -75,10 +75,10 @@ return new class extends Migration
     private function extendUsers(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            if (!Schema::hasColumn('users', 'finance_totp_secret')) {
+            if (! Schema::hasColumn('users', 'finance_totp_secret')) {
                 $table->text('finance_totp_secret')->nullable();
             }
-            if (!Schema::hasColumn('users', 'finance_totp_confirmed_at')) {
+            if (! Schema::hasColumn('users', 'finance_totp_confirmed_at')) {
                 $table->timestamp('finance_totp_confirmed_at')->nullable();
             }
         });
@@ -87,16 +87,16 @@ return new class extends Migration
     private function extendTeacherProfiles(): void
     {
         Schema::table('teacher_profiles', function (Blueprint $table) {
-            if (!Schema::hasColumn('teacher_profiles', 'bank_account_changed_at')) {
+            if (! Schema::hasColumn('teacher_profiles', 'bank_account_changed_at')) {
                 $table->timestamp('bank_account_changed_at')->nullable();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'payout_hold_until')) {
+            if (! Schema::hasColumn('teacher_profiles', 'payout_hold_until')) {
                 $table->timestamp('payout_hold_until')->nullable()->index();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'bank_details_version')) {
+            if (! Schema::hasColumn('teacher_profiles', 'bank_details_version')) {
                 $table->unsignedInteger('bank_details_version')->default(0);
             }
-            if (!Schema::hasColumn('teacher_profiles', 'bank_account_fingerprint')) {
+            if (! Schema::hasColumn('teacher_profiles', 'bank_account_fingerprint')) {
                 $table->char('bank_account_fingerprint', 64)->nullable();
             }
         });
@@ -105,10 +105,10 @@ return new class extends Migration
     private function extendOrders(): void
     {
         Schema::table('orders', function (Blueprint $table) {
-            if (!Schema::hasColumn('orders', 'payment_provider')) {
+            if (! Schema::hasColumn('orders', 'payment_provider')) {
                 $table->string('payment_provider', 40)->default('manual_transfer');
             }
-            if (!Schema::hasColumn('orders', 'provider_reference')) {
+            if (! Schema::hasColumn('orders', 'provider_reference')) {
                 $table->string('provider_reference', 120)->nullable()->unique();
             }
         });
@@ -116,7 +116,7 @@ return new class extends Migration
 
     private function createFinancialJournals(): void
     {
-        if (!Schema::hasTable('financial_journals')) {
+        if (! Schema::hasTable('financial_journals')) {
             Schema::create('financial_journals', function (Blueprint $table) {
                 $table->id();
                 $table->uuid('uuid')->unique();
@@ -135,7 +135,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('financial_ledger_entries')) {
+        if (! Schema::hasTable('financial_ledger_entries')) {
             Schema::create('financial_ledger_entries', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('financial_journal_id')
@@ -246,7 +246,7 @@ return new class extends Migration
     private function extendPayouts(): void
     {
         Schema::table('payouts', function (Blueprint $table) {
-            if (!Schema::hasColumn('payouts', 'payout_approval_id')) {
+            if (! Schema::hasColumn('payouts', 'payout_approval_id')) {
                 $table->foreignId('payout_approval_id')
                     ->nullable()
                     ->unique()
@@ -258,7 +258,7 @@ return new class extends Migration
 
     private function seedSettings(): void
     {
-        if (!Schema::hasTable('settings')) {
+        if (! Schema::hasTable('settings')) {
             return;
         }
 

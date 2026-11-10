@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\ImmutableFinancialRecord;
+use App\Support\WalletLedgerSignature;
 use Illuminate\Database\Eloquent\Model;
 
 class CustomerWalletTransaction extends Model
@@ -13,6 +14,22 @@ class CustomerWalletTransaction extends Model
 
     /** Mutasi permanen hanya dibuat melalui CustomerWalletService. */
     protected $guarded = ['*'];
+
+    protected static function booted(): void
+    {
+        static::creating(function (self $transaction): void {
+            $signature = app(WalletLedgerSignature::class);
+
+            if (blank($transaction->reference_type) || blank($transaction->reference_id)) {
+                [$referenceType, $referenceId] = $signature->referenceFor($transaction->getAttributes());
+                $transaction->reference_type = $referenceType;
+                $transaction->reference_id = $referenceId;
+            }
+            if (blank($transaction->checksum)) {
+                $transaction->checksum = $signature->sign($transaction->getAttributes());
+            }
+        });
+    }
 
     protected $casts = [
         'amount' => 'decimal:2',

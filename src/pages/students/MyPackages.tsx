@@ -1,4 +1,5 @@
 import { notify } from "@/lib/notify";
+import { formatSearchAge } from "@/lib/duration";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -6,6 +7,7 @@ import {
   ArrowRight,
   BarChart3,
   BookOpenCheck,
+  Building2,
   CalendarDays,
   ChevronDown,
   ChevronUp,
@@ -15,6 +17,8 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  ShieldCheck,
+  WalletCards,
   WifiOff,
   XCircle,
   UserRound,
@@ -73,7 +77,10 @@ type PackageData = {
       recommended_action?: string | null;
       search_radius_km?: number;
       next_radius_km?: number | null;
+      search_started_at?: string | null;
       search_expires_at?: string | null;
+      search_age_minutes?: number | null;
+      search_age_seconds?: number | null;
       next_matching_at?: string | null;
       teacher_response_deadline?: string | null;
       active_offer_count?: number;
@@ -97,6 +104,24 @@ type PackageData = {
     tutor_name: string;
     package_name?: string | null;
     order_kind: "package";
+    payment_provider?: string | null;
+  } | null;
+  latest_refund?: {
+    id: number;
+    status: string;
+    amount: number;
+    reason?: string | null;
+    destination_method?: "bank_transfer" | "bimbelku_balance" | "xendit_original" | null;
+    destination_selected_at?: string | null;
+    destination_bank_name?: string | null;
+    destination_account_name?: string | null;
+    destination_account_number?: string | null;
+    stage_label?: string | null;
+    status_message?: string | null;
+    can_switch_to_balance?: boolean;
+    gateway_failure_message?: string | null;
+    wallet_funded_amount?: number;
+    external_funded_amount?: number;
   } | null;
 };
 
@@ -131,6 +156,9 @@ type PackageListResponse = PackageData[] | { data?: PackageData[] };
 type PackageScope = "active" | "history";
 
 const historyPackageStatuses = new Set(["completed", "cancelled", "payment_expired", "refunded"]);
+// A refund row may linger on an order while a package is searching again. Only
+// surface refund choices once the package is officially out of matching.
+const refundChoiceStatuses = new Set(["no_teacher", "cancelled", "refund_pending", "refunded"]);
 const packageDisplayStatus = (item: PackageData) => item.status === "refund_pending" && item.latest_order?.status === "refunded" ? "refunded" : item.status;
 
 const readPackageRows = (payload: PackageListResponse): PackageData[] | null => {
@@ -142,6 +170,27 @@ const validDate = (value?: string | null): Date | null => {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+};
+
+// The search window is the package's real 60-minute matching deadline. A
+// package can be labelled "no_teacher" while a retry is still scheduled, so
+// the refund choice must wait for the deadline, not the status label.
+const matchingWindowEndsAt = (item: PackageData): Date | null => {
+  const subjects = (item.subjects || []).filter((subject) => subject.status !== "accepted");
+  const deadlines = subjects
+    .map((subject) => validDate(subject.matching?.search_expires_at))
+    .filter((date): date is Date => Boolean(date));
+
+  // Prefer the strict 60-minute deadline. next_matching_at is only a fallback
+  // for older rows that never stored search_expires_at.
+  const fallbackDeadlines = subjects
+    .map((subject) => validDate(subject.matching?.next_matching_at))
+    .filter((date): date is Date => Boolean(date));
+
+  const relevant = deadlines.length ? deadlines : fallbackDeadlines;
+  if (!relevant.length) return null;
+
+  return new Date(Math.max(...relevant.map((date) => date.getTime())));
 };
 
 const formatShortDate = (value?: string | null): string => {
@@ -158,6 +207,9 @@ const formatSessionDate = (value?: string | null): string | null => {
     : null;
 };
 
+const rupiah = (value: number) =>
+  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value || 0);
+
 export default function PackageProcessList({ scope }: { scope: PackageScope }) {
   const confirm = useConfirmDialog();
   const [items, setItems] = useState<PackageData[]>([]);
@@ -171,9 +223,18 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
   const [replacementEvidence, setReplacementEvidence] = useState<File | null>(null);
   const [rescheduleTarget, setRescheduleTarget] = useState<NonNullable<NonNullable<PackageData["subjects"]>[number]["teacher_replacement"]> | null>(null);
   const [replacementSchedules, setReplacementSchedules] = useState<string[]>([]);
+  const [refundSubmitting, setRefundSubmitting] = useState<number | null>(null);
+  // Re-render around the matching deadline so the refund choice appears on
+  // time even if the student keeps this page open without reloading.
+  const [clock, setClock] = useState(() => Date.now());
 
-  const load = useCallback(async (force = false) => {
-    setError(null);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const load = useCallback(async (force = false, silent = false) => {
+    if (!silent) setError(null);
     try {
       const [activeResponse, historyResponse] = await Promise.all([
         getCached<PackageListResponse>("/student/packages", { params: { scope: "active", per_page: 100 }, maxAgeMs: 10_000, force }),
@@ -184,22 +245,24 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
       if (!activeRows || !historyRows) throw new Error("Format daftar paket tidak dikenali.");
       setItems([...activeRows, ...historyRows]);
     } catch (err) {
-      if (axios.isAxiosError(err)) {
-        if (!err.response) {
-          setError("network");
-        } else if (err.response.status === 401) {
-          setError("unauthorized");
-        } else if (err.response.status === 403) {
-          setError("forbidden");
-        } else if (err.response.status === 404) {
-          setError("not_found");
+      if (!silent) {
+        if (axios.isAxiosError(err)) {
+          if (!err.response) {
+            setError("network");
+          } else if (err.response.status === 401) {
+            setError("unauthorized");
+          } else if (err.response.status === 403) {
+            setError("forbidden");
+          } else if (err.response.status === 404) {
+            setError("not_found");
+          } else {
+            setError("generic");
+          }
         } else {
           setError("generic");
         }
-      } else {
-        setError("generic");
+        notify.error(getApiError(err, "Paket gagal dimuat."));
       }
-      notify.error(getApiError(err, "Paket gagal dimuat."));
     } finally {
       setLoading(false);
     }
@@ -213,6 +276,20 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
 
   useEffect(() => {
     void load()
+  }, [load]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(true, true);
+    };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("bimbelku:data-changed", refresh);
+    const timer = window.setInterval(refresh, 30_000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("bimbelku:data-changed", refresh);
+      window.clearInterval(timer);
+    };
   }, [load]);
 
   const retry = async (packageId: number) => {
@@ -229,9 +306,12 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
   };
 
   const cancel = async (item: PackageData) => {
+    const noTeacher = item.status === "no_teacher";
     const approved = await confirm({
       title: "Batalkan seluruh paket belajar?",
-      description: "Pencarian dan penerimaan tutor untuk semua mapel akan dibatalkan. Jika paket sudah dibayar, pengembalian dana penuh akan diproses dan statusnya dapat dipantau di akun.",
+      description: noTeacher
+        ? "Tutor belum ditemukan. Setelah paket dibatalkan, pilih tujuan refund: Saldo BimbelKu atau metode pembayaran asal. Pembayaran via Xendit (QRIS, e-wallet, VA) dikembalikan otomatis ke metode asal tanpa menunggu bukti transfer admin."
+        : "Pencarian dan penerimaan tutor untuk semua mapel akan dibatalkan. Jika paket sudah dibayar, pengembalian dana penuh akan diproses dan statusnya dapat dipantau di akun.",
       confirmText: "Batalkan seluruh paket",
       tone: "danger",
     });
@@ -243,6 +323,66 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
       await load(true);
     } catch (error) {
       notify.error(getApiError(error));
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const submitRefundDestination = async (refundId: number, method: "bimbelku_balance" | "xendit_original") => {
+    if (refundSubmitting !== null) return;
+    setRefundSubmitting(refundId);
+    try {
+      const response = await http.post(`/student/refunds/${refundId}/destination`, {
+        destination_method: method,
+      });
+      notify.success(response.data?.message || "Tujuan refund berhasil dikonfirmasi.");
+      await load(true);
+    } catch (error) {
+      notify.error(getApiError(error, "Tujuan refund tidak dapat disimpan."));
+    } finally {
+      setRefundSubmitting(null);
+    }
+  };
+
+  const requestRefundDestination = async (refundId: number, method: "bimbelku_balance" | "xendit_original") => {
+    const approved = await confirm({
+      title: method === "bimbelku_balance" ? "Refund ke Saldo BimbelKu?" : "Refund ke metode pembayaran asal?",
+      description: method === "bimbelku_balance"
+        ? "Dana langsung masuk ke Saldo BimbelKu. Saldo dapat dipakai untuk paket les berikutnya atau Kelas Bersama, tetapi tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet."
+        : "Dana dikembalikan otomatis ke metode pembayaran asal melalui Xendit. Tidak perlu menunggu bukti transfer admin.",
+      confirmText: "Konfirmasi tujuan",
+    });
+    if (!approved) return;
+    await submitRefundDestination(refundId, method);
+  };
+
+  const cancelWithRefund = async (item: PackageData, method: "bimbelku_balance" | "xendit_original") => {
+    const toBalance = method === "bimbelku_balance";
+    const approved = await confirm({
+      title: toBalance ? "Batalkan paket & refund ke Saldo BimbelKu?" : "Batalkan paket & refund ke metode pembayaran asal?",
+      description: toBalance
+        ? "Pencarian tutor dihentikan. Dana langsung masuk ke Saldo BimbelKu dan dapat dipakai untuk paket les berikutnya atau Kelas Bersama. Saldo tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet."
+        : "Pencarian tutor dihentikan. Dana dikembalikan otomatis ke metode pembayaran asal melalui Xendit (QRIS, e-wallet, atau VA). Tidak perlu menunggu bukti transfer admin.",
+      confirmText: toBalance ? "Batalkan & isi saldo" : "Batalkan & refund otomatis",
+      tone: "danger",
+    });
+    if (!approved) return;
+    setProcessing(item.id);
+    try {
+      const cancelResponse = await http.post(`/student/packages/${item.id}/cancel`);
+      const refundId = Number(cancelResponse.data?.refund_id || 0);
+      if (refundId) {
+        const destinationResponse = await http.post(`/student/refunds/${refundId}/destination`, {
+          destination_method: method,
+        });
+        notify.success(destinationResponse.data?.message || cancelResponse.data?.message || "Refund diproses otomatis.");
+      } else {
+        notify.success(cancelResponse.data?.message || "Paket dibatalkan.");
+      }
+      await load(true);
+    } catch (error) {
+      notify.error(getApiError(error, "Paket belum dapat dibatalkan. Muat ulang lalu coba lagi."));
+      await load(true);
     } finally {
       setProcessing(null);
     }
@@ -378,7 +518,7 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
               const canCancelSearch = ["matching", "teacher_pending", "no_teacher"].includes(item.status);
               const retryableSubjects = subjects.filter((subject) => subject.status === "no_teacher" && subject.matching?.can_retry);
               const canRetry = retryableSubjects.length > 0;
-              const canChangeSchedule = subjects.some((subject) => subject.status === "no_teacher" && subject.matching?.can_change_schedule);
+              const canChangeSchedule = subjects.some((subject) => ["matching", "teacher_pending", "no_teacher"].includes(subject.status) && subject.matching?.can_change_schedule);
               const retryLabel = retryableSubjects.length === 1 ? (retryableSubjects[0].matching?.retry_label || "Cari Lagi") : "Cari Lagi";
               const readySubjects = subjects.filter((subject) => subject.status === "accepted" && subject.teacher);
               const waitingSubjects = subjects.filter((subject) => subject.status !== "accepted");
@@ -386,6 +526,19 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
               const missingSubjects = waitingSubjects.filter((subject) => subject.status === "no_teacher");
               const renewalSubject = item.can_renew ? subjects.find((subject) => Boolean(subject.teacher)) : undefined;
               const isCollapsed = scope === "history" && !expandedHistory.has(item.id);
+              const refund = item.latest_refund;
+              const refundVisible = Boolean(refund) && refundChoiceStatuses.has(item.status);
+              const refundNeedsDestination = Boolean(refundVisible && refund && refund.status === "pending" && !refund.destination_selected_at);
+              const refundExternal = Number(refund?.external_funded_amount ?? refund?.amount ?? 0);
+              const canReturnToOriginal = refundExternal > 0.009 && item.latest_order?.payment_provider === "xendit";
+              const searchWindowEndsAt = matchingWindowEndsAt(item);
+              const matchingWindowOpen = Boolean(searchWindowEndsAt && searchWindowEndsAt.getTime() > clock);
+              // Waiting for 60 minutes only gates the prompt before the student
+              // cancels. Once the package is cancelled (refund already created),
+              // the destination choice must open immediately.
+              const refundDestinationUnlocked = !matchingWindowOpen
+                || item.status === "cancelled"
+                || item.status === "refund_pending";
               return (
                 <article key={item.id} className="min-w-0 max-w-full overflow-hidden rounded-[1.6rem] border border-slate-100 bg-white shadow-sm sm:rounded-[2rem]">
                   <div className="flex min-w-0 flex-col justify-between gap-4 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:p-6">
@@ -443,6 +596,13 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
                     </div>
                   </div>
 
+                  {scope === "active" && canCancelSearch && (
+                    <div role="status" className="mx-4 mt-4 flex items-start gap-2 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs font-semibold leading-5 text-sky-900 sm:mx-6 sm:p-4">
+                      <Clock3 size={15} className="mt-0.5 shrink-0" />
+                      <span>Waktu tunggu pencarian tutor secara sistematis biasanya memakan waktu hingga 1 jam. Kamu tidak perlu menunggu di halaman ini — status akan diperbarui otomatis begitu ada tutor yang menerima.</span>
+                    </div>
+                  )}
+
                   {hasPartialTutorMatch && (
                     <div role="status" className="mx-4 mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 sm:mx-6 sm:p-5">
                       <p className="font-black">{readySubjects.length} tutor siap mengajar · {waitingSubjects.length} mapel masih menunggu tutor</p>
@@ -454,6 +614,135 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
                           {canRetry ? "Untuk mapel yang belum mendapat tutor, pilih Cari lagi atau Ubah jadwal. Jika tidak ingin melanjutkan, Batalkan seluruh paket." : "Pencarian ulang pada jadwal ini sudah mencapai batas. Ubah jadwal mapel yang belum mendapat tutor atau batalkan seluruh paket."}
                         </p>
                       )}
+                    </div>
+                  )}
+
+                  {refundVisible && refund && (
+                    <div className="mx-4 mt-4 rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950 sm:mx-6 sm:p-5">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="font-black">Refund · {rupiah(Number(refund.amount || 0))}</p>
+                          <p className="mt-1 text-xs leading-5 text-violet-700">{refund.reason || "Pengembalian dana paket belajar."}</p>
+                        </div>
+                        <span className="w-fit rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-wide text-violet-700 shadow-sm">
+                          {refund.stage_label || (refund.status === "paid" ? "Berhasil" : refund.status === "failed" ? "Gagal" : refund.destination_selected_at ? "Diproses" : "Memenuhi syarat")}
+                        </span>
+                      </div>
+
+                      {refund.status_message && (
+                        <p className="mt-3 rounded-xl border border-violet-200 bg-white/80 p-3 text-xs font-semibold leading-5 text-violet-900">{refund.status_message}</p>
+                      )}
+
+                      {refundNeedsDestination && refundDestinationUnlocked && (
+                        <div className="mt-3 rounded-xl border border-violet-200 bg-white p-3">
+                          <p className="font-black text-slate-900">Mau menerima refund ke mana?</p>
+                          <p className="mt-1 text-xs leading-5 text-slate-600">
+                            Pilih tujuan pengembalian dana. Pembayaran melalui Xendit (QRIS, e-wallet, atau VA) dapat dikembalikan otomatis ke metode pembayaran asal tanpa menunggu bukti transfer admin.
+                          </p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            <div className="min-w-0">
+                              <button
+                                type="button"
+                                onClick={() => void requestRefundDestination(refund.id, "bimbelku_balance")}
+                                disabled={refundSubmitting === refund.id}
+                                className="flex min-h-12 w-full items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-left text-white disabled:opacity-50"
+                              >
+                                {refundSubmitting === refund.id ? <Loader2 size={17} className="shrink-0 animate-spin" /> : <WalletCards size={17} className="shrink-0" />}
+                                <span><span className="block font-black">Saldo BimbelKu</span><span className="block text-[10px] font-medium text-indigo-100">Langsung masuk saldo · tidak bisa ditarik tunai</span></span>
+                              </button>
+                              <p className="mt-1.5 rounded-lg bg-indigo-50 px-2 py-1.5 text-[11px] font-medium leading-4 text-indigo-900">
+                                Saldo BimbelKu dapat langsung digunakan untuk pembelian paket les berikutnya, namun tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void requestRefundDestination(refund.id, "xendit_original")}
+                              disabled={!canReturnToOriginal || refundSubmitting === refund.id}
+                              className="flex min-h-12 items-center gap-2 rounded-xl border border-violet-200 bg-white px-3 py-2 text-left text-violet-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                            >
+                              <Building2 size={17} className="shrink-0" />
+                              <span><span className="block font-black">Metode pembayaran asal</span><span className="block text-[10px] font-medium">{canReturnToOriginal ? `${rupiah(refundExternal)} kembali otomatis via Xendit` : "Tidak tersedia untuk pembayaran ini"}</span></span>
+                            </button>
+                          </div>
+                          {!canReturnToOriginal && <p className="mt-2 text-[11px] font-semibold leading-5 text-slate-500">Pengembalian ke metode asal tidak tersedia. Pilih Saldo BimbelKu agar dana tetap dapat digunakan.</p>}
+                        </div>
+                      )}
+
+                      {refundNeedsDestination && !refundDestinationUnlocked && (
+                        <div role="status" className="mt-3 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs font-semibold leading-5 text-sky-900">
+                          <Clock3 size={15} className="mt-0.5 shrink-0" />
+                          <span>
+                            Paket sudah dibatalkan dan dana refund sudah tercatat. Pilihan tujuan refund (Saldo BimbelKu atau metode pembayaran asal) terbuka setelah masa pencarian tutor berakhir
+                            {searchWindowEndsAt ? ` pada ${formatSessionDate(searchWindowEndsAt.toISOString())}` : ""}. Halaman ini akan memperbarui pilihannya otomatis.
+                          </span>
+                        </div>
+                      )}
+
+                      {refund.can_switch_to_balance && (
+                        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3">
+                          <p className="text-xs font-bold leading-5 text-rose-700">{refund.gateway_failure_message || "Pengembalian ke metode pembayaran asal gagal."}</p>
+                          <button
+                            type="button"
+                            onClick={() => void requestRefundDestination(refund.id, "bimbelku_balance")}
+                            disabled={refundSubmitting === refund.id}
+                            className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-xl bg-rose-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50"
+                          >
+                            {refundSubmitting === refund.id ? <Loader2 size={16} className="animate-spin" /> : <WalletCards size={16} />}
+                            Pindahkan ke Saldo BimbelKu
+                          </button>
+                          <p className="mt-2 rounded-lg bg-white/80 px-2 py-1.5 text-[11px] font-medium leading-4 text-slate-600">
+                            Saldo BimbelKu dapat langsung digunakan untuk pembelian paket les berikutnya, namun tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet.
+                          </p>
+                        </div>
+                      )}
+
+                      {refund.destination_selected_at && (
+                        <div className="mt-3 flex items-start gap-2 rounded-xl border border-violet-200 bg-white/80 p-3">
+                          <ShieldCheck size={17} className="mt-0.5 shrink-0 text-violet-600" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-black text-slate-900">Tujuan refund tersimpan</p>
+                            {refund.destination_method === "bimbelku_balance" ? (
+                              <p className="mt-1 text-xs leading-5 text-slate-600">Saldo BimbelKu · otomatis masuk ke saldo, dapat dipakai untuk belajar, dan tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet.</p>
+                            ) : refund.destination_method === "xendit_original" ? (
+                              <p className="mt-1 text-xs leading-5 text-slate-600">Dana dikembalikan otomatis ke metode pembayaran asal (QRIS, e-wallet, atau VA). Tidak perlu menunggu bukti transfer admin.</p>
+                            ) : (
+                              <p className="mt-1 break-words text-xs leading-5 text-slate-600">{refund.destination_bank_name} · {refund.destination_account_number} · a.n. {refund.destination_account_name}</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {item.status === "no_teacher" && !refund && item.latest_order?.status === "paid" && !matchingWindowOpen && (
+                    <div role="status" className="mx-4 mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 sm:mx-6 sm:p-5">
+                      <p className="font-black">Tutor belum ditemukan. Pilih tujuan pengembalian dana.</p>
+                      <p className="mt-1 text-xs leading-5 text-amber-900">Paket akan dibatalkan dan dana dikembalikan sesuai pilihanmu. Pembayaran via Xendit (QRIS, e-wallet, VA) dikembalikan otomatis ke metode pembayaran asal tanpa menunggu bukti transfer admin.</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <div className="min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => void cancelWithRefund(item, "bimbelku_balance")}
+                            disabled={processing === item.id}
+                            className="flex min-h-12 w-full items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-left text-white disabled:opacity-50"
+                          >
+                            {processing === item.id ? <Loader2 size={17} className="shrink-0 animate-spin" /> : <WalletCards size={17} className="shrink-0" />}
+                            <span><span className="block font-black">Saldo BimbelKu</span><span className="block text-[10px] font-medium text-indigo-100">Langsung masuk saldo · tidak bisa ditarik tunai</span></span>
+                          </button>
+                          <p className="mt-1.5 rounded-lg bg-white/70 px-2 py-1.5 text-[11px] font-medium leading-4 text-amber-950">
+                            Saldo BimbelKu dapat langsung digunakan untuk pembelian paket les berikutnya, namun tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void cancelWithRefund(item, "xendit_original")}
+                          disabled={processing === item.id || item.latest_order?.payment_provider !== "xendit"}
+                          className="flex min-h-12 items-center gap-2 rounded-xl border border-amber-300 bg-white px-3 py-2 text-left text-amber-950 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        >
+                          <Building2 size={17} className="shrink-0" />
+                          <span><span className="block font-black">Metode pembayaran asal</span><span className="block text-[10px] font-medium">{item.latest_order?.payment_provider === "xendit" ? "Kembali otomatis via Xendit · tanpa bukti transfer admin" : "Tidak tersedia untuk pembayaran ini"}</span></span>
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -494,9 +783,19 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
                               </div>
                             </div>
                             <p className="mt-3 text-sm font-bold text-slate-700">{subject.teacher ? `Tutor ${subject.teacher.name}` : "Tutor sedang dicari"}</p>
+                            {(subject.status === "matching" || subject.status === "teacher_pending") && !subject.teacher && subject.matching?.search_age_seconds != null && (
+                              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
+                                <Clock3 size={13} /> Lama mencari {formatSearchAge(subject.matching.search_age_seconds, subject.matching.search_age_minutes)}
+                              </p>
+                            )}
                             {Boolean(subject.matching?.active_offer_count) && (
                               <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold leading-5 text-blue-900">
                                 <div className="flex items-start gap-2"><Search size={15} className="mt-0.5 shrink-0"/><span>{subject.matching?.active_offer_count} guru sedang dihubungi. Batas jawaban terdekat {formatSessionDate(subject.matching?.teacher_response_deadline) || "sedang dihitung"}.</span></div>
+                              </div>
+                            )}
+                            {subject.matching?.search_state === "matching" && (
+                              <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs font-semibold leading-5 text-sky-900">
+                                <div className="flex items-start gap-2"><Search size={15} className="mt-0.5 shrink-0"/><span>Pencarian tutor aktif. Sistem menyiapkan gelombang penawaran berikutnya{subject.matching.search_expires_at ? ` · batas pencarian ${formatSessionDate(subject.matching.search_expires_at)}` : ""}.</span></div>
                               </div>
                             )}
                             {subject.matching?.search_state === "retry_scheduled" && (

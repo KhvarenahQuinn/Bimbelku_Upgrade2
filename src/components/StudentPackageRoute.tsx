@@ -2,6 +2,7 @@ import { ArrowLeft, GraduationCap, LayoutDashboard } from "lucide-react";
 import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { clearBrowserSession } from "@/lib/session";
 
 type StoredUser = {
   name?: string;
@@ -25,8 +26,7 @@ export default function StudentPackageRoute() {
   try {
     user = userString ? JSON.parse(userString) : null;
   } catch {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    clearBrowserSession();
   }
 
   if (!token || !user) {

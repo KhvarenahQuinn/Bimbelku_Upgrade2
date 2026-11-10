@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('customer_wallets')) {
+        if (! Schema::hasTable('customer_wallets')) {
             Schema::create('customer_wallets', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('user_id')->unique()->constrained()->cascadeOnDelete();
@@ -18,7 +18,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('customer_wallet_transactions')) {
+        if (! Schema::hasTable('customer_wallet_transactions')) {
             Schema::create('customer_wallet_transactions', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('customer_wallet_id')->constrained()->cascadeOnDelete();
@@ -41,16 +41,16 @@ return new class extends Migration
 
         if (Schema::hasTable('refunds')) {
             Schema::table('refunds', function (Blueprint $table) {
-                if (!Schema::hasColumn('refunds', 'destination_method')) {
+                if (! Schema::hasColumn('refunds', 'destination_method')) {
                     $table->string('destination_method', 30)->nullable()->after('status')->index();
                 }
-                if (!Schema::hasColumn('refunds', 'destination_bank_name')) {
+                if (! Schema::hasColumn('refunds', 'destination_bank_name')) {
                     $table->string('destination_bank_name', 120)->nullable()->after('destination_method');
                 }
-                if (!Schema::hasColumn('refunds', 'destination_account_name')) {
+                if (! Schema::hasColumn('refunds', 'destination_account_name')) {
                     $table->string('destination_account_name', 160)->nullable()->after('destination_bank_name');
                 }
-                if (!Schema::hasColumn('refunds', 'destination_account_number')) {
+                if (! Schema::hasColumn('refunds', 'destination_account_number')) {
                     $table->string('destination_account_number', 100)->nullable()->after('destination_account_name');
                 }
             });

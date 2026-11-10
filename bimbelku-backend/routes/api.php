@@ -21,21 +21,22 @@ use App\Http\Controllers\Api\CurriculumSubjectController;
 use App\Http\Controllers\Api\CurriculumSubjectGroupController;
 use App\Http\Controllers\Api\CustomerWalletController;
 use App\Http\Controllers\Api\EmailVerificationController;
-use App\Http\Controllers\Api\HourlyRateController;
 use App\Http\Controllers\Api\GoogleAuthController;
 use App\Http\Controllers\Api\GuestPackageOrderController;
+use App\Http\Controllers\Api\HourlyRateController;
 use App\Http\Controllers\Api\LearningCatalogController;
+use App\Http\Controllers\Api\LearningProgramController;
 use App\Http\Controllers\Api\LearningSessionController;
 use App\Http\Controllers\Api\NoteController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\PaymentPinController;
+use App\Http\Controllers\Api\PrivateClassJoinController;
+use App\Http\Controllers\Api\PrivateParticipantPricingController;
+use App\Http\Controllers\Api\ProgramController;
 use App\Http\Controllers\Api\ProtectedFileController;
 use App\Http\Controllers\Api\PublicController;
-use App\Http\Controllers\Api\ProgramController;
-use App\Http\Controllers\Api\PrivateParticipantPricingController;
-use App\Http\Controllers\Api\PrivateClassJoinController;
 use App\Http\Controllers\Api\PublicMediaController;
 use App\Http\Controllers\Api\RatingController;
 use App\Http\Controllers\Api\ScheduleChangeController;
@@ -44,8 +45,8 @@ use App\Http\Controllers\Api\SessionWorkflowController;
 use App\Http\Controllers\Api\StageFiveContentController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\StudentPackageController;
-use App\Http\Controllers\Api\SubjectPageContentController;
 use App\Http\Controllers\Api\StudentRefundController;
+use App\Http\Controllers\Api\SubjectPageContentController;
 use App\Http\Controllers\Api\TeacherCheapClassController;
 use App\Http\Controllers\Api\TeacherController;
 use App\Http\Controllers\Api\TeacherDocumentController;
@@ -69,12 +70,13 @@ Route::post('/auth/google/complete-profile', [GoogleAuthController::class, 'comp
     ->middleware(['auth:sanctum', 'throttle:auth-register']);
 Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink'])->middleware('throttle:auth-forgot-password');
 Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:auth-reset-password');
+Route::post('/payment-pin/reset-with-token', [PaymentPinController::class, 'resetWithEmailToken'])->middleware('throttle:payment-pin-reset-token');
 Route::post('/email/verification/resend', [EmailVerificationController::class, 'resend'])->middleware('throttle:auth-email-verification-resend');
 Route::post('/email/verification/verify', [EmailVerificationController::class, 'verify'])->middleware('throttle:auth-email-verification-verify');
 
 Route::get('/learning-catalog', [LearningCatalogController::class, 'index'])->middleware('throttle:public-read');
 Route::get('/program-groups', [ProgramController::class, 'index'])->middleware('throttle:public-read');
-Route::get('/learning-programs', [\App\Http\Controllers\Api\LearningProgramController::class, 'index'])->middleware('throttle:public-read');
+Route::get('/learning-programs', [LearningProgramController::class, 'index'])->middleware('throttle:public-read');
 Route::get('/public-tutors', [WebsiteContentController::class, 'tutors'])->middleware('throttle:public-read');
 Route::get('/website-tutor-gallery', [WebsiteTutorGalleryController::class, 'publicIndex'])->middleware('throttle:public-read');
 Route::get('/subject-pages/{curriculumSubject}', [SubjectPageContentController::class, 'show'])->whereNumber('curriculumSubject')->middleware('throttle:public-read');
@@ -109,9 +111,10 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
     Route::post('/user', [UserController::class, 'update']);
     Route::put('/user/password', [UserController::class, 'updatePassword'])
         ->middleware('throttle:account-password-change');
+    Route::post('/user/set-initial-password', [UserController::class, 'setInitialPassword'])
+        ->middleware('throttle:account-password-change');
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/logout-all', [AuthController::class, 'logoutAll'])->middleware('throttle:account-password-change');
-
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read-batch', [NotificationController::class, 'markManyAsRead']);
@@ -164,6 +167,8 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
         Route::get('/student/wallet', [CustomerWalletController::class, 'show']);
         Route::get('/student/payment-pin/status', [PaymentPinController::class, 'status']);
         Route::post('/student/payment-pin', [PaymentPinController::class, 'set'])->middleware('throttle:student-payment-pin-set');
+        Route::post('/student/payment-pin/forgot', [PaymentPinController::class, 'forgot'])->middleware('throttle:student-payment-pin-forgot');
+        Route::post('/student/payment-pin/forgot-email', [PaymentPinController::class, 'forgotEmail'])->middleware('throttle:student-payment-pin-forgot-email');
         Route::post('/student/payment-pin/reset/request', [PaymentPinController::class, 'requestReset'])->middleware('throttle:student-payment-pin-reset-request');
         Route::post('/student/payment-pin/reset', [PaymentPinController::class, 'reset'])->middleware('throttle:student-payment-pin-reset');
         Route::post('/student/refunds/{refund}/destination', [StudentRefundController::class, 'selectDestination'])
@@ -388,10 +393,10 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
         Route::put('/notes/{id}', [NoteController::class, 'update']);
         Route::delete('/notes/{id}', [NoteController::class, 'destroy']);
         Route::get('/program-groups', [ProgramController::class, 'adminIndex']);
-        Route::get('/learning-programs', [\App\Http\Controllers\Api\LearningProgramController::class, 'adminIndex']);
-        Route::post('/learning-programs', [\App\Http\Controllers\Api\LearningProgramController::class, 'store']);
-        Route::put('/learning-programs/{learningProgram}', [\App\Http\Controllers\Api\LearningProgramController::class, 'update']);
-        Route::delete('/learning-programs/{learningProgram}', [\App\Http\Controllers\Api\LearningProgramController::class, 'deactivate']);
+        Route::get('/learning-programs', [LearningProgramController::class, 'adminIndex']);
+        Route::post('/learning-programs', [LearningProgramController::class, 'store']);
+        Route::put('/learning-programs/{learningProgram}', [LearningProgramController::class, 'update']);
+        Route::delete('/learning-programs/{learningProgram}', [LearningProgramController::class, 'deactivate']);
         Route::post('/program-groups', [ProgramController::class, 'store']);
         Route::put('/program-groups/{program}', [ProgramController::class, 'update']);
         Route::delete('/program-groups/{program}', [ProgramController::class, 'deactivate']);

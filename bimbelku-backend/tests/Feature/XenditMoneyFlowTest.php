@@ -2,15 +2,15 @@
 
 namespace Tests\Feature;
 
-use App\Models\Order;
 use App\Models\Notification;
+use App\Models\Order;
 use App\Models\Payout;
 use App\Models\Refund;
 use App\Models\TeacherProfile;
 use App\Models\User;
+use App\Services\RefundSettlementService;
 use App\Services\XenditMoneyMovementService;
 use App\Services\XenditPaymentService;
-use App\Services\RefundSettlementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -67,6 +67,7 @@ class XenditMoneyFlowTest extends TestCase
             if ($request->method() === 'GET') {
                 return Http::response(['payment_session_id' => 'ps-embedded', 'components_sdk_key' => 'sdk-reloaded', 'status' => 'ACTIVE']);
             }
+
             return Http::response([
                 'payment_session_id' => 'ps-embedded', 'components_sdk_key' => 'sdk-created',
                 'status' => 'ACTIVE', 'expires_at' => now()->addHour()->toIso8601String(),
@@ -200,7 +201,10 @@ class XenditMoneyFlowTest extends TestCase
             && $request['session_type'] === 'PAY'
             && $request['mode'] === 'PAYMENT_LINK'
             && $request['amount'] === 150000
-            && str_starts_with((string) data_get($request->data(), 'customer.reference_id'), 'USER-'.$student->id.'-BKU-'.$order->id.'-'));
+            // Kode transaksi lokal (PKG-.../INV-...) menjadi reference_id utama
+            // agar bisa difilter langsung pada dashboard Xendit.
+            && $request['reference_id'] === $order->order_id
+            && str_starts_with((string) data_get($request->data(), 'customer.reference_id'), 'USER-'.$student->id.'-'.$order->order_id));
         Http::assertSent(fn (Request $request) => $request->url() === 'https://api.xendit.test/refunds'
             && $request->hasHeader('idempotency-key', 'BKU-RFD-'.$refund->id)
             && $request['payment_request_id'] === 'pr-test-1' && $request['amount'] === 150000);
@@ -339,7 +343,6 @@ class XenditMoneyFlowTest extends TestCase
         Http::assertSentCount(1);
     }
 
-
     public function test_student_can_sync_completed_session_without_double_credit(): void
     {
         Http::fake([
@@ -379,5 +382,4 @@ class XenditMoneyFlowTest extends TestCase
         $this->assertSame(160000.0, (float) $order->external_received_amount);
         $this->assertSame('py-sync-1', $order->gateway_payment_id);
     }
-
 }

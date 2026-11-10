@@ -80,7 +80,7 @@ class ScheduleRecommendationController extends Controller
                     return null;
                 }
 
-                $preview = new BookingRequest();
+                $preview = new BookingRequest;
                 $preview->forceFill([
                     'student_id' => $student->id,
                     'package_subject_id' => -1,
@@ -98,9 +98,9 @@ class ScheduleRecommendationController extends Controller
                     'longitude' => $validated['learning_mode'] === 'offline' ? $student->longitude : null,
                     'search_radius_km' => $validated['learning_mode'] === 'offline' ? 3 : null,
                 ]);
-                $packageSubject = new PackageSubject();
+                $packageSubject = new PackageSubject;
                 $packageSubject->setRelation('sessions', $starts->values()->map(
-                    fn (Carbon $start, int $index) => (new PackageSession())->forceFill([
+                    fn (Carbon $start, int $index) => (new PackageSession)->forceFill([
                         'sequence' => $index + 1,
                         'scheduled_start_at' => $start,
                         'scheduled_end_at' => $start->copy()->addHours($duration),
@@ -121,6 +121,7 @@ class ScheduleRecommendationController extends Controller
             ->filter()
             ->sort(function (array $a, array $b) {
                 $candidateOrder = $b['candidate_count'] <=> $a['candidate_count'];
+
                 return $candidateOrder !== 0
                     ? $candidateOrder
                     : ($a['distance_from_current_minutes'] <=> $b['distance_from_current_minutes']);
@@ -128,6 +129,7 @@ class ScheduleRecommendationController extends Controller
             ->take(3)
             ->map(function (array $item) {
                 unset($item['distance_from_current_minutes']);
+
                 return $item;
             })
             ->values();
@@ -165,6 +167,7 @@ class ScheduleRecommendationController extends Controller
     private function minutes(string $time): int
     {
         [$hour, $minute] = array_map('intval', explode(':', $time));
+
         return ($hour * 60) + $minute;
     }
 

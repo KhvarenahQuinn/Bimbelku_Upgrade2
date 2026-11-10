@@ -8,16 +8,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('classrooms')) {
+        if (! Schema::hasTable('classrooms')) {
             return;
         }
 
         Schema::table('classrooms', function (Blueprint $table) {
-            if (!Schema::hasColumn('classrooms', 'day')) {
+            if (! Schema::hasColumn('classrooms', 'day')) {
                 $table->string('day')->nullable();
             }
 
-            if (!Schema::hasColumn('classrooms', 'time')) {
+            if (! Schema::hasColumn('classrooms', 'time')) {
                 $table->string('time')->nullable();
             }
         });
@@ -25,7 +25,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (!Schema::hasTable('classrooms')) {
+        if (! Schema::hasTable('classrooms')) {
             return;
         }
 

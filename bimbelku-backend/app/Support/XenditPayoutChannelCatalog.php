@@ -36,11 +36,16 @@ final class XenditPayoutChannelCatalog
     public static function inferCode(?string $bankName): ?string
     {
         $normalized = strtoupper((string) preg_replace('/[^A-Z0-9]+/i', '', $bankName ?? ''));
-        if ($normalized === '') return null;
+        if ($normalized === '') {
+            return null;
+        }
         foreach (self::CHANNELS as $code => $item) {
             $label = strtoupper((string) preg_replace('/[^A-Z0-9]+/i', '', $item['label']));
-            if ($normalized === $code || str_contains($normalized, $code) || str_contains($label, $normalized)) return $code;
+            if ($normalized === $code || str_contains($normalized, $code) || str_contains($label, $normalized)) {
+                return $code;
+            }
         }
+
         return null;
     }
 }

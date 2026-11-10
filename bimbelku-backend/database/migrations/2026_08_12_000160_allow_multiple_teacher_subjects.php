@@ -8,12 +8,14 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     private const PROFILE_FK_INDEX = 'teacher_subjects_profile_fk_idx';
+
     private const OLD_PROFILE_UNIQUE = 'teacher_subjects_profile_unique';
+
     private const PROFILE_SUBJECT_UNIQUE = 'teacher_subjects_profile_subject_unique';
 
     public function up(): void
     {
-        if (!Schema::hasTable('teacher_subjects')) {
+        if (! Schema::hasTable('teacher_subjects')) {
             return;
         }
 
@@ -29,7 +31,7 @@ return new class extends Migration
          */
         if (
             Schema::hasColumn('teacher_subjects', 'teacher_profile_id')
-            && !Schema::hasIndex('teacher_subjects', self::PROFILE_FK_INDEX)
+            && ! Schema::hasIndex('teacher_subjects', self::PROFILE_FK_INDEX)
         ) {
             Schema::table('teacher_subjects', function (Blueprint $table) {
                 $table->index('teacher_profile_id', self::PROFILE_FK_INDEX);
@@ -45,7 +47,7 @@ return new class extends Migration
         if (
             Schema::hasColumn('teacher_subjects', 'teacher_profile_id')
             && Schema::hasColumn('teacher_subjects', 'curriculum_subject_id')
-            && !Schema::hasIndex('teacher_subjects', self::PROFILE_SUBJECT_UNIQUE)
+            && ! Schema::hasIndex('teacher_subjects', self::PROFILE_SUBJECT_UNIQUE)
         ) {
             Schema::table('teacher_subjects', function (Blueprint $table) {
                 $table->unique(
@@ -58,7 +60,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (!Schema::hasTable('teacher_subjects')) {
+        if (! Schema::hasTable('teacher_subjects')) {
             return;
         }
 
@@ -76,7 +78,7 @@ return new class extends Migration
             ->havingRaw('COUNT(*) > 1')
             ->exists();
 
-        if (!$hasMultiple && !Schema::hasIndex('teacher_subjects', self::OLD_PROFILE_UNIQUE)) {
+        if (! $hasMultiple && ! Schema::hasIndex('teacher_subjects', self::OLD_PROFILE_UNIQUE)) {
             Schema::table('teacher_subjects', function (Blueprint $table) {
                 $table->unique('teacher_profile_id', self::OLD_PROFILE_UNIQUE);
             });

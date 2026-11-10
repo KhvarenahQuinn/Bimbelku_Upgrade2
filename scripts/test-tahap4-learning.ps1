@@ -31,7 +31,7 @@ try {
 }
 
 Write-Host "Menjalankan tes Tahap 4..." -ForegroundColor Cyan
-php artisan test --filter=StageFourLearningSessionTest
+php artisan test --filter="SessionPresenceFlowV2Test|FreeTextLearningFocusTest|StageFourAccountFlowTest"
 php artisan route:list --path=api
 
 Write-Host "Tahap 4 lulus pada Laragon." -ForegroundColor Green

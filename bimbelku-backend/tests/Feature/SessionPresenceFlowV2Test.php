@@ -5,9 +5,9 @@ namespace Tests\Feature;
 use App\Models\Booking;
 use App\Models\BookingParticipant;
 use App\Models\BookingRequest;
-use App\Models\Order;
 use App\Models\LearningPackage;
 use App\Models\LearningProgram;
+use App\Models\Order;
 use App\Models\PackageChapter;
 use App\Models\PackagePlan;
 use App\Models\PackageSession;
@@ -229,6 +229,74 @@ class SessionPresenceFlowV2Test extends TestCase
         $this->assertDatabaseCount('learning_progress_reports', 0);
     }
 
+    public function test_teacher_portal_and_dashboard_expose_package_session_and_chapter_progress(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-20 10:00:00', 'Asia/Jakarta'));
+        [$student, $teacher, $booking] = $this->makePresenceBooking();
+        $topic = $this->attachSingleChapterPackage($student, $teacher, $booking);
+
+        Sanctum::actingAs($teacher);
+        $this->getJson('/api/teacher/classes')
+            ->assertOk()
+            ->assertJsonPath('0.package_session_progress.subject_total_sessions', 1)
+            ->assertJsonPath('0.package_session_progress.subject_completed_sessions', 0)
+            ->assertJsonPath('0.package_session_progress.subject_remaining_sessions', 1)
+            ->assertJsonPath('0.package_progress.completed_chapters', 0)
+            ->assertJsonPath('0.package_progress.progress_percent', 0);
+        $this->getJson('/api/teacher/dashboard-v2')
+            ->assertOk()
+            ->assertJsonPath('classes.session_progress.total', 1)
+            ->assertJsonPath('classes.session_progress.completed', 0)
+            ->assertJsonPath('classes.session_progress.remaining', 1);
+
+        $this->postJson("/api/teacher/bookings/{$booking->id}/ready", [
+            'focus_note' => 'Latihan Bab Pecahan.',
+        ])->assertOk();
+        Sanctum::actingAs($student);
+        $this->postJson("/api/student/bookings/{$booking->id}/presence-confirm")->assertOk();
+
+        Carbon::setTestNow(Carbon::parse('2026-08-20 10:50:00', 'Asia/Jakarta'));
+        Sanctum::actingAs($teacher);
+        $this->postJson("/api/teacher/bookings/{$booking->id}/check-out")->assertOk();
+        $this->postJson("/api/teacher/bookings/{$booking->id}/progress-reports", [
+            'material_covered' => 'Pembahasan Bab Pecahan dan latihan terarah.',
+            'mastered_skills' => 'Murid mampu menyelesaikan latihan Bab Pecahan dengan lebih mandiri.',
+            'next_exercise' => 'Lanjutkan latihan Bab Pecahan pada sesi berikutnya.',
+            'chapter_updates' => [[
+                'chapter' => 'Pecahan',
+                'activity_type' => 'taught',
+                'status_after' => 'completed',
+                'needs_review' => false,
+            ]],
+        ])->assertCreated();
+
+        // Progress sesi tetap provisional sampai murid menerima sesi.
+        $this->getJson('/api/teacher/classes')
+            ->assertOk()
+            ->assertJsonPath('0.package_session_progress.subject_completed_sessions', 0)
+            ->assertJsonPath('0.package_progress.progress_percent', 0);
+
+        Sanctum::actingAs($student);
+        $this->postJson("/api/student/bookings/{$booking->id}/approve")->assertOk();
+        $this->assertSame('completed', $topic->fresh()->status);
+
+        Sanctum::actingAs($teacher);
+        $this->getJson('/api/teacher/classes')
+            ->assertOk()
+            ->assertJsonPath('0.package_session_progress.subject_total_sessions', 1)
+            ->assertJsonPath('0.package_session_progress.subject_completed_sessions', 1)
+            ->assertJsonPath('0.package_session_progress.subject_remaining_sessions', 0)
+            ->assertJsonPath('0.package_session_progress.used_sessions', 1)
+            ->assertJsonPath('0.package_session_progress.remaining_sessions', 0)
+            ->assertJsonPath('0.package_progress.completed_chapters', 1)
+            ->assertJsonPath('0.package_progress.progress_percent', 100);
+        $this->getJson('/api/teacher/dashboard-v2')
+            ->assertOk()
+            ->assertJsonPath('classes.session_progress.total', 1)
+            ->assertJsonPath('classes.session_progress.completed', 1)
+            ->assertJsonPath('classes.session_progress.remaining', 0);
+    }
+
     private function makePresenceBooking(): array
     {
         $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
@@ -294,6 +362,7 @@ class SessionPresenceFlowV2Test extends TestCase
 
         return [$student, $teacher, $booking->fresh()];
     }
+
     private function attachSingleChapterPackage(User $student, User $teacher, Booking $booking): PackageChapter
     {
         $plan = PackagePlan::create([
@@ -356,5 +425,4 @@ class SessionPresenceFlowV2Test extends TestCase
 
         return $topic;
     }
-
 }

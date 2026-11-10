@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\Order;
 use App\Models\Booking;
 use App\Models\CheapClass;
+use App\Models\Order;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;

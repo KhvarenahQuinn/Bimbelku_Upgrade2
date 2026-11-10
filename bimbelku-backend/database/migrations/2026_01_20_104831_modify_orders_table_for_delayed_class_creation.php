@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('orders')) {
+        if (! Schema::hasTable('orders')) {
             return;
         }
 
@@ -17,7 +17,7 @@ return new class extends Migration
                 $table->unsignedBigInteger('classroom_id')->nullable()->change();
             }
 
-            if (!Schema::hasColumn('orders', 'class_details_snapshot')) {
+            if (! Schema::hasColumn('orders', 'class_details_snapshot')) {
                 $table->json('class_details_snapshot')->nullable();
             }
         });
@@ -25,7 +25,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (!Schema::hasTable('orders')) {
+        if (! Schema::hasTable('orders')) {
             return;
         }
 

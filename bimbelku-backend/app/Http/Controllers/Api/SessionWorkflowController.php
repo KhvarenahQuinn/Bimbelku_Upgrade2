@@ -19,6 +19,7 @@ use App\Services\CustomerWalletService;
 use App\Services\PartialPackageRefundService;
 use App\Services\RefundSettlementService;
 use App\Services\XenditMoneyMovementService;
+use App\Support\RefundStatusPresenter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -802,16 +803,33 @@ class SessionWorkflowController extends Controller
         $refund->refresh()->loadMissing('order');
         $breakdown = $refund->tenderBreakdown();
         if ($refund->order?->payment_provider === 'xendit' && $breakdown['external_funded_amount'] > 0.009) {
-            abort_unless($refund->status === 'pending', 422, 'Refund ini sudah diproses.');
+            abort_unless(in_array($refund->status, ['pending', 'failed'], true), 422, 'Refund ini sudah diproses.');
             try {
                 $data = $xendit->createRefund($refund);
+                $refund->refresh();
+                if ($refund->gatewayFailed()) {
+                    $settlement->markGatewayFailure($refund);
+
+                    return response()->json([
+                        'message' => 'Pengembalian ke metode pembayaran asal gagal. Murid dapat memilih Saldo BimbelKu atau admin mencoba ulang.',
+                        'data' => $data,
+                        'wallet_funded_amount' => $breakdown['wallet_funded_amount'],
+                        'external_funded_amount' => $breakdown['external_funded_amount'],
+                    ], 502);
+                }
+
                 return response()->json([
-                    'message' => 'Refund sedang diproses. Status akhir akan diperbarui secara otomatis.',
+                    'message' => RefundStatusPresenter::present($refund->fresh())['status_message'],
                     'data' => $data,
                     'wallet_funded_amount' => $breakdown['wallet_funded_amount'],
                     'external_funded_amount' => $breakdown['external_funded_amount'],
                 ], 202);
             } catch (\RuntimeException $exception) {
+                $refund->refresh();
+                if ($refund->gatewayFailed()) {
+                    $settlement->markGatewayFailure($refund);
+                }
+
                 return response()->json(['message' => $exception->getMessage()], 502);
             }
         }
@@ -968,6 +986,15 @@ class SessionWorkflowController extends Controller
                     $participant?->update(['status' => 'refunded']);
                     $participant?->bookingRequest?->update(['status' => 'refunded']);
                     $lockedRefund->order->cheapClassEnrollment?->update(['status' => 'refunded']);
+
+                    $package = $lockedRefund->order->learningPackage;
+                    if ($package && in_array($package->status, [
+                        'refund_pending', 'no_teacher', 'matching', 'teacher_pending', 'cancelled', 'payment_expired', 'refunded',
+                    ], true)) {
+                        $package->update(['status' => 'refunded']);
+                        $package->subjects()->update(['status' => 'refunded']);
+                        app(\App\Services\ScheduleReleaseService::class)->releasePackage($package, 'refunded');
+                    }
                 } else {
                     $partialPackageRefunds->completeTeacherReplacementRefund($lockedRefund->fresh());
                 }

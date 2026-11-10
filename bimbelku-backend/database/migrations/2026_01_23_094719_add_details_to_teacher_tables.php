@@ -9,10 +9,10 @@ return new class extends Migration
     public function up()
     {
         Schema::table('teacher_subjects', function (Blueprint $table) {
-            if (!Schema::hasColumn('teacher_subjects', 'is_online')) {
+            if (! Schema::hasColumn('teacher_subjects', 'is_online')) {
                 $table->boolean('is_online')->default(true);
             }
-            if (!Schema::hasColumn('teacher_subjects', 'is_offline')) {
+            if (! Schema::hasColumn('teacher_subjects', 'is_offline')) {
                 $table->boolean('is_offline')->default(true);
             }
         });

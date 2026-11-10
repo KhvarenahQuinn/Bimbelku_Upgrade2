@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Models\HourlyRate;
 use App\Models\CurriculumSubject;
+use App\Models\HourlyRate;
 use App\Models\TeacherAvailability;
 use App\Models\TeacherProfile;
 use App\Models\TeacherSubject;
@@ -20,7 +20,7 @@ class DatabaseSeeder extends Seeder
         $this->call(StageFiveExperienceSeeder::class);
         $this->call(AdminSeeder::class);
 
-        if (!filter_var(env('SEED_DEMO_USERS', false), FILTER_VALIDATE_BOOLEAN)) {
+        if (! filter_var(env('SEED_DEMO_USERS', false), FILTER_VALIDATE_BOOLEAN)) {
             return;
         }
 
@@ -100,6 +100,8 @@ class DatabaseSeeder extends Seeder
                 'policy_version' => config('app.policy_version'),
             ]
         );
+
+        $this->call(DemoMathTutorSeeder::class);
 
         foreach ([
             ['class_type' => 'private', 'learning_mode' => 'online', 'amount' => 40000],

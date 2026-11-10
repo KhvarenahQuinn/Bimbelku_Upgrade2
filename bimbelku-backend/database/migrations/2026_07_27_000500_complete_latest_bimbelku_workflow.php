@@ -27,13 +27,13 @@ return new class extends Migration
     private function extendUsers(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            if (!Schema::hasColumn('users', 'teacher_rejection_streak')) {
+            if (! Schema::hasColumn('users', 'teacher_rejection_streak')) {
                 $table->unsignedSmallInteger('teacher_rejection_streak')->default(0);
             }
-            if (!Schema::hasColumn('users', 'last_teacher_rejection_at')) {
+            if (! Schema::hasColumn('users', 'last_teacher_rejection_at')) {
                 $table->timestamp('last_teacher_rejection_at')->nullable();
             }
-            if (!Schema::hasColumn('users', 'search_cooldown_until')) {
+            if (! Schema::hasColumn('users', 'search_cooldown_until')) {
                 $table->timestamp('search_cooldown_until')->nullable();
             }
         });
@@ -42,34 +42,34 @@ return new class extends Migration
     private function extendTeacherProfiles(): void
     {
         Schema::table('teacher_profiles', function (Blueprint $table) {
-            if (!Schema::hasColumn('teacher_profiles', 'identity_document')) {
+            if (! Schema::hasColumn('teacher_profiles', 'identity_document')) {
                 $table->string('identity_document')->nullable();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'live_selfie')) {
+            if (! Schema::hasColumn('teacher_profiles', 'live_selfie')) {
                 $table->string('live_selfie')->nullable();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'qualification_document')) {
+            if (! Schema::hasColumn('teacher_profiles', 'qualification_document')) {
                 $table->string('qualification_document')->nullable();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'certification_document')) {
+            if (! Schema::hasColumn('teacher_profiles', 'certification_document')) {
                 $table->string('certification_document')->nullable();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'verification_notes')) {
+            if (! Schema::hasColumn('teacher_profiles', 'verification_notes')) {
                 $table->text('verification_notes')->nullable();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'verified_at')) {
+            if (! Schema::hasColumn('teacher_profiles', 'verified_at')) {
                 $table->timestamp('verified_at')->nullable();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'verified_by')) {
+            if (! Schema::hasColumn('teacher_profiles', 'verified_by')) {
                 $table->foreignId('verified_by')->nullable()->constrained('users')->nullOnDelete();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'suspended_until')) {
+            if (! Schema::hasColumn('teacher_profiles', 'suspended_until')) {
                 $table->timestamp('suspended_until')->nullable();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'no_response_streak')) {
+            if (! Schema::hasColumn('teacher_profiles', 'no_response_streak')) {
                 $table->unsignedSmallInteger('no_response_streak')->default(0);
             }
-            if (!Schema::hasColumn('teacher_profiles', 'no_response_window_started_at')) {
+            if (! Schema::hasColumn('teacher_profiles', 'no_response_window_started_at')) {
                 $table->timestamp('no_response_window_started_at')->nullable();
             }
         });
@@ -78,7 +78,7 @@ return new class extends Migration
     private function extendHourlyRates(): void
     {
         Schema::table('hourly_rates', function (Blueprint $table) {
-            if (!Schema::hasColumn('hourly_rates', 'learning_mode')) {
+            if (! Schema::hasColumn('hourly_rates', 'learning_mode')) {
                 $table->string('learning_mode', 20)->nullable();
                 $table->index(
                     ['subject_name', 'education_level', 'class_type', 'learning_mode', 'is_active'],
@@ -113,7 +113,7 @@ return new class extends Migration
 
     private function createGroupPools(): void
     {
-        if (!Schema::hasTable('group_pools')) {
+        if (! Schema::hasTable('group_pools')) {
             Schema::create('group_pools', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('created_by')->constrained('users')->cascadeOnDelete();
@@ -150,43 +150,43 @@ return new class extends Migration
     private function extendBookingRequests(): void
     {
         Schema::table('booking_requests', function (Blueprint $table) {
-            if (!Schema::hasColumn('booking_requests', 'group_pool_id')) {
+            if (! Schema::hasColumn('booking_requests', 'group_pool_id')) {
                 $table->foreignId('group_pool_id')->nullable()->constrained()->nullOnDelete();
             }
-            if (!Schema::hasColumn('booking_requests', 'chapter')) {
+            if (! Schema::hasColumn('booking_requests', 'chapter')) {
                 $table->string('chapter', 180)->nullable();
             }
-            if (!Schema::hasColumn('booking_requests', 'subtopic')) {
+            if (! Schema::hasColumn('booking_requests', 'subtopic')) {
                 $table->string('subtopic', 220)->nullable();
             }
-            if (!Schema::hasColumn('booking_requests', 'learning_goal')) {
+            if (! Schema::hasColumn('booking_requests', 'learning_goal')) {
                 $table->text('learning_goal')->nullable();
             }
-            if (!Schema::hasColumn('booking_requests', 'attachment')) {
+            if (! Schema::hasColumn('booking_requests', 'attachment')) {
                 $table->string('attachment')->nullable();
             }
-            if (!Schema::hasColumn('booking_requests', 'search_radius_km')) {
+            if (! Schema::hasColumn('booking_requests', 'search_radius_km')) {
                 $table->unsignedSmallInteger('search_radius_km')->default(3);
             }
-            if (!Schema::hasColumn('booking_requests', 'search_started_at')) {
+            if (! Schema::hasColumn('booking_requests', 'search_started_at')) {
                 $table->timestamp('search_started_at')->nullable();
             }
-            if (!Schema::hasColumn('booking_requests', 'search_expires_at')) {
+            if (! Schema::hasColumn('booking_requests', 'search_expires_at')) {
                 $table->timestamp('search_expires_at')->nullable();
             }
-            if (!Schema::hasColumn('booking_requests', 'teacher_decision_deadline')) {
+            if (! Schema::hasColumn('booking_requests', 'teacher_decision_deadline')) {
                 $table->timestamp('teacher_decision_deadline')->nullable();
             }
-            if (!Schema::hasColumn('booking_requests', 'teacher_rejection_reason')) {
+            if (! Schema::hasColumn('booking_requests', 'teacher_rejection_reason')) {
                 $table->string('teacher_rejection_reason', 500)->nullable();
             }
-            if (!Schema::hasColumn('booking_requests', 'booking_id')) {
+            if (! Schema::hasColumn('booking_requests', 'booking_id')) {
                 $table->unsignedBigInteger('booking_id')->nullable();
                 $table->index('booking_id', 'booking_requests_booking_idx');
             }
         });
 
-        if (!Schema::hasTable('group_members')) {
+        if (! Schema::hasTable('group_members')) {
             Schema::create('group_members', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('group_pool_id')->constrained()->cascadeOnDelete();
@@ -203,7 +203,7 @@ return new class extends Migration
     private function extendTeacherOffers(): void
     {
         Schema::table('teacher_offers', function (Blueprint $table) {
-            if (!Schema::hasColumn('teacher_offers', 'no_response_penalty_applied')) {
+            if (! Schema::hasColumn('teacher_offers', 'no_response_penalty_applied')) {
                 $table->boolean('no_response_penalty_applied')->default(false);
             }
         });
@@ -212,43 +212,43 @@ return new class extends Migration
     private function extendBookings(): void
     {
         Schema::table('bookings', function (Blueprint $table) {
-            if (!Schema::hasColumn('bookings', 'group_pool_id')) {
+            if (! Schema::hasColumn('bookings', 'group_pool_id')) {
                 $table->foreignId('group_pool_id')->nullable()->constrained()->nullOnDelete();
             }
-            if (!Schema::hasColumn('bookings', 'commission_percent')) {
+            if (! Schema::hasColumn('bookings', 'commission_percent')) {
                 $table->decimal('commission_percent', 5, 2)->default(20);
             }
-            if (!Schema::hasColumn('bookings', 'gross_amount')) {
+            if (! Schema::hasColumn('bookings', 'gross_amount')) {
                 $table->decimal('gross_amount', 12, 2)->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'teacher_net_amount')) {
+            if (! Schema::hasColumn('bookings', 'teacher_net_amount')) {
                 $table->decimal('teacher_net_amount', 12, 2)->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'completion_evidence')) {
+            if (! Schema::hasColumn('bookings', 'completion_evidence')) {
                 $table->string('completion_evidence')->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'meeting_link')) {
+            if (! Schema::hasColumn('bookings', 'meeting_link')) {
                 $table->string('meeting_link', 500)->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'completion_notes')) {
+            if (! Schema::hasColumn('bookings', 'completion_notes')) {
                 $table->text('completion_notes')->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'completion_submitted_at')) {
+            if (! Schema::hasColumn('bookings', 'completion_submitted_at')) {
                 $table->timestamp('completion_submitted_at')->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'objection_deadline')) {
+            if (! Schema::hasColumn('bookings', 'objection_deadline')) {
                 $table->timestamp('objection_deadline')->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'student_approved_at')) {
+            if (! Schema::hasColumn('bookings', 'student_approved_at')) {
                 $table->timestamp('student_approved_at')->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'admin_review_required_at')) {
+            if (! Schema::hasColumn('bookings', 'admin_review_required_at')) {
                 $table->timestamp('admin_review_required_at')->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'completed_at')) {
+            if (! Schema::hasColumn('bookings', 'completed_at')) {
                 $table->timestamp('completed_at')->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'payout_status')) {
+            if (! Schema::hasColumn('bookings', 'payout_status')) {
                 $table->string('payout_status', 30)->default('locked');
             }
         });
@@ -257,22 +257,22 @@ return new class extends Migration
     private function extendOrders(): void
     {
         Schema::table('orders', function (Blueprint $table) {
-            if (!Schema::hasColumn('orders', 'booking_id')) {
+            if (! Schema::hasColumn('orders', 'booking_id')) {
                 $table->foreignId('booking_id')->nullable()->constrained()->nullOnDelete();
             }
-            if (!Schema::hasColumn('orders', 'payment_rejection_reason')) {
+            if (! Schema::hasColumn('orders', 'payment_rejection_reason')) {
                 $table->text('payment_rejection_reason')->nullable();
             }
-            if (!Schema::hasColumn('orders', 'payment_submitted_at')) {
+            if (! Schema::hasColumn('orders', 'payment_submitted_at')) {
                 $table->timestamp('payment_submitted_at')->nullable();
             }
-            if (!Schema::hasColumn('orders', 'sender_account_number')) {
+            if (! Schema::hasColumn('orders', 'sender_account_number')) {
                 $table->string('sender_account_number', 80)->nullable();
             }
-            if (!Schema::hasColumn('orders', 'verified_at')) {
+            if (! Schema::hasColumn('orders', 'verified_at')) {
                 $table->timestamp('verified_at')->nullable();
             }
-            if (!Schema::hasColumn('orders', 'verified_by')) {
+            if (! Schema::hasColumn('orders', 'verified_by')) {
                 $table->foreignId('verified_by')->nullable()->constrained('users')->nullOnDelete();
             }
         });
@@ -301,7 +301,7 @@ return new class extends Migration
 
     private function createOperationalCases(): void
     {
-        if (!Schema::hasTable('session_reports')) {
+        if (! Schema::hasTable('session_reports')) {
             Schema::create('session_reports', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('booking_id')->constrained()->cascadeOnDelete();
@@ -324,7 +324,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('booking_disputes')) {
+        if (! Schema::hasTable('booking_disputes')) {
             Schema::create('booking_disputes', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('booking_id')->constrained()->cascadeOnDelete();
@@ -342,7 +342,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('refunds')) {
+        if (! Schema::hasTable('refunds')) {
             Schema::create('refunds', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('order_id')->constrained()->cascadeOnDelete();
@@ -365,25 +365,25 @@ return new class extends Migration
     private function extendPayoutsAndRatings(): void
     {
         Schema::table('payouts', function (Blueprint $table) {
-            if (!Schema::hasColumn('payouts', 'booking_id')) {
+            if (! Schema::hasColumn('payouts', 'booking_id')) {
                 $table->foreignId('booking_id')->nullable()->constrained()->nullOnDelete();
             }
-            if (!Schema::hasColumn('payouts', 'gross_amount')) {
+            if (! Schema::hasColumn('payouts', 'gross_amount')) {
                 $table->decimal('gross_amount', 15, 2)->nullable();
             }
-            if (!Schema::hasColumn('payouts', 'commission_amount')) {
+            if (! Schema::hasColumn('payouts', 'commission_amount')) {
                 $table->decimal('commission_amount', 15, 2)->nullable();
             }
-            if (!Schema::hasColumn('payouts', 'processed_by')) {
+            if (! Schema::hasColumn('payouts', 'processed_by')) {
                 $table->foreignId('processed_by')->nullable()->constrained('users')->nullOnDelete();
             }
-            if (!Schema::hasColumn('payouts', 'processed_at')) {
+            if (! Schema::hasColumn('payouts', 'processed_at')) {
                 $table->timestamp('processed_at')->nullable();
             }
         });
 
         Schema::table('ratings', function (Blueprint $table) {
-            if (!Schema::hasColumn('ratings', 'booking_id')) {
+            if (! Schema::hasColumn('ratings', 'booking_id')) {
                 $table->foreignId('booking_id')->nullable()->constrained()->nullOnDelete();
                 $table->unique(['booking_id', 'student_id'], 'ratings_booking_student_unique');
             }

@@ -7,6 +7,7 @@ use App\Models\CustomerWallet;
 use App\Models\Order;
 use App\Models\Refund;
 use App\Services\RefundSettlementService;
+use App\Support\RefundStatusPresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -98,7 +99,7 @@ class AdminFinanceOperationsController extends Controller
         ]);
     }
 
-    public function refunds(Request $request)
+    public function refunds(Request $request, RefundSettlementService $settlement)
     {
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
@@ -106,6 +107,10 @@ class AdminFinanceOperationsController extends Controller
         ]);
         $search = trim((string) ($validated['search'] ?? ''));
         $status = trim((string) ($validated['status'] ?? ''));
+
+        // Opening (or polling) the refund page is enough to finish refunds the
+        // provider already succeeded on; no manual "Periksa status" required.
+        $settlement->reconcileDue(null, 5, 10);
 
         $query = Refund::query()->with([
             'user:id,name,email',
@@ -139,7 +144,7 @@ class AdminFinanceOperationsController extends Controller
                 ? $refund->order->class_details_snapshot
                 : [];
             $breakdown = $refund->tenderBreakdown();
-            $needsAction = $refund->status === 'pending'
+            $needsAction = in_array($refund->status, ['pending', 'failed'], true)
                 && $refund->destination_selected_at !== null
                 && (in_array($refund->destination_method, ['bank_transfer', 'bimbelku_balance'], true)
                     || in_array($refund->gateway_status, ['FAILED', 'REJECTED'], true)
@@ -152,6 +157,7 @@ class AdminFinanceOperationsController extends Controller
             } : null;
 
             return [
+                ...RefundStatusPresenter::present($refund),
                 'id' => $refund->id,
                 'order_id' => $refund->order?->order_id,
                 'student' => $refund->user ? [
@@ -171,6 +177,7 @@ class AdminFinanceOperationsController extends Controller
                 'payment_provider' => $refund->payment_provider,
                 'gateway_status' => $refund->gateway_status,
                 'gateway_failure_code' => $refund->gateway_failure_code,
+                'gateway_failure_message' => $refund->gateway_failure_message,
                 'gateway_refund_id' => $refund->gateway_refund_id,
                 'gateway_submitted_at' => $refund->gateway_submitted_at,
                 'gateway_processed_at' => $refund->gateway_processed_at,
@@ -203,7 +210,7 @@ class AdminFinanceOperationsController extends Controller
         // even when the pending queue grows. Prioritize actionable pending
         // refunds before limiting that queue.
         $pendingRefunds = (clone $query)
-            ->where('status', 'pending')
+            ->whereIn('status', ['pending', 'failed'])
             ->orderByRaw("CASE WHEN destination_selected_at IS NOT NULL AND (destination_method IN ('bank_transfer', 'bimbelku_balance') OR gateway_status IN ('FAILED', 'REJECTED') OR (destination_method = 'xendit_original' AND created_at <= ?)) THEN 0 ELSE 1 END", [now()->subDay()])
             ->latest()
             ->limit(300)
@@ -211,7 +218,7 @@ class AdminFinanceOperationsController extends Controller
             ->map($formatRefund)
             ->values();
         $historyRefunds = (clone $query)
-            ->where('status', '!=', 'pending')
+            ->whereNotIn('status', ['pending', 'failed'])
             ->latest()
             ->limit(300)
             ->get()
@@ -229,6 +236,7 @@ class AdminFinanceOperationsController extends Controller
         $walletCredited30Days = round((float) $recentPaidRefunds
             ->sum(function (Refund $recentRefund) {
                 $breakdown = $recentRefund->tenderBreakdown();
+
                 return $recentRefund->destination_method === 'bimbelku_balance'
                     ? $breakdown['total_amount']
                     : $breakdown['wallet_funded_amount'];
@@ -238,6 +246,7 @@ class AdminFinanceOperationsController extends Controller
             'summary' => [
                 'pending_count' => Refund::query()->where('status', 'pending')->count(),
                 'pending_amount' => round((float) Refund::query()->where('status', 'pending')->sum('amount'), 2),
+                'failed_count' => Refund::query()->where('status', 'failed')->count(),
                 'bank_paid_30_days' => $bankPaid30Days,
                 'wallet_credited_30_days' => $walletCredited30Days,
                 'wallet_liability' => round((float) CustomerWallet::query()->selectRaw('COALESCE(SUM(current_balance + reserved_balance), 0) AS total')->value('total'), 2),
@@ -250,7 +259,7 @@ class AdminFinanceOperationsController extends Controller
 
     public function reconcileRefund(Refund $refund, RefundSettlementService $settlement)
     {
-        abort_unless($refund->status === 'pending' && $refund->destination_method === 'xendit_original', 422, 'Refund ini tidak memerlukan rekonsiliasi otomatis.');
+        abort_unless(in_array($refund->status, ['pending', 'failed'], true) && $refund->destination_method === 'xendit_original', 422, 'Refund ini tidak memerlukan rekonsiliasi otomatis.');
         $settlement->reconcile($refund);
 
         return response()->json([
@@ -262,7 +271,7 @@ class AdminFinanceOperationsController extends Controller
     public function retryRefund(Refund $refund, RefundSettlementService $settlement)
     {
         abort_unless(
-            $refund->status === 'pending'
+            in_array($refund->status, ['pending', 'failed'], true)
                 && $refund->destination_method === 'xendit_original'
                 && $settlement->isAutomatic($refund)
                 && in_array($refund->gateway_status, ['FAILED', 'REJECTED', 'SUBMITTING'], true),
@@ -288,7 +297,7 @@ class AdminFinanceOperationsController extends Controller
         $cheapClassCancelled = $isCheapClass
             && ($cheapClass?->status === 'cancelled' || $cheapEnrollment?->status === 'cancellation_pending');
         $capacityAlreadyFull = $isCheapClass
-            && !$cheapClassCancelled
+            && ! $cheapClassCancelled
             && $cheapClass
             && (int) ($cheapClass->confirmed_payment_count ?? 0) >= (int) $cheapClass->maximum_participants;
         $refundReasonIfAccepted = $cheapClassCancelled
@@ -320,7 +329,7 @@ class AdminFinanceOperationsController extends Controller
             'subtotal_amount' => (float) $order->subtotal_amount,
             'discount_amount' => (float) $order->discount_amount,
             'amount' => (float) $order->amount,
-            'promotion' => ($order->promotion || !empty($details['promotion_code']) || !empty($details['promotion_title'])) ? [
+            'promotion' => ($order->promotion || ! empty($details['promotion_code']) || ! empty($details['promotion_title'])) ? [
                 'id' => $order->promotion?->id,
                 'title' => $order->promotion?->title ?? $details['promotion_title'] ?? 'Voucher',
                 'code' => $order->promotion?->code ?? $details['promotion_code'],
@@ -360,7 +369,7 @@ class AdminFinanceOperationsController extends Controller
             'cheap_class_cancellation_reason' => $cheapClass?->cancellation_reason,
             'enrollment_status' => $cheapEnrollment?->status,
             'can_resubmit' => (bool) $canResubmit,
-            'can_resubmit_if_rejected' => (bool) ($canResubmitIfRejected && !$cheapClassCancelled),
+            'can_resubmit_if_rejected' => (bool) ($canResubmitIfRejected && ! $cheapClassCancelled),
             'will_refund_if_accepted' => (bool) ($order->status === 'submitted' && $refundReasonIfAccepted !== null),
             'refund_reason_if_accepted' => $order->status === 'submitted' ? $refundReasonIfAccepted : null,
             'verified_at' => $order->verified_at,

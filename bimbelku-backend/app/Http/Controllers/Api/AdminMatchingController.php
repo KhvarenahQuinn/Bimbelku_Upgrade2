@@ -22,7 +22,7 @@ class AdminMatchingController extends Controller
 
     private const MONITORED_STATUSES = [...self::ACTIVE_STATUSES, ...self::HISTORY_STATUSES];
 
-    public function index(Request $request)
+    public function index(Request $request, TeacherMatchingService $matchingService)
     {
         $validated = $request->validate([
             'status' => ['nullable', Rule::in(array_merge(['all', 'attention'], self::MONITORED_STATUSES))],
@@ -96,7 +96,7 @@ class AdminMatchingController extends Controller
 
         $summary = $this->summaryCounts();
         $items = collect($paginator->items())
-            ->map(fn (BookingRequest $bookingRequest) => $this->formatSummary($bookingRequest))
+            ->map(fn (BookingRequest $bookingRequest) => $this->formatSummary($bookingRequest, $matchingService))
             ->values();
 
         return response()->json([
@@ -134,9 +134,13 @@ class AdminMatchingController extends Controller
 
         return response()->json([
             'data' => array_merge(
-                $this->formatSummary($bookingRequest),
+                $this->formatSummary($bookingRequest, $matchingService),
                 [
                     'available_candidate_count' => $matchingService->availableCandidateCount($bookingRequest),
+                    // "Kandidat otomatis" must include tutors who already
+                    // received an offer. Relying on available candidates alone
+                    // made a dispatched wave look like zero candidates.
+                    'automatic_candidate_count' => $this->automaticCandidateCount($bookingRequest, $matchingService),
                     'manual_candidate_count' => $assignmentService
                         ->candidateSummaries($bookingRequest)
                         ->count(),
@@ -316,7 +320,7 @@ class AdminMatchingController extends Controller
                     ->with('teacher:id,name,email')
                     ->latest('offered_at'),
                 'packageSubject.package:id,student_id,status',
-            ])),
+            ]), $matchingService),
         ]);
     }
 
@@ -342,15 +346,17 @@ class AdminMatchingController extends Controller
         $query->matchingNeedsAttention();
     }
 
-    private function formatSummary(BookingRequest $bookingRequest): array
+    private function formatSummary(BookingRequest $bookingRequest, TeacherMatchingService $matchingService): array
     {
         $activeOffers = $bookingRequest->offers
             ->filter(fn (TeacherOffer $offer) => $offer->status === 'pending' && $offer->expires_at?->isFuture())
             ->values();
         $activeOffer = $bookingRequest->offers
             ->first(fn (TeacherOffer $offer) => $offer->status === 'pending');
-        $startedAt = $bookingRequest->search_started_at ?? $bookingRequest->created_at;
-        $attention = $this->attentionReason($bookingRequest, $activeOffer);
+        $startedAt = $matchingService->searchStartedAt($bookingRequest);
+        $searchDeadline = $matchingService->searchDeadline($bookingRequest);
+        $searchAgeSeconds = $matchingService->searchAgeSeconds($bookingRequest);
+        $attention = $this->attentionReason($bookingRequest, $activeOffer, $searchDeadline);
 
         return [
             'id' => $bookingRequest->id,
@@ -370,12 +376,19 @@ class AdminMatchingController extends Controller
             'status_description' => $this->statusDescription($bookingRequest),
             'search_radius_km' => $bookingRequest->learning_mode === 'offline' ? (int) $bookingRequest->search_radius_km : null,
             'matching_attempts' => (int) $bookingRequest->matching_attempts,
-            'search_started_at' => $startedAt?->toIso8601String(),
-            'search_expires_at' => $bookingRequest->search_expires_at?->toIso8601String(),
+            'search_started_at' => $startedAt->toIso8601String(),
+            'search_expires_at' => $searchDeadline->toIso8601String(),
+            'search_window_minutes' => $matchingService->searchWindowMinutes(),
             'teacher_response_deadline' => $bookingRequest->teacher_response_deadline?->toIso8601String(),
             'next_matching_at' => $bookingRequest->next_matching_at?->toIso8601String(),
             'active_offer_count' => $activeOffers->count(),
-            'search_age_minutes' => $startedAt ? $startedAt->diffInMinutes(now()) : 0,
+            // Active-search duration is capped by the same one-hour window the
+            // engine enforces, so old multi-day rows cannot render "2 hari".
+            'search_age_minutes' => round($searchAgeSeconds / 60, 2),
+            'search_age_seconds' => $searchAgeSeconds,
+            'search_remaining_seconds' => $searchDeadline->isFuture()
+                ? max(0, (int) now()->diffInSeconds($searchDeadline))
+                : 0,
             'needs_attention' => $attention !== null,
             'attention_reason' => $attention,
             'can_synchronize' => $bookingRequest->status === 'matching'
@@ -431,6 +444,20 @@ class AdminMatchingController extends Controller
         ];
     }
 
+    private function automaticCandidateCount(
+        BookingRequest $bookingRequest,
+        TeacherMatchingService $matchingService
+    ): int {
+        $offeredTeacherCount = $bookingRequest->relationLoaded('offers')
+            ? $bookingRequest->offers->pluck('teacher_id')->filter()->unique()->count()
+            : $bookingRequest->offers()->distinct()->count('teacher_id');
+
+        // availableCandidateCount() excludes every tutor who has ever received
+        // an offer, so adding the two values counts each automatic candidate
+        // once while still reflecting the dispatched wave.
+        return $offeredTeacherCount + $matchingService->availableCandidateCount($bookingRequest);
+    }
+
     private function systemHealth(): array
     {
         $value = Setting::query()
@@ -448,8 +475,11 @@ class AdminMatchingController extends Controller
         ];
     }
 
-    private function attentionReason(BookingRequest $bookingRequest, ?TeacherOffer $activeOffer): ?string
-    {
+    private function attentionReason(
+        BookingRequest $bookingRequest,
+        ?TeacherOffer $activeOffer,
+        ?Carbon $searchDeadline = null
+    ): ?string {
         if ($bookingRequest->status === 'no_teacher') {
             return $bookingRequest->learning_mode === 'offline'
                 ? "Belum ada tutor yang cocok pada radius {$bookingRequest->search_radius_km} km."
@@ -460,6 +490,16 @@ class AdminMatchingController extends Controller
             return 'Batas pencarian atau waktu mulai kelas telah terlewati.';
         }
 
+        $searching = in_array($bookingRequest->status, ['matching', 'teacher_pending'], true);
+        $windowExpired = $searchDeadline?->isPast() ?? false;
+
+        // The 60-minute window owns the search. While it is still running the
+        // engine may dispatch another wave, so an expired offer on its own is
+        // not an admin problem yet.
+        if ($searching && ! $windowExpired) {
+            return null;
+        }
+
         if (
             ($bookingRequest->status === 'teacher_pending' && $bookingRequest->teacher_response_deadline?->lte(now()))
             || ($activeOffer?->status === 'pending' && $activeOffer->expires_at?->lte(now()))
@@ -467,13 +507,8 @@ class AdminMatchingController extends Controller
             return 'Batas jawaban tutor telah terlewati dan perlu disinkronkan.';
         }
 
-        if (
-            in_array($bookingRequest->status, ['matching', 'teacher_pending'], true)
-            && $bookingRequest->search_expires_at
-            && $bookingRequest->search_expires_at->isFuture()
-            && $bookingRequest->search_expires_at->lte(now()->addHours(6))
-        ) {
-            return 'Batas pencarian akan berakhir kurang dari enam jam.';
+        if ($searching) {
+            return 'Batas pencarian sudah terlewati dan perlu disinkronkan.';
         }
 
         return null;
@@ -528,6 +563,13 @@ class AdminMatchingController extends Controller
         return match ($action) {
             'radius_expanded' => 'Radius diperluas',
             'teacher_assigned_manually' => 'Tutor ditetapkan manual',
+            'matching_started' => 'Pencarian dimulai',
+            'offers_dispatched' => 'Penawaran tutor dikirim',
+            'offer_expired' => 'Penawaran tutor kedaluwarsa',
+            'waiting_for_availability' => 'Menunggu ketersediaan tutor',
+            'matching_exhausted' => 'Batas pencarian berakhir',
+            'schedule_changed' => 'Jadwal diubah',
+            'search_restarted' => 'Pencarian diulang',
             default => $action,
         };
     }

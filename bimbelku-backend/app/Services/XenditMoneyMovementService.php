@@ -43,6 +43,7 @@ class XenditMoneyMovementService
             'gateway_reference_id' => $reference,
             'gateway_status' => 'SUBMITTING',
             'gateway_failure_code' => null,
+            'gateway_failure_message' => null,
         ]);
         if ($refund->status === 'paid' || $refund->gateway_status === 'SUCCEEDED') {
             return $this->refundPayload($refund);
@@ -57,13 +58,21 @@ class XenditMoneyMovementService
             'metadata' => ['refund_id' => (string) $refund->id, 'order_id' => (string) $refund->order_id],
         ]);
         if (! $response->successful()) {
-            $refund = $this->storeRefundResponse($refund, in_array($response->status(), [400, 401, 403, 404, 422], true)
-                ? ['gateway_status' => 'FAILED'] : []);
+            $body = is_array($response->json()) ? $response->json() : [];
+            $definitive = in_array($response->status(), [400, 401, 403, 404, 422], true);
+            $refund = $this->storeRefundResponse($refund, array_filter([
+                'gateway_status' => $definitive ? 'FAILED' : null,
+                'gateway_failure_code' => $body['error_code'] ?? $body['failure_code'] ?? null,
+                'gateway_failure_message' => $body['message'] ?? null,
+                'last_reconciled_at' => now(),
+            ], fn ($value) => $value !== null));
             if ($refund->status === 'paid' || $refund->gateway_status === 'SUCCEEDED') {
                 return $this->refundPayload($refund);
             }
             report(new RuntimeException('Xendit refund failed: '.$response->status().' '.$response->body()));
-            throw new RuntimeException('Refund otomatis belum dapat dibuat. Periksa saldo operasional dan coba kembali.');
+            throw new RuntimeException($definitive
+                ? 'Pengembalian dana ke metode pembayaran asal ditolak. Pilih Saldo BimbelKu atau hubungi bantuan.'
+                : 'Refund otomatis belum dapat dibuat. Periksa saldo operasional dan coba kembali.');
         }
         $data = $response->json();
         $refund = $this->storeRefundResponse($refund, [
@@ -72,8 +81,10 @@ class XenditMoneyMovementService
             'destination_selected_at' => $refund->destination_selected_at ?: now(),
             'gateway_refund_id' => $data['id'] ?? null,
             'gateway_status' => strtoupper((string) ($data['status'] ?? 'PENDING')),
-            'gateway_failure_code' => null,
+            'gateway_failure_code' => $data['failure_code'] ?? null,
+            'gateway_failure_message' => $data['failure_message'] ?? $data['message'] ?? null,
             'gateway_submitted_at' => now(),
+            'last_reconciled_at' => now(),
         ]);
 
         return $this->refundPayload($refund->fresh());
@@ -97,6 +108,7 @@ class XenditMoneyMovementService
         $refund = $this->storeRefundResponse($refund, [
             'gateway_status' => strtoupper((string) ($data['status'] ?? $refund->gateway_status ?? 'PENDING')),
             'gateway_failure_code' => $data['failure_code'] ?? null,
+            'gateway_failure_message' => $data['failure_message'] ?? $data['message'] ?? null,
             'gateway_submitted_at' => $refund->gateway_submitted_at ?: now(),
             'last_reconciled_at' => now(),
         ]);

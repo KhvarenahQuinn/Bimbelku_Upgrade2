@@ -12,9 +12,13 @@ use Illuminate\Validation\ValidationException;
 class OneTimeCodeService
 {
     public const EMAIL_VERIFICATION = 'email_verification';
+
     public const PAYMENT_PIN_RESET = 'payment_pin_reset';
+
     public const EXPIRES_MINUTES = 10;
+
     public const RESEND_SECONDS = 60;
+
     public const MAX_ATTEMPTS = 5;
 
     public function send(User $user, string $purpose): void
@@ -43,7 +47,7 @@ class OneTimeCodeService
     {
         $last = DB::table('verification_codes')->where('user_id', $user->id)
             ->where('purpose', $purpose)->max('sent_at');
-        if (!$last) {
+        if (! $last) {
             return;
         }
         $available = Carbon::parse($last)->addSeconds(self::RESEND_SECONDS);
@@ -75,18 +79,20 @@ class OneTimeCodeService
             $record = DB::table('verification_codes')->where('user_id', $user->id)
                 ->where('purpose', $purpose)->whereNull('used_at')->latest('id')
                 ->lockForUpdate()->first();
-            if (!$record || now()->greaterThan($record->expires_at)) {
+            if (! $record || now()->greaterThan($record->expires_at)) {
                 return 'Kode sudah kedaluwarsa. Minta kode baru.';
             }
             if ((int) $record->attempts >= self::MAX_ATTEMPTS) {
                 return 'Batas percobaan kode tercapai. Minta kode baru.';
             }
-            if (!Hash::check($code, $record->code_hash)) {
+            if (! Hash::check($code, $record->code_hash)) {
                 DB::table('verification_codes')->where('id', $record->id)->increment('attempts');
+
                 return 'Kode OTP tidak sesuai.';
             }
             DB::table('verification_codes')->where('id', $record->id)
                 ->update(['used_at' => now(), 'updated_at' => now()]);
+
             return null;
         });
         if ($error) {

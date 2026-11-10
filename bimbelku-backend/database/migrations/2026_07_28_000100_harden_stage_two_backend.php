@@ -10,7 +10,7 @@ return new class extends Migration
     public function up(): void
     {
         if (Schema::hasTable('settings')) {
-            if (!DB::table('settings')->where('key', 'teacher_cover_path')->exists()) {
+            if (! DB::table('settings')->where('key', 'teacher_cover_path')->exists()) {
                 DB::table('settings')->insert([
                     'key' => 'teacher_cover_path',
                     'value' => null,
@@ -167,7 +167,7 @@ return new class extends Migration
         }
 
         if (Schema::hasTable('payment_settings')) {
-            if (!Schema::hasColumn('payment_settings', 'singleton_key')) {
+            if (! Schema::hasColumn('payment_settings', 'singleton_key')) {
                 Schema::table('payment_settings', function (Blueprint $table) {
                     $table->unsignedTinyInteger('singleton_key')->default(1);
                 });
@@ -185,16 +185,16 @@ return new class extends Migration
 
         if (Schema::hasTable('payouts')) {
             Schema::table('payouts', function (Blueprint $table) {
-                if (!Schema::hasColumn('payouts', 'booking_ids')) {
+                if (! Schema::hasColumn('payouts', 'booking_ids')) {
                     $table->json('booking_ids')->nullable();
                 }
-                if (!Schema::hasColumn('payouts', 'bank_name')) {
+                if (! Schema::hasColumn('payouts', 'bank_name')) {
                     $table->string('bank_name', 100)->nullable();
                 }
-                if (!Schema::hasColumn('payouts', 'account_number')) {
+                if (! Schema::hasColumn('payouts', 'account_number')) {
                     $table->string('account_number', 80)->nullable();
                 }
-                if (!Schema::hasColumn('payouts', 'account_name')) {
+                if (! Schema::hasColumn('payouts', 'account_name')) {
                     $table->string('account_name', 150)->nullable();
                 }
             });
@@ -234,7 +234,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('payouts')) {
+        if (! Schema::hasTable('payouts')) {
             return;
         }
 

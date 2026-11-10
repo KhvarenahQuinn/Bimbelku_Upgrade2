@@ -9,19 +9,19 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            if (!Schema::hasColumn('users', 'terms_accepted_at')) {
+            if (! Schema::hasColumn('users', 'terms_accepted_at')) {
                 $table->timestamp('terms_accepted_at')->nullable();
             }
-            if (!Schema::hasColumn('users', 'privacy_accepted_at')) {
+            if (! Schema::hasColumn('users', 'privacy_accepted_at')) {
                 $table->timestamp('privacy_accepted_at')->nullable();
             }
-            if (!Schema::hasColumn('users', 'policy_version')) {
+            if (! Schema::hasColumn('users', 'policy_version')) {
                 $table->string('policy_version', 40)->nullable();
             }
-            if (!Schema::hasColumn('users', 'consent_ip')) {
+            if (! Schema::hasColumn('users', 'consent_ip')) {
                 $table->string('consent_ip', 45)->nullable();
             }
-            if (!Schema::hasColumn('users', 'consent_user_agent')) {
+            if (! Schema::hasColumn('users', 'consent_user_agent')) {
                 $table->string('consent_user_agent', 500)->nullable();
             }
         });

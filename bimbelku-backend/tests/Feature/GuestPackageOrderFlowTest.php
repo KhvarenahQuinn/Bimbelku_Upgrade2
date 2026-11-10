@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\CurriculumChapter;
 use App\Models\CurriculumSubject;
 use App\Models\GuestPackageOrder;
+use App\Models\LearningPackage;
 use App\Models\PackagePlan;
 use App\Models\PaymentSetting;
 use App\Models\User;
@@ -175,11 +176,17 @@ class GuestPackageOrderFlowTest extends TestCase
         $this->getJson('/api/student/guest-packages/pending')
             ->assertOk()
             ->assertJsonPath('data.0.code', $code);
+        // Email terverifikasi dan sama, jadi draf ditautkan tanpa mengubah status.
+        $this->assertDatabaseHas('guest_package_orders', [
+            'code' => $code,
+            'status' => 'pending',
+            'student_id' => $student->id,
+        ]);
         $first = $this->postJson("/api/guest/packages/{$code}/claim")
             ->assertOk()
             ->assertJsonPath('data.participant_count', 1);
         $second = $this->postJson("/api/guest/packages/{$code}/claim")->assertOk();
-        $this->assertTrue(\App\Models\LearningPackage::query()->findOrFail($first->json('data.id'))->payment_due_at->equalTo(now()->addHour()));
+        $this->assertTrue(LearningPackage::query()->findOrFail($first->json('data.id'))->payment_due_at->equalTo(now()->addHour()));
 
         $this->assertSame($first->json('data.id'), $second->json('data.id'));
         $this->assertDatabaseCount('learning_packages', 1);
@@ -190,6 +197,7 @@ class GuestPackageOrderFlowTest extends TestCase
         ]);
         $this->assertNotNull(GuestPackageOrder::query()->where('code', $code)->value('claimed_at'));
     }
+
     public function test_guest_order_preserves_each_private_participant_identity_when_purchaser_does_not_join(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-09-19 09:00:00', 'Asia/Jakarta'));
@@ -263,6 +271,7 @@ class GuestPackageOrderFlowTest extends TestCase
             'purchaser_participates' => false,
         ]);
     }
+
     public function test_expired_guest_draft_is_marked_and_cannot_be_claimed(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-09-19 11:00:00', 'Asia/Jakarta'));

@@ -379,8 +379,8 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
           </div>
         </header>
 
-        <div className={`mobile-app-content min-h-0 flex-1 overflow-x-hidden p-4 pb-[calc(7.25rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-7 sm:pb-[calc(6.75rem+env(safe-area-inset-bottom))] xl:px-8 xl:pb-7 ${lockContentScroll ? "overflow-y-hidden" : "overflow-y-auto"}`}>
-          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[90rem] flex-col pb-20 sm:pb-24 xl:pb-16">{children}</div>
+        <div className={`mobile-app-content min-h-0 flex-1 basis-0 overflow-x-hidden scroll-smooth p-4 pb-24 sm:px-6 sm:py-7 sm:pb-28 xl:px-8 xl:pb-7 ${lockContentScroll ? "overflow-y-hidden" : "overflow-y-auto"}`}>
+          <div className={`mx-auto flex min-h-0 w-full min-w-0 max-w-[90rem] flex-col pb-0 sm:pb-24 xl:pb-16 ${lockContentScroll ? "h-full" : ""}`}>{children}</div>
         </div>
         {!sidebarOpen && (
           <AdminMobileBottomNav

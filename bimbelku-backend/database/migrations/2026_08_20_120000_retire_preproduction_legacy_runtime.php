@@ -17,7 +17,7 @@ return new class extends Migration
 
     private function createChapterNativeTables(): void
     {
-        if (!Schema::hasTable('package_chapters')) {
+        if (! Schema::hasTable('package_chapters')) {
             Schema::create('package_chapters', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('package_subject_id')->constrained('package_subjects')->cascadeOnDelete();
@@ -34,7 +34,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('package_session_chapter_logs')) {
+        if (! Schema::hasTable('package_session_chapter_logs')) {
             Schema::create('package_session_chapter_logs', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('package_session_id')->constrained('package_sessions')->cascadeOnDelete();
@@ -54,7 +54,7 @@ return new class extends Migration
 
     private function backfillChapterProgress(): void
     {
-        if (!Schema::hasTable('package_learning_topics')) {
+        if (! Schema::hasTable('package_learning_topics')) {
             return;
         }
 
@@ -70,6 +70,7 @@ return new class extends Migration
         $groups = $legacyRows->groupBy(function ($row) {
             $catalogKey = $row->curriculum_chapter_id ? 'catalog:'.$row->curriculum_chapter_id : null;
             $fallback = mb_strtolower(trim((string) ($row->chapter ?: $row->title ?: 'Materi belajar')));
+
             return $row->package_subject_id.'|'.($catalogKey ?: 'title:'.$fallback);
         });
 
@@ -105,7 +106,7 @@ return new class extends Migration
             }
         }
 
-        if (!Schema::hasTable('package_session_topic_logs')) {
+        if (! Schema::hasTable('package_session_topic_logs')) {
             return;
         }
 
@@ -189,7 +190,7 @@ return new class extends Migration
 
     private function dropForeignColumn(string $tableName, string $column): void
     {
-        if (!Schema::hasTable($tableName) || !Schema::hasColumn($tableName, $column)) {
+        if (! Schema::hasTable($tableName) || ! Schema::hasColumn($tableName, $column)) {
             return;
         }
 
@@ -200,7 +201,7 @@ return new class extends Migration
 
     private function dropColumns(string $tableName, array $columns): void
     {
-        if (!Schema::hasTable($tableName)) {
+        if (! Schema::hasTable($tableName)) {
             return;
         }
 

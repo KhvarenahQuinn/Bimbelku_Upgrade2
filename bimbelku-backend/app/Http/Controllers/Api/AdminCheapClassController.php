@@ -5,10 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CheapClass;
 use App\Models\CheapClassSession;
-use App\Models\Notification;
 use App\Models\CheapClassTemplate;
 use App\Models\CurriculumChapter;
 use App\Models\CurriculumSubject;
+use App\Models\Notification;
 use App\Services\CheapClassService;
 use App\Support\CheapClassSchema;
 use App\Support\EducationCatalog;
@@ -22,7 +22,7 @@ class AdminCheapClassController extends Controller
     public function form()
     {
         $setup = CheapClassSchema::status();
-        if (!$setup['ready']) {
+        if (! $setup['ready']) {
             return response()->json([
                 'setup' => $setup,
                 'subjects' => [],
@@ -62,7 +62,7 @@ class AdminCheapClassController extends Controller
     public function index(CheapClassService $cheapClasses)
     {
         $setup = CheapClassSchema::status();
-        if (!$setup['ready']) {
+        if (! $setup['ready']) {
             return response()->json([
                 'setup' => $setup,
                 'classes' => [],
@@ -142,6 +142,7 @@ class AdminCheapClassController extends Controller
         $recurrenceMessage = $class->template?->recurrence_enabled
             ? ' Pengulangan mingguan aktif; setiap periode berikutnya menjadi paket baru.'
             : ' Paket ini hanya dibuat sekali.';
+
         return response()->json([
             'message' => $teacher
                 ? "1 paket Kelas Kelompok dibuat dengan {$subjectCount} mapel dan {$class->session_count} sesi. Tutor {$teacher->name} dipilih otomatis.{$recurrenceMessage}"
@@ -187,6 +188,7 @@ class AdminCheapClassController extends Controller
             ->where(function ($query) use ($scope) {
                 if ($scope === 'history') {
                     $query->whereIn('status', ['cancelled', 'completed']);
+
                     return;
                 }
 
@@ -204,7 +206,7 @@ class AdminCheapClassController extends Controller
             ->sort()
             ->values();
 
-        if (!empty($validated['subject'])) {
+        if (! empty($validated['subject'])) {
             $selectedSubject = mb_strtolower((string) $validated['subject']);
             $classes = $classes->filter(fn (CheapClass $class) => collect($this->packageSubjects($class))
                 ->contains(fn ($item) => mb_strtolower((string) $item['subject_name']) === $selectedSubject))
@@ -244,11 +246,12 @@ class AdminCheapClassController extends Controller
                     'pending_payment_count' => (int) $class->pending_payment_count,
                     'maximum_participants' => $class->maximum_participants,
                 ]))
-                ->when(!empty($validated['status']), fn ($sessions) => $sessions->where('session_status', $validated['status'])->values())
+                ->when(! empty($validated['status']), fn ($sessions) => $sessions->where('session_status', $validated['status'])->values())
             : $classes->map(function (CheapClass $class) use ($cheapClasses) {
                 $orderedSessions = $class->sessions->sortBy('session_number')->values();
                 $deletion = $cheapClasses->deletionEligibility($class);
                 $cancellation = $cheapClasses->cancellationEligibility($class);
+
                 return [
                     'id' => $class->id,
                     'package_code' => $class->package_code,
@@ -544,6 +547,7 @@ class AdminCheapClassController extends Controller
     {
         CheapClassSchema::ensureReady();
         $cheapClasses->finalizeIfReady($cheapClass);
+
         return response()->json(['message' => 'Status Kelas Kelompok diperiksa ulang.', 'data' => $cheapClass->fresh()]);
     }
 
@@ -607,10 +611,10 @@ class AdminCheapClassController extends Controller
         abort_unless(EducationCatalog::supports($data['education_level'], $data['grade']), 422, 'Kelas tidak sesuai dengan jenjang.');
         abort_if(substr($data['start_time'], 3, 2) !== '00', 422, 'Jam mulai hanya boleh menggunakan menit 00.');
         abort_if($data['start_time'] >= '23:00', 422, 'Sesi harus selesai pada hari yang sama. Pilih jam mulai paling lambat 22.00.');
-        $hasRegistrationDate = !empty($data['registration_open_date']);
-        $hasRegistrationTime = !empty($data['registration_open_time']);
+        $hasRegistrationDate = ! empty($data['registration_open_date']);
+        $hasRegistrationTime = ! empty($data['registration_open_time']);
         abort_if($hasRegistrationDate !== $hasRegistrationTime, 422, 'Tanggal dan jam pembukaan pendaftaran harus diisi bersama.');
-        abort_if(!$hasRegistrationDate && empty($data['first_session_date']), 422, 'Tanggal pembukaan pendaftaran wajib diisi.');
+        abort_if(! $hasRegistrationDate && empty($data['first_session_date']), 422, 'Tanggal pembukaan pendaftaran wajib diisi.');
         if ($hasRegistrationTime) {
             abort_if(substr((string) $data['registration_open_time'], 3, 2) !== '00', 422, 'Jam pembukaan hanya boleh menggunakan menit 00.');
             abort_if((int) $data['registration_window_hours'] !== 24, 422, 'Pendaftaran paket baru berlangsung tetap selama 24 jam.');
@@ -650,9 +654,9 @@ class AdminCheapClassController extends Controller
                 ->whereRaw('LOWER(name) = ?', [mb_strtolower($subjectName)])
                 ->first();
             abort_if(
-                !$subject
-                    || !in_array($data['education_level'], $subject->education_levels ?? [], true)
-                    || !in_array($data['grade'], $subject->grades ?? [], true),
+                ! $subject
+                    || ! in_array($data['education_level'], $subject->education_levels ?? [], true)
+                    || ! in_array($data['grade'], $subject->grades ?? [], true),
                 422,
                 "Mata pelajaran {$subjectName} belum tersedia untuk jenjang dan kelas ini."
             );
@@ -739,6 +743,7 @@ class AdminCheapClassController extends Controller
             $data['registration_open_date'],
             $data['registration_open_time']
         );
+
         return $data;
     }
 
@@ -822,7 +827,7 @@ class AdminCheapClassController extends Controller
     {
         $items = is_array($template->subjects) ? $template->subjects : [];
         $normalized = collect($items)
-            ->filter(fn ($item) => is_array($item) && !empty($item['subject_name']))
+            ->filter(fn ($item) => is_array($item) && ! empty($item['subject_name']))
             ->take(4)
             ->map(fn ($item) => [
                 'curriculum_subject_id' => isset($item['curriculum_subject_id']) ? (int) $item['curriculum_subject_id'] : null,
@@ -856,7 +861,7 @@ class AdminCheapClassController extends Controller
     {
         $items = is_array($class->subjects) ? $class->subjects : [];
         $normalized = collect($items)
-            ->filter(fn ($item) => is_array($item) && !empty($item['subject_name']))
+            ->filter(fn ($item) => is_array($item) && ! empty($item['subject_name']))
             ->take(4)
             ->map(fn ($item) => [
                 'curriculum_subject_id' => isset($item['curriculum_subject_id']) ? (int) $item['curriculum_subject_id'] : null,

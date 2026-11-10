@@ -21,10 +21,12 @@ class DemoGatewayConnectivity extends Command
         if (! app()->environment(['local', 'testing'])
             || ! str_starts_with((string) config('xendit.secret_key'), 'xnd_development_')) {
             $this->error('Demo hanya boleh memakai environment local/testing dan Xendit development key.');
+
             return self::FAILURE;
         }
         if (! $gateway->configured()) {
             $this->error('Konfigurasi Xendit test mode belum lengkap.');
+
             return self::FAILURE;
         }
 
@@ -59,6 +61,7 @@ class DemoGatewayConnectivity extends Command
         } catch (Throwable $exception) {
             $this->error('Sesi sandbox gagal dibuat: '.$exception->getMessage());
             $this->line('Tagihan demo ID '.$order->id.' tetap pending; tidak ada pembayaran yang dicatat.');
+
             return self::FAILURE;
         }
 
@@ -77,11 +80,13 @@ class DemoGatewayConnectivity extends Command
         $id = filter_var($this->argument('order_id'), FILTER_VALIDATE_INT);
         if (! $id) {
             $this->error('Isi ID tagihan demo dari hasil perintah start.');
+
             return self::FAILURE;
         }
         $order = Order::query()->where('order_id', 'like', 'DEMO-XENDIT-%')->find($id);
         if (! $order) {
             $this->error('Tagihan demo tidak ditemukan.');
+
             return self::FAILURE;
         }
 
@@ -89,6 +94,7 @@ class DemoGatewayConnectivity extends Command
             $remote = $gateway->fetchSession($order);
         } catch (Throwable $exception) {
             $this->error('Status gateway gagal diperiksa: '.$exception->getMessage());
+
             return self::FAILURE;
         }
 
@@ -96,12 +102,14 @@ class DemoGatewayConnectivity extends Command
         $this->line('Status di BimbelKu: '.$order->fresh()->status);
         $this->line('Session ID: '.$order->gateway_session_id);
         $this->warn('Status lokal baru lunas setelah webhook diterima atau sinkronisasi status dari halaman pembayaran.');
+
         return self::SUCCESS;
     }
 
     private function invalidStage(): int
     {
         $this->error('Stage tersedia: start atau status.');
+
         return self::FAILURE;
     }
 }

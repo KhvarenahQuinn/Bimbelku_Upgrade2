@@ -3,27 +3,28 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Booking;
 use App\Models\CurriculumSubject;
+use App\Models\Notification;
+use App\Models\Payout;
+use App\Models\Setting;
+use App\Models\TeacherPayoutRequest;
+use App\Models\TeacherProfile;
+use App\Models\TeacherSubject;
+use App\Models\User;
+use App\Services\BankAccountNameVerifier;
+use App\Services\TeacherMatchingService;
+use App\Services\TeacherOfferReleaseService;
+use App\Support\EducationCatalog;
+use App\Support\PublicMedia;
+use App\Support\XenditPayoutChannelCatalog;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\DB; 
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use App\Models\TeacherSubject;
-use App\Models\TeacherProfile;
-use App\Models\Order;
-use App\Models\Payout;
-use App\Models\Booking;
-use App\Models\Notification;
-use App\Models\Setting;
-use App\Models\User;
-use App\Services\TeacherMatchingService;
-use App\Support\EducationCatalog;
-use App\Support\XenditPayoutChannelCatalog;
-use App\Services\TeacherOfferReleaseService;
-use App\Services\BankAccountNameVerifier;
-use Carbon\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class TeacherController extends Controller
@@ -34,10 +35,10 @@ class TeacherController extends Controller
     public function getProfile(Request $request)
     {
         $user = Auth::user()->fresh();
-        
+
         $profile = $user->teacherProfile;
 
-        if (!$profile) {
+        if (! $profile) {
             $profile = TeacherProfile::firstOrCreate(['user_id' => $user->id]);
         }
 
@@ -58,7 +59,7 @@ class TeacherController extends Controller
         $profileData['account_name'] = $profile->account_name;
         $profileData['bank_account_changed_at'] = $profile->bank_account_changed_at;
         $profileData['payout_hold_until'] = $profile->payout_hold_until;
-        $profileData['photo_url'] = \App\Support\PublicMedia::url($profile->photo);
+        $profileData['photo_url'] = PublicMedia::url($profile->photo);
         $profileData['cv_url'] = $profile->cv_file ? "/teachers/{$user->id}/documents/cv_file" : null;
         $profileData['identity_document_url'] = $profile->identity_document ? "/teachers/{$user->id}/documents/identity_document" : null;
         $profileData['live_selfie_url'] = $profile->live_selfie ? "/teachers/{$user->id}/documents/live_selfie" : null;
@@ -66,13 +67,13 @@ class TeacherController extends Controller
         $profileData['certification_document_url'] = $profile->certification_document ? "/teachers/{$user->id}/documents/certification_document" : null;
         $profileData['profile_cover_url'] = $user->profile_cover_use_default
             ? null
-            : \App\Support\PublicMedia::url($user->profile_cover);
+            : PublicMedia::url($user->profile_cover);
 
         $user->subjects = $profile->subjects;
 
         return response()->json([
             'user' => $user,
-            'profile' => $profileData
+            'profile' => $profileData,
         ]);
     }
 
@@ -86,11 +87,12 @@ class TeacherController extends Controller
         $path = $request->file('profile_cover')->store('profile_covers', 'public');
         try {
             $oldPath = DB::transaction(function () use ($user, $path) {
-                $lockedUser = \App\Models\User::query()->lockForUpdate()->findOrFail($user->id);
+                $lockedUser = User::query()->lockForUpdate()->findOrFail($user->id);
                 $oldPath = $lockedUser->profile_cover;
                 $lockedUser->profile_cover = $path;
                 $lockedUser->profile_cover_use_default = false;
                 $lockedUser->save();
+
                 return $oldPath;
             }, 3);
         } catch (\Throwable $exception) {
@@ -104,7 +106,7 @@ class TeacherController extends Controller
 
         return response()->json([
             'message' => 'Sampul profil berhasil diperbarui.',
-            'profile_cover_url' => \App\Support\PublicMedia::url($path),
+            'profile_cover_url' => PublicMedia::url($path),
         ]);
     }
 
@@ -112,8 +114,7 @@ class TeacherController extends Controller
         Request $request,
         TeacherOfferReleaseService $offerReleaseService,
         TeacherMatchingService $matchingService
-    )
-    {
+    ) {
         $request->validate([
             'name' => ['nullable', 'string', 'max:255', 'regex:/\pL/u', 'not_regex:/\d/u'],
             'title' => ['nullable', 'string', 'max:150'],
@@ -145,8 +146,8 @@ class TeacherController extends Controller
         $user = Auth::user();
         $profile = $user->teacherProfile;
 
-        if (!$profile) {
-            $profile = new TeacherProfile();
+        if (! $profile) {
+            $profile = new TeacherProfile;
             $profile->user_id = $user->id;
         }
 
@@ -160,12 +161,24 @@ class TeacherController extends Controller
         $profile->experience = $request->experience;
         $profile->bio = $request->bio;
         $profile->whatsapp_number = $request->whatsapp_number;
-        if ($request->has('latitude')) $profile->latitude = $request->filled('latitude') ? $request->latitude : null;
-        if ($request->has('longitude')) $profile->longitude = $request->filled('longitude') ? $request->longitude : null;
-        if ($request->has('max_travel_km')) $profile->max_travel_km = max(1, min(12, (int) $request->max_travel_km));
-        if ($request->has('is_accepting_requests')) $profile->is_accepting_requests = filter_var($request->is_accepting_requests, FILTER_VALIDATE_BOOLEAN);
-        if ($request->has('public_credentials')) $profile->public_credentials = trim((string) $request->public_credentials) ?: null;
-        if ($request->has('public_degree')) $profile->public_degree = trim((string) $request->public_degree) ?: null;
+        if ($request->has('latitude')) {
+            $profile->latitude = $request->filled('latitude') ? $request->latitude : null;
+        }
+        if ($request->has('longitude')) {
+            $profile->longitude = $request->filled('longitude') ? $request->longitude : null;
+        }
+        if ($request->has('max_travel_km')) {
+            $profile->max_travel_km = max(1, min(12, (int) $request->max_travel_km));
+        }
+        if ($request->has('is_accepting_requests')) {
+            $profile->is_accepting_requests = filter_var($request->is_accepting_requests, FILTER_VALIDATE_BOOLEAN);
+        }
+        if ($request->has('public_credentials')) {
+            $profile->public_credentials = trim((string) $request->public_credentials) ?: null;
+        }
+        if ($request->has('public_degree')) {
+            $profile->public_degree = trim((string) $request->public_degree) ?: null;
+        }
         if ($request->has('public_profile_enabled')) {
             $publicEnabled = filter_var($request->public_profile_enabled, FILTER_VALIDATE_BOOLEAN);
             if ($publicEnabled && ! $profile->public_profile_enabled) {
@@ -205,7 +218,7 @@ class TeacherController extends Controller
                 $profile->cv_file = $newFiles['cv_file'][1];
             }
             foreach ($verificationDocuments as $field => $directory) {
-                if (!$request->hasFile($field)) {
+                if (! $request->hasFile($field)) {
                     continue;
                 }
 
@@ -229,7 +242,7 @@ class TeacherController extends Controller
                 &$reverificationRequired,
                 &$matchingProfileChanged
             ) {
-                $lockedUser = \App\Models\User::query()
+                $lockedUser = User::query()
                     ->lockForUpdate()
                     ->findOrFail($user->id);
                 $lockedProfile = TeacherProfile::query()
@@ -298,7 +311,7 @@ class TeacherController extends Controller
         }
 
         foreach ($oldFiles as [$disk, $path]) {
-            if (!$path) {
+            if (! $path) {
                 continue;
             }
             Storage::disk($disk)->delete($path);
@@ -331,13 +344,12 @@ class TeacherController extends Controller
         Request $request,
         TeacherOfferReleaseService $offerReleaseService,
         TeacherMatchingService $matchingService
-    )
-    {
+    ) {
         $validated = $request->validate([
             'subjects' => ['required', 'array', 'size:1'],
             'subjects.*.name' => ['required', 'string', 'max:120'],
             'subjects.*.levels' => ['required', 'array', 'min:1'],
-            'subjects.*.levels.*' => ['required', \Illuminate\Validation\Rule::in(EducationCatalog::LEVELS)],
+            'subjects.*.levels.*' => ['required', Rule::in(EducationCatalog::LEVELS)],
             'subjects.*.is_online' => ['required', 'boolean'],
             'subjects.*.is_offline' => ['required', 'boolean'],
             'subjects.*.is_private_active' => ['sometimes', 'boolean'],
@@ -351,7 +363,7 @@ class TeacherController extends Controller
             $levels = array_values(array_unique($item['levels']));
             sort($levels);
 
-            if (!$item['is_online'] && !$item['is_offline']) {
+            if (! $item['is_online'] && ! $item['is_offline']) {
                 return response()->json([
                     'message' => 'Setiap mata pelajaran harus memiliki sedikitnya satu mode mengajar aktif.',
                     'errors' => ["subjects.{$index}.is_online" => ['Aktifkan mode online atau offline.']],
@@ -362,7 +374,7 @@ class TeacherController extends Controller
                 ->where('is_active', true)
                 ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
                 ->first();
-            if (!$catalogSubject) {
+            if (! $catalogSubject) {
                 return response()->json([
                     'message' => 'Pilih seluruh mata pelajaran dari katalog aktif.',
                     'errors' => ["subjects.{$index}.name" => ['Mata pelajaran tidak tersedia pada katalog aktif.']],
@@ -405,7 +417,7 @@ class TeacherController extends Controller
             &$reverificationRequired,
             &$matchingEligibilityChanged
         ) {
-            $lockedUser = \App\Models\User::query()
+            $lockedUser = User::query()
                 ->lockForUpdate()
                 ->findOrFail($user->id);
             $lockedProfile = TeacherProfile::query()
@@ -418,6 +430,7 @@ class TeacherController extends Controller
                 ->map(function (TeacherSubject $subject) {
                     $levels = $subject->levels ?? [];
                     sort($levels);
+
                     return [
                         'curriculum_subject_id' => (int) ($subject->curriculum_subject_id ?? 0),
                         'name' => mb_strtolower(trim((string) $subject->name)),
@@ -514,7 +527,8 @@ class TeacherController extends Controller
         ]);
     }
 
-    public function updateBank(Request $request) {
+    public function updateBank(Request $request)
+    {
         $validated = $request->validate([
             'payout_channel_code' => ['nullable', 'required_without:bank_name', 'string', Rule::in(XenditPayoutChannelCatalog::codes())],
             'bank_name' => ['nullable', 'required_without:payout_channel_code', 'string', 'max:100', 'regex:/\pL/u'],
@@ -530,7 +544,7 @@ class TeacherController extends Controller
         ]);
 
         $user = Auth::user();
-        if (!Hash::check($validated['current_password'], $user->password)) {
+        if (! Hash::check($validated['current_password'], $user->password)) {
             return response()->json(['message' => 'Kata sandi akun tidak sesuai.'], 422);
         }
         $normalizeName = static fn (string $name): string => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $name) ?? $name));
@@ -551,12 +565,11 @@ class TeacherController extends Controller
             $user,
             $validated,
             $normalizedAccount,
-            $holdUntil
-            ,$channel,
+            $holdUntil, $channel,
             $channelCode
         ) {
             $lockedUser = $user->newQuery()->lockForUpdate()->findOrFail($user->id);
-            if (!Hash::check($validated['current_password'], $lockedUser->password)) {
+            if (! Hash::check($validated['current_password'], $lockedUser->password)) {
                 abort(422, 'Kata sandi akun tidak sesuai.');
             }
 
@@ -568,7 +581,7 @@ class TeacherController extends Controller
                 $normalizedAccount,
                 mb_strtolower(trim($validated['account_name'])),
             ]), (string) config('app.key'));
-            $changed = !hash_equals(
+            $changed = ! hash_equals(
                 (string) ($lockedProfile->bank_account_fingerprint ?? ''),
                 $fingerprint
             );
@@ -626,10 +639,11 @@ class TeacherController extends Controller
     // ==========================================
     // 3. KEUANGAN & GAJI
     // ==========================================
-    public function getSalaryData(Request $request) {
+    public function getSalaryData(Request $request)
+    {
         $user = $request->user();
         Carbon::setLocale('id');
-        $currentAdminFee = \App\Models\Setting::where('key', 'admin_fee')->value('value') ?? 20;
+        $currentAdminFee = Setting::where('key', 'admin_fee')->value('value') ?? 20;
         $profile = TeacherProfile::query()->where('user_id', $user->id)->first();
         $completedBookings = Booking::query()
             ->where('teacher_id', $user->id)
@@ -640,8 +654,8 @@ class TeacherController extends Controller
             ->selectRaw('COALESCE(SUM(CASE WHEN teacher_net_amount - teacher_paid_amount - teacher_reserved_amount > 0 THEN teacher_net_amount - teacher_paid_amount - teacher_reserved_amount ELSE 0 END), 0) AS available')
             ->selectRaw('COALESCE(SUM(teacher_reserved_amount), 0) AS requested')
             ->selectRaw('COALESCE(SUM(teacher_paid_amount), 0) AS paid')
-            ->selectRaw("COALESCE(SUM(gross_amount), 0) AS total_gross")
-            ->selectRaw("COALESCE(SUM(gross_amount - teacher_net_amount), 0) AS total_commission")
+            ->selectRaw('COALESCE(SUM(gross_amount), 0) AS total_gross')
+            ->selectRaw('COALESCE(SUM(gross_amount - teacher_net_amount), 0) AS total_commission')
             ->first();
         $paidPayouts = Payout::query()
             ->where('user_id', $user->id)
@@ -709,7 +723,7 @@ class TeacherController extends Controller
                 'net' => round((float) ($balanceRows?->total_gross ?? 0) - (float) ($balanceRows?->total_commission ?? 0)),
             ],
             'new_students_week' => $newStudentsWeek,
-            'student_count_week' => $newStudentsWeek, 
+            'student_count_week' => $newStudentsWeek,
             'total_students' => $totalStudents,
             'total_income' => round((float) ($balanceRows?->total_gross ?? 0) - (float) ($balanceRows?->total_commission ?? 0)),
             'total_withdrawn' => round($totalWithdrawn),
@@ -731,7 +745,7 @@ class TeacherController extends Controller
                     : null,
                 'payout_hold_until' => $profile?->payout_hold_until,
             ],
-            'payout_requests' => \App\Models\TeacherPayoutRequest::query()
+            'payout_requests' => TeacherPayoutRequest::query()
                 ->where('teacher_id', $user->id)
                 ->latest('requested_at')
                 ->limit(50)

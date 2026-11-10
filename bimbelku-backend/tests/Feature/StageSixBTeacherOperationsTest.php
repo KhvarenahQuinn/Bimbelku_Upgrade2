@@ -9,11 +9,14 @@ use App\Models\Order;
 use App\Models\TeacherAvailability;
 use App\Models\TeacherProfile;
 use App\Models\User;
+use App\Services\BankAccountNameVerifier;
+use App\Services\TeacherPayoutService;
+use App\Services\XenditWebhookService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -100,9 +103,17 @@ class StageSixBTeacherOperationsTest extends TestCase
 
     public function test_teacher_payout_request_is_sent_automatically_and_reserves_only_requested_amount(): void
     {
-        app()->instance(\App\Services\BankAccountNameVerifier::class, new class extends \App\Services\BankAccountNameVerifier {
-            public function available(): bool { return true; }
-            public function matches(string $channelCode, string $accountNumber, string $expectedName): bool { return true; }
+        app()->instance(BankAccountNameVerifier::class, new class extends BankAccountNameVerifier
+        {
+            public function available(): bool
+            {
+                return true;
+            }
+
+            public function matches(string $channelCode, string $accountNumber, string $expectedName): bool
+            {
+                return true;
+            }
         });
         config()->set('xendit.enabled', true);
         config()->set('xendit.secret_key', 'xnd_development_test');
@@ -173,9 +184,17 @@ class StageSixBTeacherOperationsTest extends TestCase
 
     public function test_payout_failure_webhook_does_not_release_another_pending_withdrawal(): void
     {
-        app()->instance(\App\Services\BankAccountNameVerifier::class, new class extends \App\Services\BankAccountNameVerifier {
-            public function available(): bool { return true; }
-            public function matches(string $channelCode, string $accountNumber, string $expectedName): bool { return true; }
+        app()->instance(BankAccountNameVerifier::class, new class extends BankAccountNameVerifier
+        {
+            public function available(): bool
+            {
+                return true;
+            }
+
+            public function matches(string $channelCode, string $accountNumber, string $expectedName): bool
+            {
+                return true;
+            }
         });
         config(['xendit.enabled' => true, 'xendit.secret_key' => 'test', 'xendit.webhook_token' => 'test', 'xendit.base_url' => 'https://api.xendit.test']);
         Http::fake(['*/v3/payouts' => Http::sequence()
@@ -185,10 +204,10 @@ class StageSixBTeacherOperationsTest extends TestCase
         $teacher->update(['address' => 'Yogyakarta']);
         $booking->update(['status' => 'completed', 'completed_at' => now(), 'gross_amount' => 100000, 'teacher_net_amount' => 80000, 'payout_status' => 'ready']);
         TeacherProfile::create(['user_id' => $teacher->id, 'bank_name' => 'BCA', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name]);
-        $service = app(\App\Services\TeacherPayoutService::class);
+        $service = app(TeacherPayoutService::class);
         $first = $service->request($teacher, 30000)['payout'];
         $service->request($teacher, 20000);
-        $webhooks = app(\App\Services\XenditWebhookService::class);
+        $webhooks = app(XenditWebhookService::class);
         $data = ['payout_id' => 'po-first', 'status' => 'FAILED'];
         $webhooks->handle('v3_payout.failed', 'first-failure', $data, $data);
         $webhooks->handle('v3_payout.failed', 'duplicate-failure-new-event', $data, $data);

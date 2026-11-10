@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('package_plans')) {
+        if (! Schema::hasTable('package_plans')) {
             Schema::create('package_plans', function (Blueprint $table) {
                 $table->id();
                 $table->string('name', 100);
@@ -23,7 +23,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('promotions')) {
+        if (! Schema::hasTable('promotions')) {
             Schema::create('promotions', function (Blueprint $table) {
                 $table->id();
                 $table->string('title', 160);
@@ -49,7 +49,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('learning_time_slots')) {
+        if (! Schema::hasTable('learning_time_slots')) {
             Schema::create('learning_time_slots', function (Blueprint $table) {
                 $table->id();
                 $table->time('start_time')->unique();
@@ -61,7 +61,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('learning_packages')) {
+        if (! Schema::hasTable('learning_packages')) {
             Schema::create('learning_packages', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('student_id')->constrained('users')->cascadeOnDelete();
@@ -89,7 +89,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('package_subjects')) {
+        if (! Schema::hasTable('package_subjects')) {
             Schema::create('package_subjects', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('learning_package_id')->constrained('learning_packages')->cascadeOnDelete();
@@ -110,7 +110,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('package_sessions')) {
+        if (! Schema::hasTable('package_sessions')) {
             Schema::create('package_sessions', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('package_subject_id')->constrained('package_subjects')->cascadeOnDelete();
@@ -125,7 +125,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('promotion_claims')) {
+        if (! Schema::hasTable('promotion_claims')) {
             Schema::create('promotion_claims', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('promotion_id')->constrained('promotions')->cascadeOnDelete();
@@ -143,7 +143,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('dynamic_banners')) {
+        if (! Schema::hasTable('dynamic_banners')) {
             Schema::create('dynamic_banners', function (Blueprint $table) {
                 $table->id();
                 $table->string('title', 160);
@@ -162,7 +162,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('tutorials')) {
+        if (! Schema::hasTable('tutorials')) {
             Schema::create('tutorials', function (Blueprint $table) {
                 $table->id();
                 $table->string('role', 20);
@@ -176,7 +176,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('tutorial_steps')) {
+        if (! Schema::hasTable('tutorial_steps')) {
             Schema::create('tutorial_steps', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('tutorial_id')->constrained('tutorials')->cascadeOnDelete();
@@ -190,7 +190,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('package_renewals')) {
+        if (! Schema::hasTable('package_renewals')) {
             Schema::create('package_renewals', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('old_package_id')->constrained('learning_packages')->cascadeOnDelete();
@@ -204,7 +204,7 @@ return new class extends Migration
         }
 
         Schema::table('booking_requests', function (Blueprint $table) {
-            if (!Schema::hasColumn('booking_requests', 'package_subject_id')) {
+            if (! Schema::hasColumn('booking_requests', 'package_subject_id')) {
                 $table->foreignId('package_subject_id')
                     ->nullable()
                     ->constrained('package_subjects')
@@ -214,19 +214,19 @@ return new class extends Migration
         });
 
         Schema::table('orders', function (Blueprint $table) {
-            if (!Schema::hasColumn('orders', 'learning_package_id')) {
+            if (! Schema::hasColumn('orders', 'learning_package_id')) {
                 $table->foreignId('learning_package_id')
                     ->nullable()
                     ->constrained('learning_packages')
                     ->nullOnDelete();
             }
-            if (!Schema::hasColumn('orders', 'promotion_id')) {
+            if (! Schema::hasColumn('orders', 'promotion_id')) {
                 $table->foreignId('promotion_id')->nullable()->constrained('promotions')->nullOnDelete();
             }
-            if (!Schema::hasColumn('orders', 'subtotal_amount')) {
+            if (! Schema::hasColumn('orders', 'subtotal_amount')) {
                 $table->decimal('subtotal_amount', 12, 2)->nullable();
             }
-            if (!Schema::hasColumn('orders', 'discount_amount')) {
+            if (! Schema::hasColumn('orders', 'discount_amount')) {
                 $table->decimal('discount_amount', 12, 2)->default(0);
             }
         });

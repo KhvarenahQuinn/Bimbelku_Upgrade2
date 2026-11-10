@@ -55,12 +55,13 @@ class PrivateClassJoinController extends Controller
         $code = DB::transaction(function () use ($learningPackage) {
             $package = LearningPackage::query()->lockForUpdate()->findOrFail($learningPackage->id);
             abort_unless($package->status === 'active', 422, 'Paket tidak lagi aktif.');
-            if (!$package->class_join_code) {
+            if (! $package->class_join_code) {
                 do {
                     $code = strtoupper(Str::random(12));
                 } while (LearningPackage::query()->where('class_join_code', $code)->exists());
                 $package->update(['class_join_code' => $code]);
             }
+
             return $package->class_join_code;
         });
 
@@ -98,6 +99,7 @@ class PrivateClassJoinController extends Controller
             $existing = $package->classJoins()->where('student_id', $request->user()->id)->first();
             if ($existing) {
                 abort_if($existing->status === 'rejected', 422, 'Permintaanmu sebelumnya ditolak pemesan. Minta pemesan menghubungi bantuan bila perlu.');
+
                 return $existing;
             }
 
@@ -110,6 +112,7 @@ class PrivateClassJoinController extends Controller
                 'type' => 'info',
                 'target_url' => '/student/packages',
             ]);
+
             return $join;
         });
 

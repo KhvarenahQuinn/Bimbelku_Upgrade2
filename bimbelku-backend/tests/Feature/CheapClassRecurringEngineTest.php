@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\CheapClass;
-use App\Models\CheapClassTemplate;
 use App\Models\CurriculumChapter;
 use App\Models\CurriculumSubject;
 use App\Models\User;

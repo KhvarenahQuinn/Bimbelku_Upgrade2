@@ -8,8 +8,11 @@ use Illuminate\Validation\ValidationException;
 class PrivateParticipantPricing
 {
     public const KEY = 'private_participant_pricing_v1';
+
     public const MAXIMUM_KEY = 'private_participant_maximum_v1';
+
     public const DEFAULT_MAXIMUM = 8;
+
     public const HARD_MAXIMUM = 100;
 
     public function maximumParticipants(): int
@@ -23,7 +26,9 @@ class PrivateParticipantPricing
     {
         $decoded = json_decode((string) Setting::query()->where('key', self::KEY)->value('value'), true);
 
-        if (! is_array($decoded)) return [];
+        if (! is_array($decoded)) {
+            return [];
+        }
 
         return collect($decoded)->map(fn ($tier) => [
             'discount_percent' => is_array($tier) && is_numeric($tier['discount_percent'] ?? null)
@@ -36,7 +41,9 @@ class PrivateParticipantPricing
     {
         $tiers = $this->tiers();
         foreach (range(2, $this->maximumParticipants()) as $count) {
-            if (! is_numeric($tiers[(string) $count]['discount_percent'] ?? null)) return false;
+            if (! is_numeric($tiers[(string) $count]['discount_percent'] ?? null)) {
+                return false;
+            }
         }
 
         return true;
@@ -44,7 +51,9 @@ class PrivateParticipantPricing
 
     public function forCount(int $count): array
     {
-        if ($count === 1) return ['discount_percent' => 0.0];
+        if ($count === 1) {
+            return ['discount_percent' => 0.0];
+        }
 
         $maximum = $this->maximumParticipants();
         if ($count < 2 || $count > $maximum || ! $this->isReady()) {

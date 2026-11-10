@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BookingRequest;
 use App\Models\CurriculumChapter;
 use App\Models\CurriculumSubject;
 use App\Support\EducationCatalog;
@@ -66,7 +67,7 @@ class CurriculumChapterController extends Controller
 
     public function destroy(CurriculumChapter $curriculumChapter)
     {
-        $used = \App\Models\BookingRequest::query()
+        $used = BookingRequest::query()
             ->whereRaw('LOWER(subject_name) = ?', [$curriculumChapter->subject->normalized_name])
             ->where('grade', $curriculumChapter->grade)
             ->whereRaw('LOWER(chapter) = ?', [$curriculumChapter->normalized_title])
@@ -119,7 +120,7 @@ class CurriculumChapterController extends Controller
         ]);
 
         $this->assertGrade($validated['education_level'], $validated['grade']);
-        if (!in_array($validated['grade'], $subject->grades ?? [], true)) {
+        if (! in_array($validated['grade'], $subject->grades ?? [], true)) {
             abort(422, 'Kelas tersebut belum diaktifkan pada mata pelajaran ini.');
         }
 

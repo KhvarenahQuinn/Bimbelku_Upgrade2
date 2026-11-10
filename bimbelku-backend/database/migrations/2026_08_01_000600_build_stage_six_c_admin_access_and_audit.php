@@ -10,20 +10,20 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            if (!Schema::hasColumn('users', 'admin_type')) {
+            if (! Schema::hasColumn('users', 'admin_type')) {
                 $table->string('admin_type', 30)->nullable()->after('role')->index();
             }
-            if (!Schema::hasColumn('users', 'admin_permissions')) {
+            if (! Schema::hasColumn('users', 'admin_permissions')) {
                 $table->json('admin_permissions')->nullable()->after('admin_type');
             }
-            if (!Schema::hasColumn('users', 'admin_permissions_updated_by')) {
+            if (! Schema::hasColumn('users', 'admin_permissions_updated_by')) {
                 $table->foreignId('admin_permissions_updated_by')
                     ->nullable()
                     ->after('admin_permissions')
                     ->constrained('users')
                     ->nullOnDelete();
             }
-            if (!Schema::hasColumn('users', 'admin_permissions_updated_at')) {
+            if (! Schema::hasColumn('users', 'admin_permissions_updated_at')) {
                 $table->timestamp('admin_permissions_updated_at')->nullable()->after('admin_permissions_updated_by');
             }
         });
@@ -39,7 +39,7 @@ return new class extends Migration
                 'admin_permissions_updated_at' => now(),
             ]);
 
-        if (!Schema::hasTable('admin_audit_logs')) {
+        if (! Schema::hasTable('admin_audit_logs')) {
             Schema::create('admin_audit_logs', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('actor_id')->nullable()->constrained('users')->nullOnDelete();

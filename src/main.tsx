@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, useLocation } from "react-router-dom";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import { WebsiteContentProvider } from "./components/WebsiteContentProvider";
+import { hydrateBrowserSession } from "./lib/session";
 import "./index.css";
 
 const initialLanding = window.location.pathname === "/" ? import("./pages/Index") : null;
@@ -36,6 +37,7 @@ const rootElement = document.getElementById("root") ?? (() => {
 })();
 
 function bootstrap() {
+hydrateBrowserSession();
 createRoot(rootElement).render(
   <AppErrorBoundary>
     <BrowserRouter><AppEntry /></BrowserRouter>

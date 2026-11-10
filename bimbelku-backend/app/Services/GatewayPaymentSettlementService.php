@@ -20,6 +20,7 @@ class GatewayPaymentSettlementService
         private readonly CheapClassService $cheapClasses,
         private readonly RefundSettlementService $refunds,
         private readonly CustomerWalletService $wallets,
+        private readonly ScheduleReleaseService $scheduleRelease,
     ) {}
 
     public function settle(Order $order, array $data): void
@@ -40,6 +41,7 @@ class GatewayPaymentSettlementService
                     $current->forceFill([
                         'gateway_payment_id' => Arr::get($data, 'payment_id') ?? Arr::get($data, 'payment.id') ?? $current->gateway_payment_id,
                         'gateway_payment_request_id' => Arr::get($data, 'payment_request_id') ?? Arr::get($data, 'payment_request.id') ?? $current->gateway_payment_request_id,
+                        'xendit_payment_request_id' => Arr::get($data, 'payment_request_id') ?? Arr::get($data, 'payment_request.id') ?? $current->xendit_payment_request_id,
                     ])->save();
                     if ($current->refund) {
                         $this->refunds->startAutomatic($current->refund);
@@ -82,6 +84,7 @@ class GatewayPaymentSettlementService
                         'payment_provider' => 'xendit',
                         'gateway_payment_id' => Arr::get($data, 'payment_id') ?? Arr::get($data, 'payment.id'),
                         'gateway_payment_request_id' => Arr::get($data, 'payment_request_id') ?? Arr::get($data, 'payment_request.id'),
+                        'xendit_payment_request_id' => Arr::get($data, 'payment_request_id') ?? Arr::get($data, 'payment_request.id'),
                         'gateway_status' => 'COMPLETED',
                         'gateway_session_id' => Arr::get($data, 'payment_session_id') ?? Arr::get($data, 'session_id') ?? Arr::get($data, 'payment_session.id') ?? $locked->gateway_session_id,
                         'gateway_creation_uncertain' => false,
@@ -146,6 +149,7 @@ class GatewayPaymentSettlementService
             'payment_provider' => 'xendit',
             'gateway_payment_id' => Arr::get($data, 'payment_id') ?? Arr::get($data, 'payment.id') ?? $order->gateway_payment_id,
             'gateway_payment_request_id' => Arr::get($data, 'payment_request_id') ?? Arr::get($data, 'payment_request.id') ?? $order->gateway_payment_request_id,
+            'xendit_payment_request_id' => Arr::get($data, 'payment_request_id') ?? Arr::get($data, 'payment_request.id') ?? $order->xendit_payment_request_id,
             'gateway_status' => 'COMPLETED',
             'gateway_session_id' => Arr::get($data, 'payment_session_id') ?? Arr::get($data, 'session_id') ?? Arr::get($data, 'payment_session.id') ?? $order->gateway_session_id,
             'gateway_creation_uncertain' => false,
@@ -166,6 +170,7 @@ class GatewayPaymentSettlementService
                 $subject->bookingRequest?->offers()->whereIn('status', ['pending', 'accepted'])
                     ->update(['status' => 'cancelled', 'responded_at' => now()]);
             });
+            $this->scheduleRelease->releasePackage($package, 'cancelled', 'cancelled');
             $package->promotionClaims()->where('status', 'reserved')->update([
                 'status' => 'available', 'released_at' => now(), 'learning_package_id' => null,
             ]);

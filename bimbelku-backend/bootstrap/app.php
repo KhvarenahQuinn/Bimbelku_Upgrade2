@@ -1,5 +1,15 @@
 <?php
 
+use App\Http\Middleware\ApplySecurityHeaders;
+use App\Http\Middleware\AuditAdminAction;
+use App\Http\Middleware\AuditFinancialAction;
+use App\Http\Middleware\AuthenticateFromSessionCookie;
+use App\Http\Middleware\EnforceIdempotency;
+use App\Http\Middleware\EnsureActiveAccount;
+use App\Http\Middleware\EnsureAdminPermission;
+use App\Http\Middleware\EnsureFeatureEnabled;
+use App\Http\Middleware\EnsureUserHasRole;
+use App\Http\Middleware\RefreshPersistentSession;
 use App\Models\Promotion;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
@@ -15,23 +25,23 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->prependToGroup('api', \App\Http\Middleware\AuthenticateFromSessionCookie::class);
-        $middleware->append(\App\Http\Middleware\ApplySecurityHeaders::class);
+        $middleware->prependToGroup('api', AuthenticateFromSessionCookie::class);
+        $middleware->append(ApplySecurityHeaders::class);
 
         $middleware->alias([
-            'active.account' => \App\Http\Middleware\EnsureActiveAccount::class,
-            'role' => \App\Http\Middleware\EnsureUserHasRole::class,
-            'idempotency' => \App\Http\Middleware\EnforceIdempotency::class,
-            'finance.audit' => \App\Http\Middleware\AuditFinancialAction::class,
-            'admin.permission' => \App\Http\Middleware\EnsureAdminPermission::class,
-            'admin.audit' => \App\Http\Middleware\AuditAdminAction::class,
-            'feature' => \App\Http\Middleware\EnsureFeatureEnabled::class,
-            'persistent.session' => \App\Http\Middleware\RefreshPersistentSession::class,
+            'active.account' => EnsureActiveAccount::class,
+            'role' => EnsureUserHasRole::class,
+            'idempotency' => EnforceIdempotency::class,
+            'finance.audit' => AuditFinancialAction::class,
+            'admin.permission' => EnsureAdminPermission::class,
+            'admin.audit' => AuditAdminAction::class,
+            'feature' => EnsureFeatureEnabled::class,
+            'persistent.session' => RefreshPersistentSession::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request, \Throwable $exception): bool => $request->is('api/*') || $request->expectsJson()
+            fn (Request $request, Throwable $exception): bool => $request->is('api/*') || $request->expectsJson()
         );
 
         $exceptions->render(function (ModelNotFoundException $exception, Request $request) {

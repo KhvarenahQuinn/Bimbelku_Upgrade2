@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class PaymentSubmission extends Model
 {
     protected $guarded = ['id'];
+
     protected $hidden = ['proof_path'];
 
     protected $casts = [

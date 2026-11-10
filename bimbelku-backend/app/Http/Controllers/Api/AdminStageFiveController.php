@@ -13,6 +13,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -52,12 +53,14 @@ class AdminStageFiveController extends Controller
     public function storePlan(Request $request)
     {
         $plan = PackagePlan::create($this->validatePlan($request));
+
         return response()->json(['message' => 'Paket berhasil ditambahkan.', 'data' => $plan], 201);
     }
 
     public function updatePlan(Request $request, PackagePlan $packagePlan)
     {
         $packagePlan->update($this->validatePlan($request, $packagePlan));
+
         return response()->json(['message' => 'Paket berhasil diperbarui.', 'data' => $packagePlan->fresh()]);
     }
 
@@ -65,9 +68,11 @@ class AdminStageFiveController extends Controller
     {
         if ($packagePlan->packages()->exists()) {
             $packagePlan->update(['is_active' => false]);
+
             return response()->json(['message' => 'Paket dinonaktifkan karena sudah memiliki riwayat transaksi.']);
         }
         $packagePlan->delete();
+
         return response()->json(['message' => 'Paket berhasil dihapus.']);
     }
 
@@ -81,18 +86,21 @@ class AdminStageFiveController extends Controller
     public function storeTimeSlot(Request $request)
     {
         $slot = LearningTimeSlot::create($this->validateTimeSlot($request));
+
         return response()->json(['message' => 'Slot jadwal berhasil ditambahkan.', 'data' => $slot], 201);
     }
 
     public function updateTimeSlot(Request $request, LearningTimeSlot $learningTimeSlot)
     {
         $learningTimeSlot->update($this->validateTimeSlot($request, $learningTimeSlot));
+
         return response()->json(['message' => 'Slot jadwal berhasil diperbarui.', 'data' => $learningTimeSlot->fresh()]);
     }
 
     public function deleteTimeSlot(LearningTimeSlot $learningTimeSlot)
     {
         $learningTimeSlot->delete();
+
         return response()->json(['message' => 'Slot jadwal berhasil dihapus.']);
     }
 
@@ -109,12 +117,14 @@ class AdminStageFiveController extends Controller
     public function storePromotion(Request $request)
     {
         $promotion = Promotion::create($this->validatePromotion($request));
+
         return response()->json(['message' => 'Promo berhasil ditambahkan.', 'data' => $promotion], 201);
     }
 
     public function updatePromotion(Request $request, Promotion $promotion)
     {
         $promotion->update($this->validatePromotion($request, $promotion));
+
         return response()->json(['message' => 'Promo berhasil diperbarui.', 'data' => $promotion->fresh()]);
     }
 
@@ -131,11 +141,13 @@ class AdminStageFiveController extends Controller
 
             if ($hasClaims) {
                 $promotion->update(['is_active' => false]);
+
                 return;
             }
 
             $promotion->delete();
         });
+
         return response()->json([
             'message' => $hasClaims
                 ? 'Promo dan banner terkait dinonaktifkan karena promo sudah pernah diklaim.'
@@ -164,6 +176,7 @@ class AdminStageFiveController extends Controller
             }
             throw $exception;
         }
+
         return response()->json(['message' => 'Banner berhasil ditambahkan.', 'data' => $banner], 201);
     }
 
@@ -184,9 +197,10 @@ class AdminStageFiveController extends Controller
             }
             throw $exception;
         }
-        if ($newPath && $oldPath && !str_starts_with($oldPath, 'http')) {
+        if ($newPath && $oldPath && ! str_starts_with($oldPath, 'http')) {
             $this->deletePublicFile($oldPath);
         }
+
         return response()->json(['message' => 'Banner berhasil diperbarui.', 'data' => $dynamicBanner->fresh()]);
     }
 
@@ -194,9 +208,10 @@ class AdminStageFiveController extends Controller
     {
         $path = $dynamicBanner->image_path;
         $dynamicBanner->delete();
-        if ($path && !str_starts_with($path, 'http')) {
+        if ($path && ! str_starts_with($path, 'http')) {
             $this->deletePublicFile($path);
         }
+
         return response()->json(['message' => 'Banner berhasil dihapus.']);
     }
 
@@ -211,8 +226,10 @@ class AdminStageFiveController extends Controller
         $tutorial = DB::transaction(function () use ($tutorialData, $steps) {
             $tutorial = Tutorial::create($tutorialData);
             $this->syncSteps($tutorial, $steps);
+
             return $tutorial;
         });
+
         return response()->json(['message' => 'Tutorial berhasil ditambahkan.', 'data' => $tutorial->load('steps')], 201);
     }
 
@@ -223,17 +240,19 @@ class AdminStageFiveController extends Controller
             $tutorial->update($tutorialData);
             $this->syncSteps($tutorial, $steps);
         });
+
         return response()->json(['message' => 'Tutorial berhasil diperbarui.', 'data' => $tutorial->fresh('steps')]);
     }
 
     public function deleteTutorial(Tutorial $tutorial)
     {
         $tutorial->steps->each(function (TutorialStep $step) {
-            if ($step->image_path && !str_starts_with($step->image_path, 'http')) {
+            if ($step->image_path && ! str_starts_with($step->image_path, 'http')) {
                 $this->deletePublicFile($step->image_path);
             }
         });
         $tutorial->delete();
+
         return response()->json(['message' => 'Tutorial berhasil dihapus.']);
     }
 
@@ -248,7 +267,7 @@ class AdminStageFiveController extends Controller
             $this->deletePublicFile($newPath);
             throw $exception;
         }
-        if ($oldPath && !str_starts_with($oldPath, 'http')) {
+        if ($oldPath && ! str_starts_with($oldPath, 'http')) {
             $this->deletePublicFile($oldPath);
         }
 
@@ -344,6 +363,7 @@ class AdminStageFiveController extends Controller
             );
         }
         $data['code'] = filled($data['code'] ?? null) ? mb_strtoupper($data['code']) : null;
+
         return $data;
     }
 
@@ -380,7 +400,7 @@ class AdminStageFiveController extends Controller
             ) === 1;
             $allowed = in_array($data['destination_url'], self::INTERNAL_DESTINATIONS, true)
                 || $isPromotionDestination;
-            if (!$allowed) {
+            if (! $allowed) {
                 throw ValidationException::withMessages([
                     'destination_url' => 'Tujuan internal tidak diizinkan.',
                 ]);
@@ -391,24 +411,25 @@ class AdminStageFiveController extends Controller
                     ->whereKey((int) $promotionMatch[1])
                     ->where('is_active', true)
                     ->exists();
-                if (!$promotionExists) {
+                if (! $promotionExists) {
                     throw ValidationException::withMessages([
                         'destination_url' => 'Promo tujuan banner tidak ditemukan atau sudah dinonaktifkan.',
                     ]);
                 }
             }
         } else {
-            if (!filter_var($data['destination_url'], FILTER_VALIDATE_URL)) {
+            if (! filter_var($data['destination_url'], FILTER_VALIDATE_URL)) {
                 throw ValidationException::withMessages([
                     'destination_url' => 'Tautan luar tidak valid.',
                 ]);
             }
-            if (!str_starts_with($data['destination_url'], 'https://')) {
+            if (! str_starts_with($data['destination_url'], 'https://')) {
                 throw ValidationException::withMessages([
                     'destination_url' => 'Tautan luar wajib memakai HTTPS.',
                 ]);
             }
         }
+
         return $data;
     }
 
@@ -443,6 +464,7 @@ class AdminStageFiveController extends Controller
         ]);
         $steps = $data['steps'];
         unset($data['steps']);
+
         return [$data, $steps];
     }
 
@@ -450,7 +472,7 @@ class AdminStageFiveController extends Controller
     {
         $keptIds = [];
         foreach ($steps as $index => $stepData) {
-            $step = !empty($stepData['id'])
+            $step = ! empty($stepData['id'])
                 ? $tutorial->steps()->find($stepData['id'])
                 : null;
             $payload = [
@@ -460,12 +482,15 @@ class AdminStageFiveController extends Controller
                 'callout' => $stepData['callout'] ?? null,
                 'sort_order' => $stepData['sort_order'] ?? $index,
             ];
-            if ($step) $step->update($payload);
-            else $step = $tutorial->steps()->create($payload);
+            if ($step) {
+                $step->update($payload);
+            } else {
+                $step = $tutorial->steps()->create($payload);
+            }
             $keptIds[] = $step->id;
         }
         $tutorial->steps()->whereNotIn('id', $keptIds)->get()->each(function (TutorialStep $step) {
-            if ($step->image_path && !str_starts_with($step->image_path, 'http')) {
+            if ($step->image_path && ! str_starts_with($step->image_path, 'http')) {
                 $this->deletePublicFile($step->image_path);
             }
             $step->delete();
@@ -488,16 +513,16 @@ class AdminStageFiveController extends Controller
     {
         $file = $request->file('image');
         if (
-            !$file
-            || !function_exists('imagecreatefromstring')
-            || !function_exists('imagewebp')
+            ! $file
+            || ! function_exists('imagecreatefromstring')
+            || ! function_exists('imagewebp')
         ) {
             return $this->storePublicImage($request, 'stage-five/banners');
         }
 
         $contents = @file_get_contents($file->getRealPath());
         $source = is_string($contents) ? @imagecreatefromstring($contents) : false;
-        if (!$source) {
+        if (! $source) {
             return $this->storePublicImage($request, 'stage-five/banners');
         }
 
@@ -508,8 +533,9 @@ class AdminStageFiveController extends Controller
         $targetHeight = max(1, (int) round($sourceHeight * $scale));
         $target = imagecreatetruecolor($targetWidth, $targetHeight);
 
-        if (!$target) {
+        if (! $target) {
             imagedestroy($source);
+
             return $this->storePublicImage($request, 'stage-five/banners');
         }
 
@@ -533,7 +559,7 @@ class AdminStageFiveController extends Controller
         $disk = Storage::disk('public');
         $directory = 'stage-five/banners';
         $disk->makeDirectory($directory);
-        $path = $directory.'/'.\Illuminate\Support\Str::uuid().'.webp';
+        $path = $directory.'/'.Str::uuid().'.webp';
 
         try {
             $stored = imagewebp($target, $disk->path($path), 82);
@@ -542,10 +568,11 @@ class AdminStageFiveController extends Controller
             imagedestroy($source);
         }
 
-        if (!$stored || !$disk->exists($path)) {
+        if (! $stored || ! $disk->exists($path)) {
             if ($disk->exists($path)) {
                 $disk->delete($path);
             }
+
             return $this->storePublicImage($request, 'stage-five/banners');
         }
 
@@ -554,7 +581,7 @@ class AdminStageFiveController extends Controller
 
     private function deletePublicFile(?string $path): void
     {
-        if (!$path || str_starts_with($path, 'http')) {
+        if (! $path || str_starts_with($path, 'http')) {
             return;
         }
 

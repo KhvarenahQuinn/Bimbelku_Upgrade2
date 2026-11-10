@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('learning_progress_reports')) {
+        if (! Schema::hasTable('learning_progress_reports')) {
             return;
         }
 
@@ -19,10 +19,10 @@ return new class extends Migration
         }
 
         Schema::table('learning_progress_reports', function (Blueprint $table) use ($hasNoChange, $hasReason) {
-            if (!$hasNoChange) {
+            if (! $hasNoChange) {
                 $table->boolean('no_material_change')->default(false)->after('progress_percent');
             }
-            if (!$hasReason) {
+            if (! $hasReason) {
                 $table->string('no_change_reason', 40)->nullable()->after('no_material_change');
             }
         });
@@ -30,12 +30,16 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (!Schema::hasTable('learning_progress_reports')) {
+        if (! Schema::hasTable('learning_progress_reports')) {
             return;
         }
         $columns = [];
-        if (Schema::hasColumn('learning_progress_reports', 'no_change_reason')) $columns[] = 'no_change_reason';
-        if (Schema::hasColumn('learning_progress_reports', 'no_material_change')) $columns[] = 'no_material_change';
+        if (Schema::hasColumn('learning_progress_reports', 'no_change_reason')) {
+            $columns[] = 'no_change_reason';
+        }
+        if (Schema::hasColumn('learning_progress_reports', 'no_material_change')) {
+            $columns[] = 'no_material_change';
+        }
         if ($columns !== []) {
             Schema::table('learning_progress_reports', fn (Blueprint $table) => $table->dropColumn($columns));
         }

@@ -42,7 +42,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasTable('booking_requests') || ! Schema::hasColumn('booking_requests', 'search_radius_km')) return;
+        if (! Schema::hasTable('booking_requests') || ! Schema::hasColumn('booking_requests', 'search_radius_km')) {
+            return;
+        }
 
         DB::table('booking_requests')->whereNull('search_radius_km')->update(['search_radius_km' => 3]);
         Schema::table('booking_requests', function (Blueprint $table) {

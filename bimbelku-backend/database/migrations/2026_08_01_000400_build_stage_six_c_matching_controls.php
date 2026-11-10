@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('matching_operation_logs')) {
+        if (! Schema::hasTable('matching_operation_logs')) {
             Schema::create('matching_operation_logs', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('booking_request_id')

@@ -16,7 +16,10 @@ use App\Services\CustomerWalletService;
 use App\Services\GatewayPaymentSettlementService;
 use App\Services\PackageCheckoutService;
 use App\Services\PaymentReconciliationService;
+use App\Services\RefundSettlementService;
+use App\Services\ScheduleReleaseService;
 use App\Services\XenditPaymentService;
+use App\Support\RefundStatusPresenter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -34,14 +37,6 @@ class OrderController extends Controller
         CustomerWalletService $wallets,
         PaymentReconciliationService $reconciliation
     ) {
-        if ((bool) config('xendit.enabled')) {
-            return $this->paymentError(
-                'Pembayaran manual sudah dinonaktifkan. Gunakan pembayaran otomatis.',
-                410,
-                'manual_payment_retired'
-            );
-        }
-
         $walletInput = $request->validate([
             'use_wallet' => ['sometimes', 'boolean'],
             'wallet_expected_amount' => ['nullable', 'numeric', 'min:0'],
@@ -88,6 +83,14 @@ class OrderController extends Controller
         $walletAmount = $isTopUp
             ? round((float) $order->wallet_reserved_amount, 2)
             : ($useWallet ? round((float) $walletQuote['usable_amount'], 2) : 0.0);
+        $orderTotalDue = round(max(0, (float) $order->amount - (float) $order->external_received_amount), 2);
+        if ($useWallet && ! $isTopUp && $walletAmount + 0.009 < $orderTotalDue) {
+            return $this->paymentError(
+                'Saldo BimbelKu belum mencukupi seluruh tagihan. Pembayaran saldo hanya tersedia bila saldo menutup penuh; gunakan metode pembayaran lain untuk tagihan ini.',
+                422,
+                'wallet_full_payment_required'
+            );
+        }
         if ($useWallet && ! $isTopUp && $clientWalletExpected !== null && abs($walletAmount - $clientWalletExpected) > 0.009) {
             return $this->paymentError(
                 'Saldo yang tersedia berubah. Muat ulang pembayaran sebelum melanjutkan.',
@@ -99,6 +102,14 @@ class OrderController extends Controller
             0,
             (float) $order->amount - $walletAmount - (float) $order->external_received_amount
         ), 2);
+
+        if ((bool) config('xendit.enabled') && $externalDue > 0) {
+            return $this->paymentError(
+                'Pembayaran manual sudah dinonaktifkan. Gunakan pembayaran otomatis.',
+                410,
+                'manual_payment_retired'
+            );
+        }
 
         if ($externalDue > 0) {
             $paymentSettings = PaymentSetting::query()->first();
@@ -295,9 +306,15 @@ class OrderController extends Controller
     public function index(
         Request $request,
         CheapClassService $cheapClassService,
-        PaymentReconciliationService $reconciliation
+        PaymentReconciliationService $reconciliation,
+        RefundSettlementService $refundSettlement
     ) {
         $cheapClassService->refreshLifecycle();
+
+        // Let the student's transaction history settle a gateway refund that
+        // already succeeded, even if the webhook or scheduler was missed.
+        $refundSettlement->reconcileDue($request->user()->id, 5, 10);
+
         Order::query()
             ->where('user_id', $request->user()->id)
             ->whereIn('status', ['pending', 'rejected', 'partially_paid'])
@@ -337,7 +354,7 @@ class OrderController extends Controller
             $refundPayload = null;
             if ($order->refund) {
                 $breakdown = $order->refund->tenderBreakdown();
-                $refundPayload = array_merge($order->refund->toArray(), [
+                $refundPayload = array_merge($order->refund->toArray(), RefundStatusPresenter::present($order->refund), [
                     'wallet_funded_amount' => $breakdown['wallet_funded_amount'],
                     'external_funded_amount' => $breakdown['external_funded_amount'],
                 ]);
@@ -655,6 +672,14 @@ class OrderController extends Controller
             ])
             ->where('start_at', '<', $booking->end_at)
             ->where('end_at', '>', $booking->start_at)
+            // Only a fully released order or the session's own released
+            // request frees the slot; a partial refund keeps the rest.
+            ->whereDoesntHave('order', fn ($order) => $order
+                ->whereIn('status', ['refunded', 'cancelled', 'expired']))
+            ->whereDoesntHave('bookingRequest', fn ($bookingRequest) => $bookingRequest
+                ->whereIn('status', ['refund_pending', 'refunded', 'cancelled', 'payment_expired', 'expired']))
+            ->whereDoesntHave('bookingRequest.packageSubject.package', fn ($package) => $package
+                ->whereIn('status', ['refund_pending', 'refunded', 'cancelled', 'payment_expired']))
             ->exists();
 
         if (! $hasConflict) {
@@ -686,6 +711,12 @@ class OrderController extends Controller
                     ])
                     ->where('start_at', '<', $session->scheduled_end_at)
                     ->where('end_at', '>', $session->scheduled_start_at)
+                    ->whereDoesntHave('order', fn ($order) => $order
+                        ->whereIn('status', ['refunded', 'cancelled', 'expired']))
+                    ->whereDoesntHave('bookingRequest', fn ($bookingRequest) => $bookingRequest
+                        ->whereIn('status', ['refund_pending', 'refunded', 'cancelled', 'payment_expired', 'expired']))
+                    ->whereDoesntHave('bookingRequest.packageSubject.package', fn ($other) => $other
+                        ->whereIn('status', ['refund_pending', 'refunded', 'cancelled', 'payment_expired']))
                     ->whereDoesntHave('bookingRequest.packageSubject', fn ($query) => $query
                         ->where('learning_package_id', $package->id))
                     ->exists();
@@ -695,7 +726,8 @@ class OrderController extends Controller
                     ->whereHas('subject.package', fn ($query) => $query
                         ->where('student_id', $package->student_id)
                         ->where('id', '!=', $package->id)
-                        ->whereNotIn('status', ['cancelled', 'payment_expired', 'completed']))
+                        ->whereNotIn('status', ['cancelled', 'payment_expired', 'completed', 'refund_pending', 'refunded']))
+                    ->whereNotIn('status', ['cancelled', 'payment_expired', 'completed', 'refund_pending', 'refunded'])
                     ->where('scheduled_start_at', '<', $session->scheduled_end_at)
                     ->where('scheduled_end_at', '>', $session->scheduled_start_at)
                     ->exists();
@@ -772,6 +804,7 @@ class OrderController extends Controller
             $package->promotionClaims()
                 ->where('status', 'reserved')
                 ->update(['status' => 'available', 'released_at' => now(), 'learning_package_id' => null]);
+            app(ScheduleReleaseService::class)->releasePackage($package, 'payment_expired', 'payment_expired');
             PackageRenewal::query()
                 ->where('new_package_id', $package->id)
                 ->whereIn('status', ['requested', 'tutor_accepted'])
@@ -818,6 +851,7 @@ class OrderController extends Controller
             $package->promotionClaims()
                 ->where('status', 'reserved')
                 ->update(['status' => 'available', 'released_at' => now(), 'learning_package_id' => null]);
+            app(ScheduleReleaseService::class)->releasePackage($package, 'cancelled', 'cancelled');
             PackageRenewal::query()
                 ->where('new_package_id', $package->id)
                 ->whereIn('status', ['requested', 'tutor_accepted'])

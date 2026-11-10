@@ -10,8 +10,8 @@ use App\Models\PackageRenewal;
 use App\Models\Setting;
 use App\Models\TeacherOffer;
 use App\Services\CheapClassService;
-use App\Services\TeacherMatchingService;
 use App\Services\PaymentReconciliationService;
+use App\Services\TeacherMatchingService;
 use App\Support\CheapClassSchema;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -66,7 +66,7 @@ class ExpireBookingWorkflow extends Command
                 foreach ($offers as $offer) {
                     DB::transaction(function () use ($offer, &$count) {
                         $locked = TeacherOffer::query()->lockForUpdate()->find($offer->id);
-                        if (!$locked || $locked->status !== 'pending' || $locked->reminder_sent_at || $locked->expires_at->isPast()) {
+                        if (! $locked || $locked->status !== 'pending' || $locked->reminder_sent_at || $locked->expires_at->isPast()) {
                             return;
                         }
                         $locked->update(['reminder_sent_at' => now()]);
@@ -116,7 +116,7 @@ class ExpireBookingWorkflow extends Command
                     });
             })
             ->orderBy('id')
-                ->chunkById(100, function ($requests) use ($matchingService, &$count) {
+            ->chunkById(100, function ($requests) use ($matchingService, &$count) {
                 foreach ($requests as $bookingRequest) {
                     $offer = $matchingService->dispatchNextOffer($bookingRequest);
                     $this->syncPackageMatchingStatus($bookingRequest->fresh());
@@ -143,14 +143,14 @@ class ExpireBookingWorkflow extends Command
                 foreach ($orders as $order) {
                     DB::transaction(function () use ($order, &$count, $paymentReconciliation) {
                         $lockedOrder = Order::query()->lockForUpdate()->find($order->id);
-                        if (!$lockedOrder || !in_array($lockedOrder->status, ['pending', 'rejected', 'partially_paid'], true)) {
+                        if (! $lockedOrder || ! in_array($lockedOrder->status, ['pending', 'rejected', 'partially_paid'], true)) {
                             return;
                         }
                         $package = $lockedOrder->learningPackage()
                             ->with(['subjects.bookingRequest.offers', 'subjects.sessions.booking.bookingRequest', 'promotionClaims'])
                             ->lockForUpdate()
                             ->first();
-                        if (!$package || !$package->payment_due_at?->lte(now())) {
+                        if (! $package || ! $package->payment_due_at?->lte(now())) {
                             return;
                         }
 
@@ -233,13 +233,13 @@ class ExpireBookingWorkflow extends Command
 
     private function syncPackageMatchingStatus(?BookingRequest $bookingRequest): void
     {
-        if (!$bookingRequest?->package_subject_id) {
+        if (! $bookingRequest?->package_subject_id) {
             return;
         }
         $subject = $bookingRequest->packageSubject()
             ->with('package.subjects')
             ->first();
-        if (!$subject || !in_array($subject->package?->status, ['matching', 'teacher_pending', 'no_teacher'], true)) {
+        if (! $subject || ! in_array($subject->package?->status, ['matching', 'teacher_pending', 'no_teacher'], true)) {
             return;
         }
 
@@ -324,7 +324,7 @@ class ExpireBookingWorkflow extends Command
                 ->lockForUpdate()
                 ->find($booking->id);
 
-            if (!$locked || !in_array($locked->status, $allowedStatuses, true)) {
+            if (! $locked || ! in_array($locked->status, $allowedStatuses, true)) {
                 return false;
             }
 

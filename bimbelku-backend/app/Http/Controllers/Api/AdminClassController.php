@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Support\PublicMedia;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -61,7 +62,7 @@ class AdminClassController extends Controller
         ]);
 
         abort_unless(in_array($scope, ['attention', 'active', 'upcoming', 'history'], true), 422, 'Scope monitoring tidak valid.');
-        abort_if($status !== '' && !in_array($status, self::MONITORED_STATUSES, true), 422, 'Status kelas tidak valid.');
+        abort_if($status !== '' && ! in_array($status, self::MONITORED_STATUSES, true), 422, 'Status kelas tidak valid.');
 
         $timezone = config('app.timezone', 'Asia/Jakarta');
         $now = now();
@@ -223,7 +224,7 @@ class AdminClassController extends Controller
                 'name' => $booking->teacher?->name ?? 'Tutor tidak ditemukan',
                 'email' => $booking->teacher?->email,
                 'phone' => $profile?->whatsapp_number,
-                'photo' => \App\Support\PublicMedia::url($profile?->photo),
+                'photo' => PublicMedia::url($profile?->photo),
             ],
             'students' => $participants->map(function ($participant) {
                 return [

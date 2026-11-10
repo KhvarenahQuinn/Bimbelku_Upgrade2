@@ -90,7 +90,7 @@ class TeacherReplacementWorkflowTest extends TestCase
         $payload = ['reason_code' => 'communication', 'reason_detail' => 'Komunikasi tutor tidak berjalan dan menghambat persiapan sesi belajar berikutnya.'];
         $service->submit($fixture['student'], $fixture['package'], $fixture['subject'], $payload);
 
-        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+        $this->expectException(HttpException::class);
         $service->submit($fixture['student'], $fixture['package'], $fixture['subject'], $payload);
     }
 

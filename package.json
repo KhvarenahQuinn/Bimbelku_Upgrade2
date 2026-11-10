@@ -7,6 +7,8 @@
     "seo:sitemap": "node scripts/generate-sitemap.mjs",
     "check:seo": "node scripts/check-seo.mjs",
     "dev": "vite",
+    "start": "bash scripts/run-local.sh",
+    "start:local": "bash scripts/run-local.sh",
     "prebuild": "npm run seo:sitemap",
     "build": "vite build",
     "build:payment-preview": "node scripts/build-payment-design-preview.mjs",

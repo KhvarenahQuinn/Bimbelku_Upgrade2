@@ -97,6 +97,7 @@ class StageOneSessionActionReminderTest extends TestCase
             'focus_note' => 'Tautan sudah tersimpan.',
         ])->assertOk();
     }
+
     public function test_demo_command_prepares_only_presence_v2_sessions(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-08-20 10:00:00', 'Asia/Jakarta'));

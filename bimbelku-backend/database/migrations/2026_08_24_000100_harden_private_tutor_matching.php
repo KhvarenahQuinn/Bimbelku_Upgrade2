@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('booking_requests') && !Schema::hasColumn('booking_requests', 'next_matching_at')) {
+        if (Schema::hasTable('booking_requests') && ! Schema::hasColumn('booking_requests', 'next_matching_at')) {
             Schema::table('booking_requests', function (Blueprint $table) {
                 $table->timestamp('next_matching_at')->nullable()->after('teacher_response_deadline')->index();
             });

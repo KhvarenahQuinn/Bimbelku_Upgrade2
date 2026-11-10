@@ -2,18 +2,13 @@
 
 namespace Tests\Feature;
 
-use App\Models\Booking;
-use App\Models\BookingRequest;
 use App\Models\FinancialJournal;
 use App\Models\Order;
 use App\Models\TeacherProfile;
 use App\Models\User;
 use App\Support\EducationCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -145,6 +140,7 @@ class StageThreeFinanceSecurityTest extends TestCase
 
         $this->assertDatabaseCount('payouts', 0);
     }
+
     private function activeAdmin(): User
     {
         return User::factory()->create([

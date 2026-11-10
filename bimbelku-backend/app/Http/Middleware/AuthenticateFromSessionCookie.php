@@ -9,9 +9,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class AuthenticateFromSessionCookie
 {
-    public function __construct(private readonly PersistentLoginService $sessions)
-    {
-    }
+    public function __construct(private readonly PersistentLoginService $sessions) {}
 
     public function handle(Request $request, Closure $next): Response
     {

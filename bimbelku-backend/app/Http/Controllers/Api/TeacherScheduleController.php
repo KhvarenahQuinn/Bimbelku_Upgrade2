@@ -6,10 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\TeacherAvailability;
 use App\Models\TeacherAvailabilityException;
-use Carbon\Carbon;
+use App\Models\User;
 use App\Services\CheapClassService;
 use App\Services\TeacherMatchingService;
 use App\Services\TeacherOfferReleaseService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -89,6 +90,7 @@ class TeacherScheduleController extends Controller
         $offerReleaseService->releaseForTeacherDateRange($request->user()->id, $startDate, $endDate, 'Tutor menambahkan tanggal tidak tersedia')
             ->each(fn ($bookingRequest) => $matchingService->dispatchNextOffer($bookingRequest));
         $cheapClassService->refreshTeacherAssignmentsForTeacher($request->user()->id);
+
         return response()->json(['message' => 'Tanggal tidak tersedia berhasil ditambahkan.', 'data' => $exception], 201);
     }
 
@@ -96,11 +98,11 @@ class TeacherScheduleController extends Controller
         Request $request,
         TeacherAvailabilityException $teacherAvailabilityException,
         CheapClassService $cheapClassService
-    )
-    {
+    ) {
         abort_unless((int) $teacherAvailabilityException->user_id === (int) $request->user()->id, 403);
         $teacherAvailabilityException->delete();
         $cheapClassService->refreshTeacherAssignmentsForTeacher($request->user()->id);
+
         return response()->json(['message' => 'Tanggal tidak tersedia berhasil dihapus.']);
     }
 
@@ -129,8 +131,9 @@ class TeacherScheduleController extends Controller
                 ->values()
                 ->all();
 
-            if (!$item['is_active']) {
+            if (! $item['is_active']) {
                 $item['ranges'] = [];
+
                 continue;
             }
 
@@ -141,7 +144,7 @@ class TeacherScheduleController extends Controller
             }
 
             foreach ($item['ranges'] as $index => $range) {
-                if (!TeacherAvailability::isFullHour($range['start_time']) || !TeacherAvailability::isFullHour($range['end_time'])) {
+                if (! TeacherAvailability::isFullHour($range['start_time']) || ! TeacherAvailability::isFullHour($range['end_time'])) {
                     return response()->json([
                         'message' => "Jam {$item['day']} hanya boleh memakai menit 00.",
                     ], 422);
@@ -162,7 +165,7 @@ class TeacherScheduleController extends Controller
 
         $scheduleChanged = false;
         DB::transaction(function () use ($validated, &$scheduleChanged) {
-            \App\Models\User::query()->lockForUpdate()->findOrFail(Auth::id());
+            User::query()->lockForUpdate()->findOrFail(Auth::id());
             $current = TeacherAvailability::query()
                 ->where('user_id', Auth::id())
                 ->lockForUpdate()
@@ -174,7 +177,7 @@ class TeacherScheduleController extends Controller
                 $ranges = $item['is_active'] ? $item['ranges'] : [];
                 $existingRanges = $existing?->normalizedRanges() ?? [];
                 $scheduleChanged = $scheduleChanged
-                    || !$existing
+                    || ! $existing
                     || (bool) $existing->is_active !== (bool) $item['is_active']
                     || $existingRanges !== $ranges;
 

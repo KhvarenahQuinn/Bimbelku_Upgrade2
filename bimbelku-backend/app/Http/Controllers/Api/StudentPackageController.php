@@ -22,20 +22,28 @@ use App\Models\Promotion;
 use App\Models\PromotionClaim;
 use App\Models\Refund;
 use App\Models\Setting;
+use App\Models\TeacherOffer;
+use App\Models\TeacherReplacementRequest;
+use App\Models\User;
 use App\Services\HourlyRateService;
-use App\Services\PackageEarningsAllocation;
+use App\Services\LearningProgramSelection;
 use App\Services\PackageCheckoutService;
+use App\Services\PackageEarningsAllocation;
 use App\Services\PrivateParticipantPricing;
+use App\Services\RefundService;
 use App\Services\RefundSettlementService;
+use App\Services\ScheduleReleaseService;
 use App\Services\TeacherMatchingService;
 use App\Support\EducationCatalog;
+use App\Support\LearningFocus;
 use App\Support\PackageChapterProgress;
+use App\Support\PublicMedia;
+use App\Support\RefundStatusPresenter;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
 class StudentPackageController extends Controller
 {
@@ -66,7 +74,7 @@ class StudentPackageController extends Controller
         return $this->publicCachedResponse($request, $timeSlots, 60);
     }
 
-    public function bookingRules(Request $request)
+    public function bookingRules(Request $request, TeacherMatchingService $matchingService)
     {
         $keys = [
             'booking_lead_hours',
@@ -81,7 +89,8 @@ class StudentPackageController extends Controller
         return response()->json([
             'booking_lead_hours' => (int) ($values['booking_lead_hours'] ?? 24),
             'renewal_booking_lead_hours' => (int) ($values['renewal_booking_lead_hours'] ?? 12),
-            'maximum_search_hours' => (int) ($values['maximum_search_hours'] ?? 24),
+            'maximum_search_hours' => $matchingService->maximumSearchHours(),
+            'maximum_search_minutes' => $matchingService->searchWindowMinutes(),
             'matching_cutoff_hours' => (int) ($values['matching_cutoff_hours'] ?? 2),
             'teacher_response_minutes' => (int) ($values['teacher_response_minutes'] ?? 30),
         ]);
@@ -117,6 +126,7 @@ class StudentPackageController extends Controller
                 'subjects.chapters',
                 'subjects.sessions.booking.teacher.teacherProfile',
                 'subjects.latestTeacherReplacement.sessions.packageSession',
+                'subjects.bookingRequest.offers',
                 'subjects.bookingRequest.matchingOperationLogs',
                 'subjects.bookingRequest.latestMatchingExhaustion',
                 'orders' => fn ($query) => $query->latest(),
@@ -141,6 +151,7 @@ class StudentPackageController extends Controller
             'subjects.chapters',
             'subjects.sessions.booking.teacher.teacherProfile',
             'subjects.latestTeacherReplacement.sessions.packageSession',
+            'subjects.bookingRequest.offers',
             'subjects.bookingRequest.matchingOperationLogs',
             'subjects.bookingRequest.latestMatchingExhaustion',
             'orders' => fn ($query) => $query->latest(),
@@ -163,6 +174,7 @@ class StudentPackageController extends Controller
                 'subjects.chapters',
                 'subjects.sessions.booking.teacher.teacherProfile',
                 'subjects.latestTeacherReplacement.sessions.packageSession',
+                'subjects.bookingRequest.offers',
                 'subjects.bookingRequest.matchingOperationLogs',
                 'subjects.bookingRequest.latestMatchingExhaustion',
             ])
@@ -314,7 +326,7 @@ class StudentPackageController extends Controller
             'subjects.*.learning_goal.string' => 'Target atau materi belajar harus berupa teks.',
             'subjects.*.learning_goal.max' => 'Target atau materi belajar maksimal 1500 karakter per mapel.',
         ]);
-        $validated['subjects'] = \App\Support\LearningFocus::normalizeSubjects($validated['subjects'], ! empty($validated['learning_program_id']), $validated['education_level'], $validated['grade']);
+        $validated['subjects'] = LearningFocus::normalizeSubjects($validated['subjects'], ! empty($validated['learning_program_id']), $validated['education_level'], $validated['grade']);
         abort_if(
             filled($validated['promotion_code'] ?? null) && filled($validated['promotion_claim_id'] ?? null),
             422,
@@ -349,8 +361,8 @@ class StudentPackageController extends Controller
         }
 
         $plan = PackagePlan::query()->where('is_active', true)->findOrFail($validated['package_plan_id']);
-        if (!empty($validated['learning_program_id'])) {
-            app(\App\Services\LearningProgramSelection::class)->validate(
+        if (! empty($validated['learning_program_id'])) {
+            app(LearningProgramSelection::class)->validate(
                 (int) $validated['learning_program_id'], (int) $plan->id,
                 $validated['education_level'], $validated['grade'], $validated['subjects']
             );
@@ -550,7 +562,7 @@ class StudentPackageController extends Controller
             $participantDetails,
             $earningsAllocation
         ) {
-            \App\Models\User::query()->lockForUpdate()->findOrFail($student->id);
+            User::query()->lockForUpdate()->findOrFail($student->id);
             if ($renewalOf) {
                 $lockedRenewalSource = LearningPackage::query()->lockForUpdate()->findOrFail($renewalOf->id);
                 abort_if(
@@ -909,10 +921,10 @@ class StudentPackageController extends Controller
                     $noTeacher = true;
                 }
             });
-        $learningPackage->update(['status' => $noTeacher ? 'no_teacher' : 'matching']);
+        $packageStatus = $matchingService->syncPackageStatus($learningPackage);
 
         return response()->json([
-            'message' => $noTeacher
+            'message' => $noTeacher || $packageStatus === 'no_teacher'
                 ? 'Pencarian baru sudah dijalankan, tetapi tutor masih belum tersedia. Periksa alasan di tiap mapel atau ubah jadwal.'
                 : 'Radar memulai pencarian baru dengan batas waktu yang diperbarui.',
         ]);
@@ -957,7 +969,7 @@ class StudentPackageController extends Controller
             foreach ($validated['subjects'] as $payload) {
                 $subject = $targets[(int) $payload['package_subject_id']];
                 $bookingRequest = $subject->bookingRequest;
-                abort_unless($bookingRequest && in_array($bookingRequest->status, ['no_teacher', 'expired'], true), 422, "Jadwal {$subject->subject_name} belum dapat diubah karena pencariannya masih aktif.");
+                abort_unless($bookingRequest && in_array($bookingRequest->status, ['no_teacher', 'expired', 'matching', 'teacher_pending'], true), 422, "Jadwal {$subject->subject_name} belum dapat diubah karena tutor sudah ditetapkan.");
                 $starts = collect($payload['schedules'])->map(function (string $value) use ($activeSlotTimes, $durationHours, $bookingLeadHours) {
                     $start = Carbon::parse($value, config('app.timezone', 'Asia/Jakarta'))->seconds(0);
                     abort_if(
@@ -1040,19 +1052,43 @@ class StudentPackageController extends Controller
                     $noTeacher = true;
                 }
             });
-        $learningPackage->update(['status' => $noTeacher ? 'no_teacher' : 'matching']);
+        $packageStatus = $matchingService->syncPackageStatus($learningPackage);
 
         return response()->json([
-            'message' => $noTeacher
+            'message' => $noTeacher || $packageStatus === 'no_teacher'
                 ? 'Jadwal sudah diperbarui dan pencarian dimulai ulang, tetapi tutor belum tersedia. Periksa alasan terbaru di Kelas Saya.'
                 : 'Jadwal berhasil diperbarui. Sistem mulai mencari tutor dengan jadwal baru.',
         ]);
     }
 
-    public function cancel(Request $request, LearningPackage $learningPackage, RefundSettlementService $refunds)
-    {
+    public function cancel(
+        Request $request,
+        LearningPackage $learningPackage,
+        RefundSettlementService $refunds,
+        ScheduleReleaseService $scheduleRelease,
+        RefundService $refundService
+    ) {
         abort_unless($learningPackage->student_id === $request->user()->id, 403);
-        [$teacherIds, $refund, $automatic] = DB::transaction(function () use ($learningPackage) {
+
+        $destination = $request->input('destination') ?? $request->input('destination_method');
+        if ($destination && ($refundService->isWalletDestination($destination) || $refundService->isExternalDestination($destination))) {
+            $result = $refundService->cancelPackage(
+                $learningPackage,
+                $destination,
+                $request->only(['bank_name', 'account_name', 'account_number']),
+                $request->user()->id
+            );
+
+            return response()->json([
+                'message' => $result['message'],
+                'package_status' => $result['status'],
+                'refund_status' => $result['refund']?->status,
+                'refund_id' => $result['refund']?->id,
+                'needs_destination' => false,
+            ]);
+        }
+
+        [$teacherIds, $refund, $automatic] = DB::transaction(function () use ($learningPackage, $scheduleRelease) {
             $package = LearningPackage::query()
                 ->with(['subjects.sessions', 'subjects.bookingRequest.offers', 'promotionClaims', 'orders'])
                 ->lockForUpdate()
@@ -1072,7 +1108,6 @@ class StudentPackageController extends Controller
             $teacherIds = collect();
             foreach ($package->subjects as $subject) {
                 $subject->update(['status' => $nextStatus]);
-                $subject->sessions()->update(['status' => $nextStatus]);
                 $bookingRequest = $subject->bookingRequest;
                 if ($bookingRequest) {
                     $teacherIds = $teacherIds->merge(
@@ -1086,6 +1121,9 @@ class StudentPackageController extends Controller
                     $bookingRequest->update(['status' => $nextStatus]);
                 }
             }
+            // Slot jadwal harus langsung bebas agar murid dapat memesan jam yang
+            // sama tanpa menunggu refund selesai diproses.
+            $scheduleRelease->releasePackage($package, $nextStatus);
             $package->promotionClaims()
                 ->where('status', 'reserved')
                 ->update([
@@ -1127,7 +1165,7 @@ class StudentPackageController extends Controller
         ]));
 
         if ($refund && ! $automatic) {
-            \App\Models\User::query()->where('role', 'admin')->pluck('id')->each(
+            User::query()->where('role', 'admin')->pluck('id')->each(
                 fn (int $adminId) => Notification::create([
                     'user_id' => $adminId,
                     'title' => 'Refund paket menunggu proses',
@@ -1138,12 +1176,18 @@ class StudentPackageController extends Controller
             );
         }
 
+        $freshRefund = $refund?->fresh();
+
         return response()->json([
             'message' => $refund
                 ? ($automaticStarted
                     ? 'Pencarian dihentikan. Refund diproses otomatis ke sumber pembayaran asal.'
                     : 'Pencarian dihentikan. Pilih dan konfirmasi tujuan refund di Riwayat Transaksi sebelum dana diproses.')
                 : 'Pencarian paket dibatalkan dan voucher dikembalikan.',
+            'refund_id' => $freshRefund?->id,
+            'needs_destination' => (bool) ($freshRefund
+                && in_array($freshRefund->status, ['pending', 'failed'], true)
+                && ! $freshRefund->destination_selected_at),
         ]);
     }
 
@@ -1284,12 +1328,23 @@ class StudentPackageController extends Controller
             ])
             ->where('start_at', '<', $end)
             ->where('end_at', '>', $start)
+            // Legacy rows may still look active after a refund. The order,
+            // booking request, and package status are authoritative for a
+            // released slot. Order `refund_pending` alone is not enough: a
+            // single-session refund must not free the package's other slots.
+            ->whereDoesntHave('order', fn ($order) => $order
+                ->whereIn('status', ['refunded', 'cancelled', 'expired']))
+            ->whereDoesntHave('bookingRequest', fn ($bookingRequest) => $bookingRequest
+                ->whereIn('status', ['refund_pending', 'refunded', 'cancelled', 'payment_expired', 'expired']))
+            ->whereDoesntHave('bookingRequest.packageSubject.package', fn ($package) => $package
+                ->whereIn('status', ['refund_pending', 'refunded', 'cancelled', 'payment_expired']))
             ->exists();
         $packageConflict = PackageSession::query()
             ->whereHas('subject.package', fn ($query) => $query
                 ->where('student_id', $studentId)
                 ->when($ignorePackageId, fn ($packages) => $packages->whereKeyNot($ignorePackageId))
-                ->whereNotIn('status', ['cancelled', 'payment_expired', 'completed']))
+                ->whereNotIn('status', ['cancelled', 'payment_expired', 'completed', 'refund_pending', 'refunded']))
+            ->whereNotIn('status', ['cancelled', 'payment_expired', 'completed', 'refund_pending', 'refunded'])
             ->where('scheduled_start_at', '<', $end)
             ->where('scheduled_end_at', '>', $start)
             ->exists();
@@ -1403,7 +1458,7 @@ class StudentPackageController extends Controller
                     && $subject->status === 'active'
                     && (bool) $subject->assigned_teacher_id
                     && ! ($subject->latestTeacherReplacement
-                        && in_array($subject->latestTeacherReplacement->status, \App\Models\TeacherReplacementRequest::OPEN_STATUSES, true))
+                        && in_array($subject->latestTeacherReplacement->status, TeacherReplacementRequest::OPEN_STATUSES, true))
                     && $subject->sessions->contains(fn (PackageSession $session) => $session->booking?->status === 'confirmed'
                         && $session->scheduled_end_at?->isFuture()),
                 'teacher_replacement' => config('features.teacher_replacement') && $subject->latestTeacherReplacement ? [
@@ -1430,7 +1485,7 @@ class StudentPackageController extends Controller
                 'teacher' => $subject->assignedTeacher ? [
                     'id' => $subject->assignedTeacher->id,
                     'name' => $subject->assignedTeacher->name,
-                    'avatar_url' => \App\Support\PublicMedia::url($subject->assignedTeacher->teacherProfile?->photo),
+                    'avatar_url' => PublicMedia::url($subject->assignedTeacher->teacherProfile?->photo),
                 ] : null,
                 'sessions' => $subject->sessions->map(fn (PackageSession $session) => [
                     'id' => $session->id,
@@ -1442,7 +1497,7 @@ class StudentPackageController extends Controller
                     'teacher' => $session->booking?->teacher ? [
                         'id' => $session->booking->teacher->id,
                         'name' => $session->booking->teacher->name,
-                        'avatar_url' => \App\Support\PublicMedia::url($session->booking->teacher->teacherProfile?->photo),
+                        'avatar_url' => PublicMedia::url($session->booking->teacher->teacherProfile?->photo),
                     ] : null,
                 ])->values(),
             ])->values(),
@@ -1459,7 +1514,16 @@ class StudentPackageController extends Controller
                 'tutor_name' => $orderDetails['teacher_name'] ?? 'Dicari setelah pembayaran',
                 'package_name' => $orderDetails['package_name'] ?? $package->plan?->name,
                 'order_kind' => 'package',
+                'payment_provider' => $latestOrder->payment_provider,
             ] : null,
+            'latest_refund' => $latestOrder?->refund ? array_merge(
+                $latestOrder->refund->toArray(),
+                RefundStatusPresenter::present($latestOrder->refund),
+                [
+                    'wallet_funded_amount' => $latestOrder->refund->tenderBreakdown()['wallet_funded_amount'],
+                    'external_funded_amount' => $latestOrder->refund->tenderBreakdown()['external_funded_amount'],
+                ]
+            ) : null,
         ];
     }
 
@@ -1483,8 +1547,26 @@ class StudentPackageController extends Controller
             }
         : null;
         $isNoTeacher = $bookingRequest->status === 'no_teacher';
+        $canChangeSchedule = in_array($bookingRequest->status, ['no_teacher', 'matching', 'teacher_pending'], true);
         $canRetry = $isNoTeacher && ($nextRadius !== null || $manualRestarts < 1);
         $metadata = $latestFailure?->metadata ?? [];
+        $matchingService = app(TeacherMatchingService::class);
+        $startedAt = $matchingService->searchStartedAt($bookingRequest);
+        $searchDeadline = $matchingService->searchDeadline($bookingRequest);
+        $searchAgeSeconds = $matchingService->searchAgeSeconds($bookingRequest);
+
+        $activeOffers = $bookingRequest->relationLoaded('offers')
+            ? $bookingRequest->offers->filter(fn (TeacherOffer $offer) => $offer->status === 'pending'
+                && $offer->expires_at?->isFuture())
+            : $bookingRequest->offers()->where('status', 'pending')->where('expires_at', '>', now())->get();
+        $activeOfferCount = $activeOffers->count();
+        $nearestDeadline = $activeOffers->min('expires_at');
+        $searchState = match (true) {
+            $isNoTeacher && $bookingRequest->next_matching_at?->isFuture() => 'retry_scheduled',
+            $isNoTeacher => 'action_required',
+            $activeOfferCount > 0 => 'offers_pending',
+            default => 'matching',
+        };
 
         return [
             'status' => $bookingRequest->status,
@@ -1493,10 +1575,18 @@ class StudentPackageController extends Controller
             'recommended_action' => $metadata['recommended_action'] ?? null,
             'search_radius_km' => $radius,
             'next_radius_km' => $nextRadius,
-            'search_expires_at' => $bookingRequest->search_expires_at,
+            'search_started_at' => $startedAt->toIso8601String(),
+            'search_expires_at' => $searchDeadline->toIso8601String(),
+            'search_window_minutes' => $matchingService->searchWindowMinutes(),
+            'search_age_minutes' => round($searchAgeSeconds / 60, 2),
+            'search_age_seconds' => $searchAgeSeconds,
+            'active_offer_count' => $activeOfferCount,
+            'search_state' => $searchState,
+            'teacher_response_deadline' => $nearestDeadline?->toIso8601String(),
+            'next_matching_at' => $bookingRequest->next_matching_at?->toIso8601String(),
             'can_retry' => $canRetry,
             'retry_label' => $canRetry ? ($nextRadius ? "Perluas ke {$nextRadius} km" : 'Cek tutor baru') : null,
-            'can_change_schedule' => $isNoTeacher,
+            'can_change_schedule' => $canChangeSchedule,
             'manual_restart_used' => $manualRestarts >= 1,
         ];
     }

@@ -84,6 +84,14 @@ interface TeacherClass {
   latest_report?: { type: string; status: string; chronology: string };
   latest_dispute?: { status: string; reason: string };
   package_progress?: { total_chapters: number; completed_chapters: number; in_progress_chapters: number; progress_percent: number } | null;
+  package_session_progress?: {
+    total_sessions: number;
+    used_sessions: number;
+    remaining_sessions: number;
+    subject_total_sessions: number;
+    subject_completed_sessions: number;
+    subject_remaining_sessions: number;
+  } | null;
   completion_steps: { check_in: boolean; attendance: boolean; check_out: boolean; progress: boolean; progress_reported_count: number; progress_required_count: number };
   latest_progress_report?: { id: number; session_number: number; material_covered: string; progress_percent: number; published_at: string } | null;
   can_complete: boolean;
@@ -164,6 +172,14 @@ const normalizeTeacherClass = (value: unknown): TeacherClass | null => {
       progress_reported_count: Number(value.completion_steps.progress_reported_count || 0),
       progress_required_count: Number(value.completion_steps.progress_required_count || 0),
     } : { check_in: false, attendance: false, check_out: false, progress: false, progress_reported_count: 0, progress_required_count: 0 },
+    package_session_progress: isRecord(value.package_session_progress) ? {
+      total_sessions: Number(value.package_session_progress.total_sessions || 0),
+      used_sessions: Number(value.package_session_progress.used_sessions || 0),
+      remaining_sessions: Number(value.package_session_progress.remaining_sessions || 0),
+      subject_total_sessions: Number(value.package_session_progress.subject_total_sessions || 0),
+      subject_completed_sessions: Number(value.package_session_progress.subject_completed_sessions || 0),
+      subject_remaining_sessions: Number(value.package_session_progress.subject_remaining_sessions || 0),
+    } : null,
     can_complete: Boolean(value.can_complete),
     can_report_absence: Boolean(value.can_report_absence),
     can_report_emergency: Boolean(value.can_report_emergency),
@@ -603,7 +619,8 @@ export default function ManageClasses() {
                 </div>
                 <p className="mt-5 min-w-0 break-words text-xs font-black uppercase tracking-[.14em] text-indigo-500 sm:tracking-widest">{item.subject} · Privat</p><h2 className="mt-1 min-w-0 break-words text-lg font-black leading-snug text-slate-900 sm:text-xl">{item.chapter || "Sesi belajar"}</h2>
                 <div className="mt-4 space-y-2 text-xs text-slate-600"><Info icon={CalendarDays} text={dateTime(item.start_at)} /><Info icon={Users} text={`${item.participants.length} murid`} /><Info icon={Clock3} text={`${item.duration_hours} jam`} /></div>
-                {item.package_progress && <div className="mt-4 rounded-xl bg-slate-50 p-3"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Progress materi</p><span className="text-sm font-black text-indigo-700">{item.package_progress.progress_percent}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-indigo-600" style={{ width: `${item.package_progress.progress_percent}%` }} /></div></div>}
+                {item.package_progress && <div className="mt-4 rounded-xl bg-slate-50 p-3"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Progress materi</p><span className="text-sm font-black text-indigo-700">{item.package_progress.progress_percent}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-indigo-600" style={{ width: `${item.package_progress.progress_percent}%` }} /></div><p className="mt-2 text-[11px] font-bold text-slate-500">{item.package_progress.completed_chapters}/{item.package_progress.total_chapters} Bab selesai</p></div>}
+                {item.package_session_progress && <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-600"><span>Sesi selesai</span><span className="text-slate-900">{item.package_session_progress.subject_completed_sessions}/{item.package_session_progress.subject_total_sessions} sesi · {item.package_session_progress.subject_remaining_sessions} tersisa</span></div>}
                 {item.completion_steps.check_out && !item.completion_steps.progress && !teacherHistoryStatuses.has(item.status) && (
                   <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
                     <div className="flex items-start gap-3"><AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600" /><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.14em] text-amber-700">Hasil belajar belum diisi</p><p className="mt-1 text-sm font-black text-amber-950">Catat progress pertemuan sekarang</p><p className="mt-1 text-xs leading-5 text-amber-800">Catat materi yang dibahas dan simpan hasil belajar sebelum sesi dapat diselesaikan.</p></div></div>

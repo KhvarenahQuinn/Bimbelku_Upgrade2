@@ -127,7 +127,7 @@ class CurriculumCatalogSeeder extends Seeder
             $subject = CurriculumSubject::query()
                 ->where('normalized_name', $normalizedName)
                 ->first();
-            $isNew = !$subject;
+            $isNew = ! $subject;
             $subject ??= new CurriculumSubject([
                 'normalized_name' => $normalizedName,
             ]);
@@ -254,7 +254,7 @@ class CurriculumCatalogSeeder extends Seeder
         if (str_starts_with($subject, 'Pendidikan Agama')) {
             return ['Keimanan dan Ketakwaan', 'Kitab Suci dan Ajaran', 'Akhlak serta Budi Pekerti', 'Ibadah dan Praktik Kehidupan', 'Sejarah serta Keteladanan'];
         }
-        if (str_starts_with($subject, 'Bahasa ') && !str_contains($subject, 'Indonesia') && !str_contains($subject, 'Inggris')) {
+        if (str_starts_with($subject, 'Bahasa ') && ! str_contains($subject, 'Indonesia') && ! str_contains($subject, 'Inggris')) {
             return ['Perkenalan dan Identitas', 'Keluarga dan Kehidupan Harian', 'Sekolah dan Lingkungan', 'Kegiatan serta Waktu', 'Budaya dan Komunikasi'];
         }
         if (str_starts_with($subject, 'Prakarya dan Kewirausahaan')) {
@@ -362,7 +362,6 @@ class CurriculumCatalogSeeder extends Seeder
             ],
         ];
     }
-
 
     private function hasExactBookChapters(string $subject, int $grade): bool
     {

@@ -94,6 +94,7 @@ class PaymentWindowTest extends TestCase
     {
         $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
         $order = Order::create(['user_id' => $student->id, 'order_id' => 'INV-HOUR', 'amount' => 50000, 'status' => 'pending']);
+
         return [$student, $order];
     }
 }

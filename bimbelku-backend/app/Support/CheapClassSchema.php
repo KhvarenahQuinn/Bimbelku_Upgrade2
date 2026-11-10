@@ -20,7 +20,7 @@ final class CheapClassSchema
             // Hasil "belum siap" tidak boleh ditahan cache. Setelah admin
             // menjalankan migrate, muat ulang berikutnya harus langsung
             // memeriksa skema baru tanpa menunggu lima menit.
-            if (!$status['ready']) {
+            if (! $status['ready']) {
                 Cache::forget('schema.cheap_classes.v8');
             }
 
@@ -135,14 +135,15 @@ final class CheapClassSchema
         ];
 
         foreach ($required as $table => $columns) {
-            if (!Schema::hasTable($table)) {
+            if (! Schema::hasTable($table)) {
                 $missing[] = $table;
+
                 continue;
             }
 
             $available = array_flip(Schema::getColumnListing($table));
             foreach ($columns as $column) {
-                if (!isset($available[$column])) {
+                if (! isset($available[$column])) {
                     $missing[] = $table.'.'.$column;
                 }
             }

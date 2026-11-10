@@ -8,9 +8,9 @@ use App\Models\SubjectPageContent;
 use App\Models\TeacherSubject;
 use App\Models\WebsiteTestimonial;
 use App\Support\PublicMedia;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Http\Request;
 
 class SubjectPageContentController extends Controller
 {
@@ -29,7 +29,7 @@ class SubjectPageContentController extends Controller
                 'display_name' => $item->display_name,
                 'quote' => $item->quote,
                 'audience_role' => $item->audience_role,
-                'photo_url' => \App\Support\PublicMedia::url($item->photo_path),
+                'photo_url' => PublicMedia::url($item->photo_path),
                 'rating' => $item->rating?->rating,
             ]);
 
@@ -108,6 +108,7 @@ class SubjectPageContentController extends Controller
 
         return response()->json(['message' => 'Foto hero Mapel dihapus.']);
     }
+
     public function update(Request $request, CurriculumSubject $curriculumSubject)
     {
         $data = $request->validate([
@@ -151,8 +152,10 @@ class SubjectPageContentController extends Controller
             ['curriculum_subject_id' => $curriculumSubject->id], $data
         );
         $request->attributes->set('admin_audit_target_override', $content);
+
         return response()->json(['message' => 'Konten halaman mapel tersimpan.', 'content' => $this->formatContent($content)]);
     }
+
     private function formatContent(?SubjectPageContent $content): ?array
     {
         if (! $content || ! $content->exists) {

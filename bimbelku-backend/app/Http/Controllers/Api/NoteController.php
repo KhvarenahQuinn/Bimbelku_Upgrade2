@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Note;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class NoteController extends Controller
@@ -12,10 +12,11 @@ class NoteController extends Controller
     public function index()
     {
         $notes = Note::where('user_id', Auth::id())
-                    ->orderBy('is_pinned', 'desc') // Pinned duluan
-                    ->orderBy('updated_at', 'desc')
-                    ->limit(200)
-                    ->get();
+            ->orderBy('is_pinned', 'desc') // Pinned duluan
+            ->orderBy('updated_at', 'desc')
+            ->limit(200)
+            ->get();
+
         return response()->json($notes);
     }
 
@@ -70,6 +71,7 @@ class NoteController extends Controller
     {
         $note = Note::where('user_id', Auth::id())->findOrFail($id);
         $note->delete();
+
         return response()->json(['message' => 'Catatan dihapus.']);
     }
 }

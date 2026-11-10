@@ -6,6 +6,7 @@ import Reveal from "@/components/Reveal";
 import LandingAmbientOrbit from "@/components/LandingAmbientOrbit";
 import StudentPackageLink from "@/components/StudentPackageLink";
 import { useWebsiteContent } from "@/components/WebsiteContentProvider";
+import { imageFetchPriority } from "@/lib/imagePriority";
 import { whatsappHref } from "@/lib/websiteContent";
 
 const quickLinks = [
@@ -190,7 +191,7 @@ export default function HeroSection() {
               alt="Siswa mengenakan batik dan membawa tas sekolah"
               loading={window.matchMedia("(min-width: 640px)").matches ? "eager" : "lazy"}
               decoding="async"
-              fetchPriority={window.matchMedia("(min-width: 640px)").matches ? "high" : "low"}
+              {...imageFetchPriority(window.matchMedia("(min-width: 640px)").matches ? "high" : "low")}
               width={900}
               height={1075}
               className="absolute bottom-0 left-1/2 z-10 h-[520px] w-auto max-w-none -translate-x-1/2 object-contain object-bottom"
@@ -276,7 +277,7 @@ function MobileHeroVisual({ imageUrl }: { imageUrl: string }) {
         alt="Siswa mengenakan batik dan membawa tas sekolah"
         loading="eager"
         decoding="async"
-        fetchPriority="high"
+        {...imageFetchPriority("high")}
         width={480}
         height={573}
         className="absolute bottom-0 left-1/2 z-10 h-[17.1rem] w-auto max-w-none -translate-x-1/2 object-contain object-bottom"

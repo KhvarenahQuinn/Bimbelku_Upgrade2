@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Storage;
 class DynamicBanner extends Model
 {
     protected $guarded = ['id'];
+
     protected $appends = ['image_url'];
 
     protected $casts = [
@@ -20,10 +21,12 @@ class DynamicBanner extends Model
 
     public function getImageUrlAttribute(): ?string
     {
-        if (!$this->image_path) return null;
+        if (! $this->image_path) {
+            return null;
+        }
         if (
-            !preg_match('#^https?://#i', $this->image_path)
-            && !Storage::disk('public')->exists($this->image_path)
+            ! preg_match('#^https?://#i', $this->image_path)
+            && ! Storage::disk('public')->exists($this->image_path)
         ) {
             return null;
         }

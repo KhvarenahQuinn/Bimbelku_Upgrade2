@@ -1,0 +1,22 @@
+services:
+  db:
+    image: mariadb:10.11
+    container_name: bimbelku_db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: bimbelku_root_local
+      MARIADB_DATABASE: bimbelku
+      MARIADB_USER: bimbelku
+      MARIADB_PASSWORD: bimbelku_local_pw
+    ports:
+      - "3307:3306"
+    volumes:
+      - bimbelku_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  bimbelku_db_data:

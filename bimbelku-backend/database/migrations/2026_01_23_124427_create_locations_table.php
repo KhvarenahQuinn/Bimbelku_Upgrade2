@@ -8,13 +8,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('locations') && !Schema::hasColumn('locations', 'image')) {
+        if (Schema::hasTable('locations') && ! Schema::hasColumn('locations', 'image')) {
             Schema::table('locations', function (Blueprint $table) {
                 $table->string('image')->nullable();
             });
         }
 
-        if (!Schema::hasTable('location_teacher')) {
+        if (! Schema::hasTable('location_teacher')) {
             Schema::create('location_teacher', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('teacher_profile_id')->constrained('teacher_profiles')->cascadeOnDelete();

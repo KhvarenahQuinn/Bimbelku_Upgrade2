@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasColumn('users', 'payment_pin_hash')) {
+        if (! Schema::hasColumn('users', 'payment_pin_hash')) {
             Schema::table('users', function (Blueprint $table) {
                 $table->string('payment_pin_hash')->nullable()->after('password');
             });

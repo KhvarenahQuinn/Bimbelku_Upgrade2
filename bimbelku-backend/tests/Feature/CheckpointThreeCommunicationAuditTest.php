@@ -7,7 +7,6 @@ use App\Models\BookingParticipant;
 use App\Models\BookingRequest;
 use App\Models\ClassroomMessage;
 use App\Models\ClassroomMessageRead;
-use App\Models\Notification;
 use App\Models\Order;
 use App\Models\User;
 use Carbon\Carbon;
@@ -60,7 +59,6 @@ class CheckpointThreeCommunicationAuditTest extends TestCase
             'system_event_key' => 'order-connected',
         ]);
     }
-
 
     public function test_admin_notification_recipients_are_searchable_paginated_and_minimal(): void
     {

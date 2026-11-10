@@ -5,20 +5,22 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CurriculumSubject;
 use App\Models\Notification;
-use Illuminate\Http\Request;
-use App\Models\User;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Auth;
 use App\Models\TeacherProfile;
 use App\Models\TeacherSubject;
-use App\Support\EducationCatalog;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Carbon\Carbon;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Models\User;
+use App\Services\GuestPackageLinkService;
 use App\Services\OneTimeCodeService;
 use App\Services\PersistentLoginService;
+use App\Support\EducationCatalog;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -34,28 +36,28 @@ class AuthController extends Controller
                 : null,
         ]);
         $validator = Validator::make($request->all(), [
-            'name'     => ['required', 'string', 'max:255', 'regex:/\pL/u', 'not_regex:/\d/u'],
-            'email'    => 'required|string|email|max:255|unique:users',
-            'phone'    => ['required', 'string', 'max:16', 'regex:/^\+?[0-9]{8,15}$/'],
+            'name' => ['required', 'string', 'max:255', 'regex:/\pL/u', 'not_regex:/\d/u'],
+            'email' => 'required|string|email|max:255|unique:users',
+            'phone' => ['required', 'string', 'max:16', 'regex:/^\+?[0-9]{8,15}$/'],
             'password' => 'required|string|min:8|confirmed',
-            'role'     => 'required|in:student,teacher',
+            'role' => 'required|in:student,teacher',
             'terms_accepted' => 'accepted',
             'privacy_accepted' => 'accepted',
             'school_name' => 'nullable|string|max:255',
-            'student_education_level' => ['nullable', \Illuminate\Validation\Rule::in(EducationCatalog::LEVELS)],
+            'student_education_level' => ['nullable', Rule::in(EducationCatalog::LEVELS)],
             'grade' => 'nullable|string|max:50',
             'date_of_birth' => 'required_if:role,student|nullable|date|before_or_equal:today',
             'guardian_name' => ['nullable', 'string', 'max:255', 'regex:/\pL/u', 'not_regex:/\d/u'],
             'guardian_phone' => ['nullable', 'string', 'max:16', 'regex:/^\+?[0-9]{8,15}$/'],
             'guardian_relationship' => 'nullable|in:orang_tua,wali_keluarga,wali_resmi',
             'guardian_consent' => 'nullable',
-            'address'  => 'nullable|string|max:1500',
-            'maps_link'=> 'nullable|string|url:http,https|max:500',
-            'cv_file'  => 'nullable|file|mimes:pdf|max:5120',
+            'address' => 'nullable|string|max:1500',
+            'maps_link' => 'nullable|string|url:http,https|max:500',
+            'cv_file' => 'nullable|file|mimes:pdf|max:5120',
             'expertise' => 'required_if:role,teacher|nullable|string|max:120',
             'public_degree' => 'required_if:role,teacher|nullable|string|max:120',
             'levels' => 'required_if:role,teacher|nullable|array|min:1',
-            'levels.*' => ['required', \Illuminate\Validation\Rule::in(EducationCatalog::LEVELS)],
+            'levels.*' => ['required', Rule::in(EducationCatalog::LEVELS)],
             'teaching_method' => 'required_if:role,teacher|nullable|in:online,offline,hybrid',
             'public_profile_consent' => ['nullable', 'boolean'],
             'linkedin' => 'nullable|url:http,https|max:500',
@@ -84,7 +86,7 @@ class AuthController extends Controller
         if ($request->role === 'student'
             && $request->filled('student_education_level')
             && $request->filled('grade')
-            && !EducationCatalog::supports(
+            && ! EducationCatalog::supports(
                 $request->string('student_education_level')->toString(),
                 $request->string('grade')->toString()
             )) {
@@ -109,7 +111,7 @@ class AuthController extends Controller
                 'guardian_name.regex' => 'Nama orang tua atau wali wajib mengandung huruf.',
                 'guardian_name.not_regex' => 'Nama orang tua atau wali tidak boleh memuat angka.',
                 'guardian_phone.required' => 'Nomor orang tua atau wali wajib diisi untuk murid di bawah 18 tahun.',
-            'guardian_phone.regex' => 'Nomor orang tua atau wali harus berisi 8–15 angka.',
+                'guardian_phone.regex' => 'Nomor orang tua atau wali harus berisi 8–15 angka.',
                 'guardian_relationship.required' => 'Hubungan orang tua atau wali wajib dipilih.',
                 'guardian_consent.accepted' => 'Persetujuan orang tua atau wali wajib diberikan.',
             ]);
@@ -128,7 +130,7 @@ class AuthController extends Controller
                 ->where('is_active', true)
                 ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim((string) $request->expertise))])
                 ->first();
-            if (!$catalogSubject) {
+            if (! $catalogSubject) {
                 return response()->json([
                     'message' => 'Pilih mata pelajaran tutor dari katalog aktif.',
                 ], 422);
@@ -172,6 +174,7 @@ class AuthController extends Controller
                     'email_verification_required_at' => now(),
                     'phone' => trim((string) $request->phone),
                     'password' => Hash::make($request->password),
+                    'has_password' => true,
                     'password_updated_at' => now(),
                     'role' => $request->role,
                     'status' => $status,
@@ -280,12 +283,25 @@ class AuthController extends Controller
             'email_delivery_failed' => $emailDeliveryFailed,
             'resend_after_seconds' => $emailDeliveryFailed ? 0 : OneTimeCodeService::RESEND_SECONDS,
             'email' => $user->email,
+            // Ringkasan aman untuk WhatsApp: tanpa kata sandi, email, atau isi
+            // dokumen privat. Nilai berasal dari data yang benar-benar tersimpan.
+            'application_code' => $user->role === 'teacher' ? 'TUTOR-'.$user->id : null,
+            'registration_summary' => $user->role === 'teacher' ? [
+                'application_code' => 'TUTOR-'.$user->id,
+                'name' => $user->name,
+                'whatsapp' => $user->phone,
+                'subject' => $request->expertise,
+                'degree' => $request->public_degree,
+                'levels' => array_values((array) $request->input('levels', [])),
+                'teaching_method' => $request->teaching_method,
+                'linkedin' => $request->linkedin,
+            ] : null,
             'user' => $user,
         ], 201);
     }
 
     // --- FITUR LOGIN ---
-    public function login(Request $request, PersistentLoginService $sessions)
+    public function login(Request $request, PersistentLoginService $sessions, GuestPackageLinkService $guestOrders)
     {
         $request->validate([
             'email' => 'required|email',
@@ -296,14 +312,26 @@ class AuthController extends Controller
 
         $user = User::where('email', mb_strtolower(trim((string) $request->email)))->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (! $user || ! Hash::check($request->password, $user->password)) {
             return response()->json(['message' => 'Email atau password salah.'], 401);
         }
 
-        // All roles use one login. Legacy login_portal is accepted but never
-        // determines account privileges; the stored role and middleware do.
+        // Portal memisahkan pintu masuk admin dari pintu masuk murid/tutor.
+        // Portal tidak pernah menentukan hak akses; role tetap dibaca dari akun.
+        $portal = (string) ($request->input('login_portal') ?: 'user');
+        if ($portal === 'admin' && $user->role !== 'admin') {
+            return response()->json([
+                'message' => 'Akun ini bukan akun admin. Silakan masuk melalui halaman pengguna.',
+            ], 403);
+        }
+        if ($portal !== 'admin' && $user->role === 'admin') {
+            return response()->json([
+                'message' => 'Akun admin harus masuk melalui halaman login admin.',
+                'error_code' => 'admin_portal_required',
+            ], 403);
+        }
 
-        if ($user->email_verification_required_at && !$user->email_verified_at) {
+        if ($user->email_verification_required_at && ! $user->email_verified_at) {
             return response()->json([
                 'message' => 'Email belum diverifikasi. Masukkan kode OTP yang telah dikirim.',
                 'error_code' => 'email_not_verified',
@@ -322,11 +350,11 @@ class AuthController extends Controller
 
         if ($user->role === 'teacher' && $user->status === 'pending') {
             return response()->json([
-                'message' => 'Akun tutor sedang menunggu pemeriksaan dokumen serta hasil seleksi dan tes melalui WhatsApp.'
+                'message' => 'Akun tutor sedang menunggu pemeriksaan dokumen serta hasil seleksi dan tes melalui WhatsApp.',
             ], 403);
         }
 
-        if ($user->role === 'teacher' && !$user->teacherProfile?->verified_at) {
+        if ($user->role === 'teacher' && ! $user->teacherProfile?->verified_at) {
             $user->update(['status' => 'pending']);
             $user->tokens()->delete();
 
@@ -355,7 +383,8 @@ class AuthController extends Controller
             'session_transport' => 'http_only_cookie',
             'session_expires_at' => $session['expires_at']->toIso8601String(),
             'remember_device' => $session['remembered'],
-            'user' => [...$user->toArray(), 'is_primary_admin' => $user->role === 'admin' && $user->isPrimaryAdmin()]
+            'pending_guest_order' => $guestOrders->pendingCodeFor($user),
+            'user' => [...$user->toArray(), 'is_primary_admin' => $user->role === 'admin' && $user->isPrimaryAdmin()],
         ])->withCookie($session['cookie']);
     }
 

@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Models\FinancialJournal;
 use App\Models\FinancialAuditLog;
+use App\Models\FinancialJournal;
 use App\Models\IdempotencyRecord;
 use App\Models\PayoutApproval;
 use App\Services\WalletIntegrityService;
@@ -61,7 +61,7 @@ class VerifyFinancialLedger extends Command
                     'occurred_at' => $journal->occurred_at->toISOString(),
                     'entries' => $entries,
                 ], JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION));
-                if (!hash_equals($journal->entry_hash, $expectedHash)) {
+                if (! hash_equals($journal->entry_hash, $expectedHash)) {
                     $errors[] = "Isi jurnal {$journal->id} tidak cocok dengan hash.";
                 }
 
@@ -87,7 +87,7 @@ class VerifyFinancialLedger extends Command
                     'payload' => $log->payload ?? [],
                     'created_at' => $log->created_at->toISOString(),
                 ], JSON_UNESCAPED_UNICODE));
-                if (!hash_equals($log->entry_hash, $expectedHash)) {
+                if (! hash_equals($log->entry_hash, $expectedHash)) {
                     $errors[] = "Isi log audit {$log->id} tidak cocok dengan hash.";
                 }
 

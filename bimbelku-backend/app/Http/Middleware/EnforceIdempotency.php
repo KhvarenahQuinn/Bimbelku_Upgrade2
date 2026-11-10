@@ -14,7 +14,7 @@ class EnforceIdempotency
     public function handle(Request $request, Closure $next): Response
     {
         $key = trim((string) $request->header('Idempotency-Key'));
-        if (!preg_match('/^[A-Za-z0-9._:-]{8,100}$/', $key)) {
+        if (! preg_match('/^[A-Za-z0-9._:-]{8,100}$/', $key)) {
             return response()->json([
                 'message' => 'Kunci transaksi tidak valid. Muat ulang halaman lalu coba lagi.',
             ], 422);
@@ -25,8 +25,8 @@ class EnforceIdempotency
         $requestHash = $this->requestHash($request);
         $record = $this->resolveRecord($actorId, $action, $key, $requestHash);
 
-        if (!$record->wasRecentlyCreated) {
-            if (!hash_equals($record->request_hash, $requestHash)) {
+        if (! $record->wasRecentlyCreated) {
+            if (! hash_equals($record->request_hash, $requestHash)) {
                 return response()->json([
                     'message' => 'Kunci transaksi sudah digunakan untuk data berbeda.',
                 ], 409);

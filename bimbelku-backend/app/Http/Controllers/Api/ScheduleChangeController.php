@@ -56,7 +56,9 @@ class ScheduleChangeController extends Controller
             $optionsOnDate = 0;
             foreach ($slotTimes as $time) {
                 $candidate = Carbon::parse($date->toDateString().' '.$time, config('app.timezone', 'Asia/Jakarta'));
-                if ($candidate->lt(now()->addHours($noticeHours))) continue;
+                if ($candidate->lt(now()->addHours($noticeHours))) {
+                    continue;
+                }
                 try {
                     $affected = $this->buildAffectedSchedules($booking, $candidate, $scope);
                     $this->validateAffectedSchedules($affected, $matchingService);
@@ -70,7 +72,9 @@ class ScheduleChangeController extends Controller
                     $optionsOnDate++;
                 } catch (ValidationException) {
                 }
-                if ($options->count() >= 24 || (!$requestedDate && $optionsOnDate >= 3)) break;
+                if ($options->count() >= 24 || (! $requestedDate && $optionsOnDate >= 3)) {
+                    break;
+                }
             }
         }
 
@@ -149,6 +153,7 @@ class ScheduleChangeController extends Controller
                     ]
                 );
             }
+
             return $record->load(['requester:id,name,role', 'responses.user:id,name,role']);
         }, 3);
 
@@ -193,6 +198,7 @@ class ScheduleChangeController extends Controller
             if ($validated['decision'] === 'rejected') {
                 $change->update(['status' => 'rejected', 'decided_at' => now()]);
                 $this->notifyScheduleDecision($lockedBooking, $change, 'rejected');
+
                 return ['status' => 'rejected', 'change' => $change->fresh('responses.user')];
             }
             if (ScheduleChangeResponse::query()->where('schedule_change_request_id', $change->id)->where('decision', 'pending')->lockForUpdate()->exists()) {
@@ -202,9 +208,12 @@ class ScheduleChangeController extends Controller
             $affected = $this->affectedFromRecord($change);
             Booking::query()->whereKey($affected->pluck('booking.id')->all())->lockForUpdate()->get();
             $this->validateAffectedSchedules($affected, $matchingService);
-            foreach ($affected as $item) $this->applySchedule($item['booking'], $item['start'], $item['end']);
+            foreach ($affected as $item) {
+                $this->applySchedule($item['booking'], $item['start'], $item['end']);
+            }
             $change->update(['status' => 'approved', 'decided_at' => now()]);
             $this->notifyScheduleDecision($lockedBooking, $change, 'approved');
+
             return ['status' => 'approved', 'change' => $change->fresh('responses.user')];
         }, 3);
 
@@ -213,6 +222,7 @@ class ScheduleChangeController extends Controller
             'rejected' => 'Perubahan jadwal ditolak. Jadwal lama tetap berlaku.',
             default => 'Jawaban tersimpan. Sistem masih menunggu pihak lain.',
         };
+
         return response()->json(['message' => $message, 'data' => $result['change']]);
     }
 
@@ -223,7 +233,9 @@ class ScheduleChangeController extends Controller
             return collect([['booking' => $booking, 'start' => $proposedStart->copy(), 'end' => $proposedStart->copy()->addMinutes($durationMinutes)]]);
         }
         $currentSession = PackageSession::query()->where('booking_id', $booking->id)->first();
-        if (!$currentSession) throw ValidationException::withMessages(['scope' => 'Perubahan seluruh sesi berikutnya hanya tersedia untuk paket belajar.']);
+        if (! $currentSession) {
+            throw ValidationException::withMessages(['scope' => 'Perubahan seluruh sesi berikutnya hanya tersedia untuk paket belajar.']);
+        }
 
         $deltaSeconds = $booking->start_at->diffInSeconds($proposedStart, false);
         $items = PackageSession::query()->where('package_subject_id', $currentSession->package_subject_id)
@@ -235,7 +247,10 @@ class ScheduleChangeController extends Controller
                 'start' => $session->booking->start_at->copy()->addSeconds($deltaSeconds),
                 'end' => $session->booking->end_at->copy()->addSeconds($deltaSeconds),
             ])->values();
-        if ($items->isEmpty()) throw ValidationException::withMessages(['scope' => 'Tidak ada sesi berikutnya yang dapat diubah.']);
+        if ($items->isEmpty()) {
+            throw ValidationException::withMessages(['scope' => 'Tidak ada sesi berikutnya yang dapat diubah.']);
+        }
+
         return $items;
     }
 
@@ -247,9 +262,11 @@ class ScheduleChangeController extends Controller
             'proposed_end_at' => $change->proposed_end_at,
         ]]);
         $bookings = Booking::query()->whereKey($rows->pluck('booking_id'))->get()->keyBy('id');
+
         return $rows->map(function (array $row) use ($bookings) {
             $booking = $bookings->get((int) $row['booking_id']);
             abort_unless($booking, 422, 'Salah satu sesi perubahan sudah tidak tersedia.');
+
             return ['booking' => $booking, 'start' => Carbon::parse($row['proposed_start_at']), 'end' => Carbon::parse($row['proposed_end_at'])];
         });
     }
@@ -262,20 +279,32 @@ class ScheduleChangeController extends Controller
         $ignoreIds = $affected->pluck('booking.id')->map(fn ($id) => (int) $id)->all();
         $sorted = $affected->sortBy(fn (array $item) => $item['start']->timestamp)->values();
         for ($i = 0; $i < $sorted->count() - 1; $i++) {
-            if ($sorted[$i]['end']->gt($sorted[$i + 1]['start'])) throw ValidationException::withMessages(['proposed_start_at' => 'Jadwal baru saling bertabrakan.']);
+            if ($sorted[$i]['end']->gt($sorted[$i + 1]['start'])) {
+                throw ValidationException::withMessages(['proposed_start_at' => 'Jadwal baru saling bertabrakan.']);
+            }
         }
         foreach ($affected as $item) {
-            $booking = $item['booking']; $startAt = $item['start']; $endAt = $item['end'];
+            $booking = $item['booking'];
+            $startAt = $item['start'];
+            $endAt = $item['end'];
             abort_unless($booking->status === 'confirmed', 422, 'Hanya sesi yang belum dimulai yang dapat diubah.');
-            if ($startAt->lt(now()->addHours($this->noticeHours()))) throw ValidationException::withMessages(['proposed_start_at' => "Jadwal baru harus diajukan sedikitnya {$this->noticeHours()} jam sebelumnya."]);
-            if ($startAt->gt(now()->addMonths(6))) throw ValidationException::withMessages(['proposed_start_at' => 'Jadwal baru tidak boleh lebih dari enam bulan.']);
-            if ((int) $startAt->format('i') !== 0 || (int) $endAt->format('i') !== 0) throw ValidationException::withMessages(['proposed_start_at' => 'Jam hanya boleh menggunakan menit 00.']);
+            if ($startAt->lt(now()->addHours($this->noticeHours()))) {
+                throw ValidationException::withMessages(['proposed_start_at' => "Jadwal baru harus diajukan sedikitnya {$this->noticeHours()} jam sebelumnya."]);
+            }
+            if ($startAt->gt(now()->addMonths(6))) {
+                throw ValidationException::withMessages(['proposed_start_at' => 'Jadwal baru tidak boleh lebih dari enam bulan.']);
+            }
+            if ((int) $startAt->format('i') !== 0 || (int) $endAt->format('i') !== 0) {
+                throw ValidationException::withMessages(['proposed_start_at' => 'Jam hanya boleh menggunakan menit 00.']);
+            }
             $packageSession = PackageSession::query()->where('booking_id', $booking->id)->with('subject.package')->first();
             if ($packageSession?->subject?->package?->expires_at && $endAt->gt($packageSession->subject->package->expires_at)) {
                 throw ValidationException::withMessages(['proposed_start_at' => 'Jadwal baru melewati masa aktif paket.']);
             }
             $teacher = $booking->teacher;
-            if (!$teacher || !$matchingService->teacherAvailableAt($teacher, $startAt, $endAt)) throw ValidationException::withMessages(['proposed_start_at' => 'Jadwal baru berada di luar jam kosong atau tanggal aktif tutor.']);
+            if (! $teacher || ! $matchingService->teacherAvailableAt($teacher, $startAt, $endAt)) {
+                throw ValidationException::withMessages(['proposed_start_at' => 'Jadwal baru berada di luar jam kosong atau tanggal aktif tutor.']);
+            }
             if ($this->teacherHasConflict((int) $booking->teacher_id, $startAt, $endAt, $ignoreIds)) {
                 throw ValidationException::withMessages(['proposed_start_at' => 'Jadwal tutor bertabrakan dengan kelas lain.']);
             }
@@ -286,13 +315,20 @@ class ScheduleChangeController extends Controller
         }
     }
 
-
     private function teacherHasConflict(int $teacherId, Carbon $startAt, Carbon $endAt, array $ignoreIds = []): bool
     {
         return Booking::query()
             ->where('teacher_id', $teacherId)
             ->when($ignoreIds, fn ($query) => $query->whereNotIn('id', $ignoreIds))
             ->whereIn('status', self::ACTIVE_STATUSES)
+            // Refunded/cancelled rows may still look active; release the slot
+            // only when the order is fully closed or this request is released.
+            ->whereDoesntHave('order', fn ($order) => $order
+                ->whereIn('status', ['refunded', 'cancelled', 'expired']))
+            ->whereDoesntHave('bookingRequest', fn ($bookingRequest) => $bookingRequest
+                ->whereIn('status', ['refund_pending', 'refunded', 'cancelled', 'payment_expired', 'expired']))
+            ->whereDoesntHave('bookingRequest.packageSubject.package', fn ($package) => $package
+                ->whereIn('status', ['refund_pending', 'refunded', 'cancelled', 'payment_expired']))
             ->where('start_at', '<', $endAt)
             ->where('end_at', '>', $startAt)
             ->exists();
@@ -300,11 +336,19 @@ class ScheduleChangeController extends Controller
 
     private function studentsHaveConflict(Collection $studentIds, Carbon $startAt, Carbon $endAt, array $ignoreIds = []): bool
     {
-        if ($studentIds->isEmpty()) return false;
+        if ($studentIds->isEmpty()) {
+            return false;
+        }
 
         return Booking::query()
             ->when($ignoreIds, fn ($query) => $query->whereNotIn('id', $ignoreIds))
             ->whereIn('status', self::ACTIVE_STATUSES)
+            ->whereDoesntHave('order', fn ($order) => $order
+                ->whereIn('status', ['refunded', 'cancelled', 'expired']))
+            ->whereDoesntHave('bookingRequest', fn ($bookingRequest) => $bookingRequest
+                ->whereIn('status', ['refund_pending', 'refunded', 'cancelled', 'payment_expired', 'expired']))
+            ->whereDoesntHave('bookingRequest.packageSubject.package', fn ($package) => $package
+                ->whereIn('status', ['refund_pending', 'refunded', 'cancelled', 'payment_expired']))
             ->where('start_at', '<', $endAt)
             ->where('end_at', '>', $startAt)
             ->whereHas('participants', fn ($query) => $query->whereIn('student_id', $studentIds))
@@ -326,9 +370,13 @@ class ScheduleChangeController extends Controller
     private function authorizeMember(Request $request, Booking $booking): string
     {
         if ($request->user()->role === 'teacher' && (int) $booking->teacher_id === (int) $request->user()->id) {
-            abort_unless($booking->participants()->whereHas('order', fn ($q) => $q->where('status', 'paid'))->exists(), 403); return 'teacher';
+            abort_unless($booking->participants()->whereHas('order', fn ($q) => $q->where('status', 'paid'))->exists(), 403);
+
+            return 'teacher';
         }
-        if ($request->user()->role === 'student' && $booking->participants()->where('student_id', $request->user()->id)->whereHas('order', fn ($q) => $q->where('status', 'paid'))->exists()) return 'student';
+        if ($request->user()->role === 'student' && $booking->participants()->where('student_id', $request->user()->id)->whereHas('order', fn ($q) => $q->where('status', 'paid'))->exists()) {
+            return 'student';
+        }
         abort(403, 'Anda tidak terdaftar pada sesi ini.');
     }
 

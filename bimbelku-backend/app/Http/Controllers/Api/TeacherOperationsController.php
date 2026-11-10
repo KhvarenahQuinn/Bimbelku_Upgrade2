@@ -6,16 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\ClassroomMessage;
 use App\Models\Notification;
+use App\Models\PackageSession;
+use App\Models\PackageSubject;
 use App\Models\Rating;
 use App\Models\ScheduleChangeResponse;
 use App\Models\TeacherOffer;
 use App\Models\TeacherPayoutRequest;
 use App\Models\TeacherProfile;
-use App\Models\User;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use App\Support\XenditPayoutChannelCatalog;
 use App\Services\TeacherPayoutService;
+use Illuminate\Http\Request;
 use RuntimeException;
 
 class TeacherOperationsController extends Controller
@@ -73,6 +72,17 @@ class TeacherOperationsController extends Controller
             ->selectRaw('COUNT(*) AS rating_count, COALESCE(AVG(rating), 0) AS rating_average')
             ->first();
 
+        $packageSubjects = PackageSubject::query()
+            ->where('assigned_teacher_id', $teacherId)
+            ->whereHas('package', fn ($query) => $query->whereIn('status', ['active', 'completed']))
+            ->with(['sessions.booking:id,status'])
+            ->get();
+        $sessionTotal = (int) $packageSubjects->sum('allocated_sessions');
+        $sessionCompleted = $packageSubjects
+            ->flatMap->sessions
+            ->filter(fn (PackageSession $session) => $session->booking?->status === 'completed')
+            ->count();
+
         return response()->json([
             'teacher' => [
                 'name' => $request->user()->name,
@@ -93,6 +103,11 @@ class TeacherOperationsController extends Controller
                 'in_progress' => $classes->where('status', 'in_progress')->count(),
                 'awaiting_student' => $classes->where('status', 'awaiting_student_approval')->count(),
                 'student_count' => $classes->flatMap->participants->pluck('student_id')->unique()->count(),
+                'session_progress' => [
+                    'total' => $sessionTotal,
+                    'completed' => $sessionCompleted,
+                    'remaining' => max(0, $sessionTotal - $sessionCompleted),
+                ],
                 'next' => $nextSession ? [
                     'id' => $nextSession->id,
                     'subject' => $nextSession->bookingRequest?->subject_name ?? 'Bimbingan',
@@ -147,6 +162,7 @@ class TeacherOperationsController extends Controller
             'ratings' => $ratings,
         ]);
     }
+
     public function payoutRequests(Request $request)
     {
         return response()->json(TeacherPayoutRequest::query()
@@ -203,6 +219,7 @@ class TeacherOperationsController extends Controller
     private function maskAccount(?string $value): string
     {
         $digits = preg_replace('/\D+/', '', (string) $value) ?? '';
+
         return $digits === '' ? '-' : str_repeat('•', max(0, strlen($digits) - 4)).substr($digits, -4);
     }
 }

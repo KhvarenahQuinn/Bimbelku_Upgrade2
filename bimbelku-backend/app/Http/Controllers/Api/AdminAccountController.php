@@ -46,6 +46,7 @@ class AdminAccountController extends Controller
             'name' => trim($validated['name']),
             'email' => mb_strtolower(trim($validated['email'])),
             'password' => Hash::make($validated['password']),
+            'has_password' => true,
             'role' => 'admin',
             'admin_type' => 'admin',
             'status' => 'active',
@@ -76,12 +77,15 @@ class AdminAccountController extends Controller
             'name' => trim($validated['name']),
             'email' => mb_strtolower(trim($validated['email'])),
         ];
-        if (!empty($validated['password'])) {
+        if (! empty($validated['password'])) {
             $changes['password'] = Hash::make($validated['password']);
+            $changes['has_password'] = true;
             $changes['password_updated_at'] = now();
         }
         $admin->forceFill($changes)->save();
-        if (!empty($validated['password'])) $admin->tokens()->delete();
+        if (! empty($validated['password'])) {
+            $admin->tokens()->delete();
+        }
 
         return response()->json([
             'message' => 'Akun admin berhasil diperbarui.',

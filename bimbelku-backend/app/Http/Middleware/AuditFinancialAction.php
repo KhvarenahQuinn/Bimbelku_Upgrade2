@@ -11,8 +11,7 @@ class AuditFinancialAction
 {
     public function __construct(
         private readonly FinancialAuditService $audit
-    ) {
-    }
+    ) {}
 
     public function handle(Request $request, Closure $next, ?string $action = null): Response
     {

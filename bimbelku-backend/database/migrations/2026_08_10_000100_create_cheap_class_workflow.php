@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('cheap_class_templates')) {
+        if (! Schema::hasTable('cheap_class_templates')) {
             Schema::create('cheap_class_templates', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('curriculum_subject_id')->nullable()->constrained()->nullOnDelete();
@@ -35,7 +35,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('cheap_classes')) {
+        if (! Schema::hasTable('cheap_classes')) {
             Schema::create('cheap_classes', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('cheap_class_template_id')->nullable()->constrained()->nullOnDelete();
@@ -67,7 +67,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('cheap_class_enrollments')) {
+        if (! Schema::hasTable('cheap_class_enrollments')) {
             Schema::create('cheap_class_enrollments', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('cheap_class_id')->constrained()->cascadeOnDelete();
@@ -85,7 +85,7 @@ return new class extends Migration
             });
         }
 
-        if (Schema::hasTable('orders') && !Schema::hasColumn('orders', 'cheap_class_enrollment_id')) {
+        if (Schema::hasTable('orders') && ! Schema::hasColumn('orders', 'cheap_class_enrollment_id')) {
             Schema::table('orders', function (Blueprint $table) {
                 $table->foreignId('cheap_class_enrollment_id')
                     ->nullable()

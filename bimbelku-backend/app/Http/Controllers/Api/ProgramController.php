@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\CurriculumSubject;
 use App\Models\Program;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,10 +18,12 @@ class ProgramController extends Controller
         $groups = DB::table('curriculum_subject_groups')->orderBy('name')->get();
         $productCategoryIds = DB::table('learning_programs')->where('is_active', true)
             ->whereNotNull('catalog_category_id')->pluck('catalog_category_id')->all();
-        $subjects = \App\Models\CurriculumSubject::query()->where('is_active', true)
+        $subjects = CurriculumSubject::query()->where('is_active', true)
             ->orderBy('name')->get();
+
         return response()->json($groups->map(function ($group) use ($subjects) {
             $items = $subjects->filter(fn ($subject) => Str::lower((string) $subject->group_name) === $group->normalized_name);
+
             return [
                 'id' => $group->id,
                 'name' => $group->name,
@@ -49,6 +52,7 @@ class ProgramController extends Controller
         $program = DB::transaction(function () use ($data) {
             $program = Program::create(collect($data)->except('subject_ids')->all());
             $program->subjects()->sync($data['subject_ids']);
+
             return $program;
         });
 
@@ -69,12 +73,14 @@ class ProgramController extends Controller
     public function deactivate(Program $program)
     {
         $program->update(['is_active' => false]);
+
         return response()->json(['message' => 'Program disembunyikan. Riwayat mapel tetap aman.']);
     }
 
     private function validateProgram(Request $request, ?Program $program = null): array
     {
         $request->merge(['slug' => Str::slug((string) $request->input('name'))]);
+
         return $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'slug' => ['required', 'string', 'max:150', Rule::unique('programs', 'slug')->ignore($program?->id)],

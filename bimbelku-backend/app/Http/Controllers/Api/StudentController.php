@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Order;
 use App\Models\Rating;
-use Illuminate\Http\Request;
 use App\Support\PackageChapterProgress;
+use App\Support\PublicMedia;
+use App\Support\RefundStatusPresenter;
+use Illuminate\Http\Request;
 
 class StudentController extends Controller
 {
@@ -26,7 +28,7 @@ class StudentController extends Controller
             ->with(['refund', 'learningPackage.plan', 'cheapClassEnrollment.cheapClass'])
             ->first();
 
-        if (!$order) {
+        if (! $order) {
             return response()->json(['message' => 'Tagihan tidak ditemukan.'], 404);
         }
 
@@ -48,7 +50,7 @@ class StudentController extends Controller
         $cheapClassCancelled = $isCheapClass
             && ($cheapEnrollment?->status === 'cancellation_pending' || $cheapClass?->status === 'cancelled');
         $capacityAlreadyFull = $isCheapClass
-            && !$cheapClassCancelled
+            && ! $cheapClassCancelled
             && $cheapClass
             && $cheapClass->enrollments()->where('status', 'confirmed')->count() >= (int) $cheapClass->maximum_participants;
         $refundReasonIfAccepted = $cheapClassCancelled
@@ -78,7 +80,7 @@ class StudentController extends Controller
             'package_name' => $details['package_name'] ?? $order->learningPackage?->plan?->name,
             'duration_hours' => (int) ($details['duration_hours'] ?? $order->learningPackage?->duration_hours ?? 1),
             'total_learning_hours' => (int) ($details['total_learning_hours'] ?? 0),
-            'has_proof' => !empty($order->payment_proof),
+            'has_proof' => ! empty($order->payment_proof),
             'rejection_reason' => $order->payment_rejection_reason,
             'order_kind' => $isCheapClass ? 'cheap_class' : ($order->learning_package_id ? 'package' : 'booking'),
             'enrollment_status' => $cheapEnrollment?->status,
@@ -100,7 +102,7 @@ class StudentController extends Controller
             'gateway_status' => $order->gateway_status,
             'gateway_session_id' => $order->gateway_session_id,
             'gateway_expires_at' => $order->gateway_expires_at,
-            'refund' => $order->refund,
+            'refund' => $order->refund ? array_merge($order->refund->toArray(), RefundStatusPresenter::present($order->refund)) : null,
         ]);
     }
 
@@ -152,7 +154,7 @@ class StudentController extends Controller
 
         $data = $bookings->map(function (Booking $booking) use ($ratedBookingIds) {
             $participant = $booking->participants->first();
-            $isJoinedGuest = !$participant;
+            $isJoinedGuest = ! $participant;
             $learningRequest = $participant?->bookingRequest ?? $booking->bookingRequest;
             $profile = $booking->teacher?->teacherProfile;
             $hasSessionAccess = $participant?->order?->status === 'paid';
@@ -160,7 +162,7 @@ class StudentController extends Controller
             $latestReport = $booking->learningProgressReports->first();
             $canApprove = $booking->status === 'awaiting_student_approval'
                 && $participant?->status === 'awaiting_student_approval'
-                && !$participant?->approved_at
+                && ! $participant?->approved_at
                 && $booking->objection_deadline?->isFuture();
             $attention = $canApprove
                 ? [
@@ -170,7 +172,7 @@ class StudentController extends Controller
                     'button_label' => 'Cek Sesi',
                     'target_url' => "/student/my-classes?session={$booking->id}&session_action=review",
                 ]
-                : ($participant && $booking->tutor_ready_at && !$booking->student_confirmed_at && $booking->status === 'confirmed' ? [
+                : ($participant && $booking->tutor_ready_at && ! $booking->student_confirmed_at && $booking->status === 'confirmed' ? [
                     'kind' => 'presence',
                     'title' => 'Tutor sudah siap',
                     'message' => 'Konfirmasi kehadiranmu dengan satu tap agar sesi dapat dimulai.',
@@ -190,7 +192,7 @@ class StudentController extends Controller
                 'grade' => $learningRequest?->grade,
                 'chapter' => $learningRequest?->chapter,
                 'mentor' => $booking->teacher?->name ?? 'Tutor',
-                'mentor_avatar' => \App\Support\PublicMedia::url($profile?->photo),
+                'mentor_avatar' => PublicMedia::url($profile?->photo),
                 'type' => 'Privat',
                 'method' => $booking->learning_mode,
                 'status' => $booking->status,
@@ -221,21 +223,23 @@ class StudentController extends Controller
                 'objection_deadline' => $booking->objection_deadline,
                 'approved_at' => $participant?->approved_at,
                 'order' => $participant?->order,
-                'refund' => $participant?->order?->refund,
+                'refund' => $participant?->order?->refund
+                    ? array_merge($participant->order->refund->toArray(), RefundStatusPresenter::present($participant->order->refund))
+                    : null,
                 'dispute' => $booking->disputes->first(),
                 'can_approve' => $canApprove,
                 'can_dispute' => $canApprove,
                 'attention' => $attention,
                 'can_rate' => $booking->status === 'completed'
                     && $participant?->status === 'approved'
-                    && !$isRated,
+                    && ! $isRated,
                 'can_report_teacher_absence' => in_array($booking->status, ['confirmed', 'in_progress'], true)
                     && $hasSessionAccess
-                    && !$booking->student_confirmed_at
+                    && ! $booking->student_confirmed_at
                     && now()->gte($booking->start_at->copy()->addMinutes(15)),
                 'workspace' => [
                     'can_open' => $hasSessionAccess,
-                    'latest_message' => !$isJoinedGuest && $booking->latestClassroomMessage ? [
+                    'latest_message' => ! $isJoinedGuest && $booking->latestClassroomMessage ? [
                         'body' => $booking->latestClassroomMessage->body,
                         'sender_name' => $booking->latestClassroomMessage->sender?->name ?? 'Pengguna BimbelKu',
                         'created_at' => $booking->latestClassroomMessage->created_at,

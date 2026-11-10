@@ -4,8 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\BookingRequest;
 use App\Models\Classroom;
-use App\Models\Rating;
 use App\Models\Notification;
+use App\Models\Rating;
 use App\Models\Setting;
 use App\Models\TeacherAvailability;
 use App\Models\TeacherOffer;
@@ -60,6 +60,11 @@ class TeacherOfferResponseWindowTest extends TestCase
     public function test_expired_offer_is_immediately_forwarded_to_the_next_ranked_teacher(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-08-10 08:00:00', 'Asia/Jakarta'));
+        // The strict search window is one hour, so shorten this offer window
+        // to leave room for the engine to forward a no-response offer.
+        Setting::query()
+            ->where('key', 'teacher_response_online_minutes')
+            ->update(['value' => '30']);
         $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
         foreach (range(1, 4) as $_) {
             $this->makeEligibleTeacher(online: true, offline: false);
@@ -70,14 +75,16 @@ class TeacherOfferResponseWindowTest extends TestCase
         $matchingService->dispatchNextOffer($bookingRequest);
         $this->assertCount(1, TeacherOffer::query()->where('status', 'pending')->get());
 
-        Carbon::setTestNow(now()->addMinutes(61));
+        Carbon::setTestNow(now()->addMinutes(31));
         $matchingService->dispatchNextOffer($bookingRequest);
 
         $offers = TeacherOffer::query()->orderBy('id')->get();
         $this->assertCount(2, $offers);
         $this->assertCount(1, $offers->where('status', 'expired'));
         $this->assertCount(1, $offers->where('status', 'pending'));
-        $this->assertTrue($offers->last()->expires_at->equalTo(now()->addMinutes(60)));
+        $this->assertTrue(
+            $offers->last()->expires_at->equalTo($bookingRequest->fresh()->search_started_at->addHour())
+        );
     }
 
     public function test_rejected_offer_is_immediately_replaced_by_next_ranked_teacher(): void

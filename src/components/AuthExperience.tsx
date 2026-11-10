@@ -39,9 +39,12 @@ const authPanelCss = `
   .auth-form-scroll {
     position: relative;
     height: 100dvh;
+    min-height: 100dvh;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 0.75rem 1.25rem 1.5rem;
+    -webkit-overflow-scrolling: touch;
+    padding: calc(0.75rem + env(safe-area-inset-top)) 1.25rem calc(1.5rem + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
     scrollbar-gutter: stable;
     background-color: #f7f1e8;
     background-image:
@@ -88,7 +91,7 @@ const authPanelCss = `
     background: transparent;
     padding: 0 1rem;
     color: #14213d;
-    font-size: 0.95rem;
+    font-size: 1rem;
     font-weight: 650;
     outline: none;
   }
@@ -150,6 +153,13 @@ const authPanelCss = `
   }
   @media (min-width: 1280px) {
     .auth-form-scroll { padding-inline: 4rem; }
+  }
+  @media (max-width: 1023px) {
+    /* 16px mencegah Safari iOS memperbesar halaman saat input difokuskan. */
+    .auth-register-form input:not([type="checkbox"]):not([type="file"]):not([role="combobox"]),
+    .auth-register-form textarea,
+    .auth-register-form select,
+    .auth-register-form button[role="combobox"] { font-size: 1rem; }
   }
   @media (max-width: 639px) {
     .auth-panel-art { display: none; }

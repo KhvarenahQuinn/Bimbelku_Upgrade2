@@ -111,14 +111,16 @@ export default function TeacherLearningProgressDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!Number.isFinite(subjectId)) {
       setError(true);
       setLoading(false);
       return;
     }
-    setLoading(true);
-    setError(false);
+    if (!silent) {
+      setLoading(true);
+      setError(false);
+    }
     try {
       const response = await http.get<TeacherProgressData>(`/teacher/package-subjects/${subjectId}/progress`);
       setData(response.data);
@@ -126,11 +128,25 @@ export default function TeacherLearningProgressDetail() {
       setError(true);
       notify.error(getApiError(requestError, "Progress kelas belum dapat dimuat."));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [subjectId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("bimbelku:data-changed", refresh);
+    const timer = window.setInterval(refresh, 20_000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("bimbelku:data-changed", refresh);
+      window.clearInterval(timer);
+    };
+  }, [load]);
 
   if (loading) {
     return (
@@ -202,7 +218,7 @@ export default function TeacherLearningProgressDetail() {
 
         {tab === "material" ? <MaterialPanel data={data} /> : <HistoryPanel data={data} onOpenSession={setSelectedBookingId} />}
       </div>
-      <LearningSessionHub bookingId={selectedBookingId} open={selectedBookingId !== null} onOpenChange={(open) => !open && setSelectedBookingId(null)} initialTab="progress" />
+      <LearningSessionHub bookingId={selectedBookingId} open={selectedBookingId !== null} onOpenChange={(open) => { if (!open) { setSelectedBookingId(null); void load(true); } }} initialTab="progress" />
     </TeacherLayout>
   );
 }

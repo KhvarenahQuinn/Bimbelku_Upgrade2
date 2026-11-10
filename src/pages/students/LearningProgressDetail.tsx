@@ -103,14 +103,16 @@ export default function LearningProgressDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!Number.isFinite(numericId) || (!isPackage && !isCheapClass)) {
       setError(true);
       setLoading(false);
       return;
     }
-    setLoading(true);
-    setError(false);
+    if (!silent) {
+      setLoading(true);
+      setError(false);
+    }
     try {
       if (isPackage) {
         const [packageResponse, classesResponse] = await Promise.all([
@@ -130,11 +132,25 @@ export default function LearningProgressDetail() {
       setError(true);
       notify.error(getApiError(requestError, "Detail progress gagal dimuat."));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [isCheapClass, isPackage, numericId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("bimbelku:data-changed", refresh);
+    const timer = window.setInterval(refresh, 20_000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("bimbelku:data-changed", refresh);
+      window.clearInterval(timer);
+    };
+  }, [load]);
 
   if (loading) {
     return <StudentLayout title="Detail Progress"><div className="grid min-h-[60dvh] place-items-center"><div className="text-center"><Loader2 className="mx-auto animate-spin text-indigo-600" size={36} /><p className="mt-3 text-sm font-bold text-slate-500">Memuat detail progress…</p></div></div></StudentLayout>;
@@ -149,7 +165,7 @@ export default function LearningProgressDetail() {
       {packageData
         ? <PackageProgressDetail item={packageData} classes={classRows} onOpenReport={setSelectedBookingId} />
         : <CheapClassProgressDetail item={cheapClassData!} />}
-      <LearningSessionHub bookingId={selectedBookingId} open={selectedBookingId !== null} onOpenChange={(open) => !open && setSelectedBookingId(null)} initialTab="progress" />
+      <LearningSessionHub bookingId={selectedBookingId} open={selectedBookingId !== null} onOpenChange={(open) => { if (!open) { setSelectedBookingId(null); void load(true); } }} initialTab="progress" />
     </StudentLayout>
   );
 }

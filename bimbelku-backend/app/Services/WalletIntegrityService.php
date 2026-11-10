@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CustomerWallet;
 use App\Models\FinancialLedgerEntry;
 use App\Models\Order;
+use App\Support\WalletLedgerSignature;
 
 class WalletIntegrityService
 {
@@ -12,11 +13,12 @@ class WalletIntegrityService
     public function errors(): array
     {
         $errors = [];
+        $signature = app(WalletLedgerSignature::class);
 
         CustomerWallet::query()
             ->with(['transactions' => fn ($query) => $query->orderBy('id')])
             ->orderBy('id')
-            ->each(function (CustomerWallet $wallet) use (&$errors) {
+            ->each(function (CustomerWallet $wallet) use (&$errors, $signature) {
                 $available = $this->money($wallet->current_balance);
                 $reserved = $this->money($wallet->reserved_balance);
                 if ($available < 0 || $reserved < 0) {
@@ -32,16 +34,29 @@ class WalletIntegrityService
                         $errors[] = "Mutasi wallet {$wallet->id} terputus pada transaksi {$transaction->id}.";
                     }
 
-                    $expectedAfter = match ($transaction->direction) {
-                        'credit' => $this->money($before + $amount),
-                        'debit' => $this->money($before - $amount),
-                        default => null,
+                    // `payment_capture` menggeser cadangan ke nilai terpakai;
+                    // saldo tersedia tidak berubah karena sudah dikurangi saat reserve.
+                    $expectedAfter = match ($transaction->type) {
+                        'payment_capture' => $before,
+                        default => match ($transaction->direction) {
+                            'credit' => $this->money($before + $amount),
+                            'debit' => $this->money($before - $amount),
+                            default => null,
+                        },
                     };
                     if ($expectedAfter === null || abs($expectedAfter - $after) > 0.009) {
                         $errors[] = "Perhitungan transaksi wallet {$transaction->id} tidak valid.";
                     }
                     if ($after < -0.009) {
                         $errors[] = "Transaksi wallet {$transaction->id} menghasilkan saldo negatif.";
+                    }
+                    if (blank($transaction->reference_type) || blank($transaction->reference_id)) {
+                        $errors[] = "Mutasi wallet {$transaction->id} tidak memiliki referensi ledger.";
+                    }
+                    if (blank($transaction->getAttributes()['checksum'] ?? null)) {
+                        $errors[] = "Mutasi wallet {$transaction->id} tidak memiliki checksum.";
+                    } elseif (! $signature->verify($transaction)) {
+                        $errors[] = "Checksum mutasi wallet {$transaction->id} tidak valid (kemungkinan injeksi manual).";
                     }
                     $running = $after;
                 }

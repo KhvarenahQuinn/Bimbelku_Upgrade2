@@ -85,6 +85,7 @@ class PersistentLoginService
 
         try {
             $token = Crypt::decryptString($value);
+
             return is_string($token) && str_contains($token, '|') ? $token : null;
         } catch (\Throwable) {
             return null;
@@ -102,6 +103,7 @@ class PersistentLoginService
         }
 
         $threshold = max(60, (int) config('persistent_sessions.refresh_threshold_minutes', 10080));
+
         return $token->expires_at->lte(now()->addMinutes($threshold));
     }
 
@@ -127,6 +129,7 @@ class PersistentLoginService
     private function secureCookie(): bool
     {
         $configured = config('session.secure');
+
         return $configured === null ? app()->isProduction() : (bool) $configured;
     }
 }

@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BookingRequest;
 use App\Models\CurriculumSubject;
+use App\Models\HourlyRate;
+use App\Models\TeacherSubject;
 use App\Support\EducationCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -44,9 +47,9 @@ class CurriculumSubjectController extends Controller
 
         if ($existing) {
             $this->rememberGroup((string) $existing->group_name);
-            if (!$existing->is_active || !$this->hasValidScope($existing)) {
+            if (! $existing->is_active || ! $this->hasValidScope($existing)) {
                 $updates = ['is_active' => true];
-                if (!$this->hasValidScope($existing)) {
+                if (! $this->hasValidScope($existing)) {
                     $levels = $validated['education_levels'] ?? EducationCatalog::LEVELS;
                     $updates['education_levels'] = $levels;
                     $updates['grades'] = $validated['grades'] ?? $this->gradesForLevels($levels);
@@ -84,7 +87,7 @@ class CurriculumSubjectController extends Controller
     public function update(Request $request, CurriculumSubject $curriculumSubject)
     {
         $validated = $this->validateSubject($request, $curriculumSubject);
-        if (array_key_exists('education_levels', $validated) && !array_key_exists('grades', $validated)) {
+        if (array_key_exists('education_levels', $validated) && ! array_key_exists('grades', $validated)) {
             $validated['grades'] = $this->gradesForLevels($validated['education_levels']);
         }
 
@@ -106,9 +109,9 @@ class CurriculumSubjectController extends Controller
     public function destroy(CurriculumSubject $curriculumSubject)
     {
         $used = $curriculumSubject->chapters()->exists()
-            || \App\Models\HourlyRate::query()->whereRaw('LOWER(subject_name) = ?', [$curriculumSubject->normalized_name])->exists()
-            || \App\Models\TeacherSubject::query()->whereRaw('LOWER(name) = ?', [$curriculumSubject->normalized_name])->exists()
-            || \App\Models\BookingRequest::query()->whereRaw('LOWER(subject_name) = ?', [$curriculumSubject->normalized_name])->exists();
+            || HourlyRate::query()->whereRaw('LOWER(subject_name) = ?', [$curriculumSubject->normalized_name])->exists()
+            || TeacherSubject::query()->whereRaw('LOWER(name) = ?', [$curriculumSubject->normalized_name])->exists()
+            || BookingRequest::query()->whereRaw('LOWER(subject_name) = ?', [$curriculumSubject->normalized_name])->exists();
 
         if ($used) {
             $curriculumSubject->update(['is_active' => false]);
@@ -184,7 +187,9 @@ class CurriculumSubjectController extends Controller
     private function rememberGroup(string $name): void
     {
         $name = preg_replace('/\s+/u', ' ', trim($name)) ?? trim($name);
-        if ($name === '') return;
+        if ($name === '') {
+            return;
+        }
 
         $now = now();
         DB::table('curriculum_subject_groups')->insertOrIgnore([

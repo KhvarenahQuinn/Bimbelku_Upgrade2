@@ -101,4 +101,66 @@ class PasswordResetEmailTest extends TestCase
         Mail::assertNothingSent();
         $this->assertDatabaseMissing('password_reset_tokens', ['email' => $email]);
     }
+
+    public function test_valid_token_resets_the_password_and_revokes_sessions(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'reset-ok@example.com',
+            'password' => Hash::make('old-password'),
+            'has_password' => true,
+        ]);
+        $user->createToken('device');
+        $token = 'valid-reset-token';
+        DB::table('password_reset_tokens')->insert([
+            'email' => $user->email,
+            'token' => Hash::make($token),
+            'created_at' => now(),
+        ]);
+
+        $this->postJson('/api/reset-password', [
+            'email' => $user->email,
+            'token' => $token,
+            'password' => 'new-password-123',
+            'password_confirmation' => 'new-password-123',
+        ])->assertOk();
+
+        $fresh = $user->fresh();
+        $this->assertTrue(Hash::check('new-password-123', $fresh->password));
+        $this->assertTrue((bool) $fresh->has_password);
+        $this->assertNotNull($fresh->password_updated_at);
+        $this->assertDatabaseMissing('password_reset_tokens', ['email' => $user->email]);
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
+
+    public function test_reset_password_rejects_wrong_or_expired_tokens(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'reset-bad@example.com',
+            'password' => Hash::make('old-password'),
+        ]);
+        DB::table('password_reset_tokens')->insert([
+            'email' => $user->email,
+            'token' => Hash::make('valid-token'),
+            'created_at' => now()->subMinutes(61),
+        ]);
+
+        $this->postJson('/api/reset-password', [
+            'email' => $user->email,
+            'token' => 'wrong-token',
+            'password' => 'new-password-123',
+            'password_confirmation' => 'new-password-123',
+        ])->assertStatus(400);
+
+        $this->assertTrue(Hash::check('old-password', $user->fresh()->password));
+
+        $this->postJson('/api/reset-password', [
+            'email' => $user->email,
+            'token' => 'valid-token',
+            'password' => 'new-password-123',
+            'password_confirmation' => 'new-password-123',
+        ])->assertStatus(400);
+
+        $this->assertTrue(Hash::check('old-password', $user->fresh()->password));
+        $this->assertDatabaseMissing('password_reset_tokens', ['email' => $user->email]);
+    }
 }

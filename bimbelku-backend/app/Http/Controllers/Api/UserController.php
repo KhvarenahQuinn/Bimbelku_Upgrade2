@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\AdminPermissionCatalog;
 use App\Support\EducationCatalog;
+use App\Support\PublicMedia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -20,10 +22,10 @@ class UserController extends Controller
     public function show(Request $request)
     {
         $user = Auth::user();
-        
+
         // Cek apakah user punya avatar (kolom 'avatar' di tabel users)
         // Jika Anda belum punya kolom 'avatar', nanti saya beri panduan migrasinya di bawah.
-        $avatarUrl = \App\Support\PublicMedia::url($user->avatar);
+        $avatarUrl = PublicMedia::url($user->avatar);
 
         return response()->json([
             'id' => $user->id,
@@ -45,7 +47,7 @@ class UserController extends Controller
             'admin_type' => $user->role === 'admin' ? ($user->isPrimaryAdmin() ? 'super_admin' : 'admin') : null,
             'is_primary_admin' => $user->role === 'admin' && $user->isPrimaryAdmin(),
             'admin_permissions' => $user->role === 'admin'
-                ? \App\Support\AdminPermissionCatalog::allCodes()
+                ? AdminPermissionCatalog::allCodes()
                 : [],
             'student_birth_date' => $user->role === 'student'
                 ? $user->date_of_birth?->toDateString()
@@ -62,7 +64,8 @@ class UserController extends Controller
                 ]
                 : null,
             'avatar_url' => $avatarUrl,
-            'profile_cover_url' => \App\Support\PublicMedia::url($user->profile_cover),
+            'profile_cover_url' => PublicMedia::url($user->profile_cover),
+            'has_password' => (bool) ($user->has_password ?? true),
             'password_updated_at' => $user->password_updated_at?->toIso8601String(),
         ]);
     }
@@ -98,7 +101,7 @@ class UserController extends Controller
             'location_consent' => ['nullable', 'boolean'],
         ]);
         $normalizedPhone = preg_replace('/\D+/', '', (string) $request->input('phone'));
-        if (!is_string($normalizedPhone) || !preg_match('/^[0-9]{8,15}$/', $normalizedPhone)) {
+        if (! is_string($normalizedPhone) || ! preg_match('/^[0-9]{8,15}$/', $normalizedPhone)) {
             throw ValidationException::withMessages([
                 'phone' => 'Nomor WhatsApp/telepon harus berisi 8–15 angka.',
             ]);
@@ -167,8 +170,8 @@ class UserController extends Controller
             'data' => [
                 'name' => $user->name,
                 'phone' => $user->phone,
-                'avatar_url' => \App\Support\PublicMedia::url($user->avatar),
-                'profile_cover_url' => \App\Support\PublicMedia::url($user->profile_cover),
+                'avatar_url' => PublicMedia::url($user->avatar),
+                'profile_cover_url' => PublicMedia::url($user->profile_cover),
                 'student_education_level' => $user->student_education_level,
                 'grade' => $user->grade,
                 'school_name' => $user->school_name,
@@ -178,26 +181,59 @@ class UserController extends Controller
                 'latitude' => $user->latitude,
                 'longitude' => $user->longitude,
                 'location_consent_at' => $user->location_consent_at?->toIso8601String(),
-            ]
+            ],
         ]);
     }
 
     public function updatePassword(Request $request)
     {
-        $validated = $request->validate([
-            'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password'],
-        ]);
-        $user = $request->user();
+        return $this->persistAccountPassword($request);
+    }
 
-        if (!Hash::check($validated['current_password'], $user->password)) {
-            return response()->json([
-                'message' => 'Kata sandi saat ini tidak sesuai.',
-            ], 422);
+    /**
+     * Dipakai akun yang masuk lewat Google OAuth. Akun seperti ini belum
+     * pernah menetapkan password lokal, jadi current_password tidak diminta.
+     * Endpoint ini tetap aman jika akun sudah punya password: current_password
+     * akan diwajibkan seperti perubahan password biasa.
+     */
+    public function setInitialPassword(Request $request)
+    {
+        return $this->persistAccountPassword($request);
+    }
+
+    private function persistAccountPassword(Request $request)
+    {
+        $user = $request->user();
+        $hasPassword = (bool) ($user->has_password ?? true);
+
+        // Terima dua gaya penamaan: password/new_password beserta konfirmasinya.
+        if (! $request->filled('password')) {
+            $request->merge(['password' => $request->input('new_password')]);
+        }
+        if (! $request->filled('password_confirmation')) {
+            $request->merge(['password_confirmation' => $request->input('new_password_confirmation')]);
+        }
+
+        $rules = [
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ];
+
+        if ($hasPassword) {
+            $rules['current_password'] = ['required', 'string'];
+            $rules['password'][] = 'different:current_password';
+        }
+
+        $validated = $request->validate($rules);
+
+        if ($hasPassword && ! Hash::check($validated['current_password'], (string) $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => 'Kata sandi saat ini tidak sesuai.',
+            ]);
         }
 
         $user->forceFill([
             'password' => Hash::make($validated['password']),
+            'has_password' => true,
             'password_updated_at' => now(),
         ])->save();
 
@@ -207,7 +243,10 @@ class UserController extends Controller
             ->delete();
 
         return response()->json([
-            'message' => 'Kata sandi berhasil diperbarui. Sesi lain telah ditutup.',
+            'message' => $hasPassword
+                ? 'Kata sandi berhasil diperbarui. Sesi lain telah ditutup.'
+                : 'Kata sandi akun berhasil dibuat. Sesi lain telah ditutup.',
+            'has_password' => true,
             'password_updated_at' => $user->password_updated_at?->toIso8601String(),
         ]);
     }

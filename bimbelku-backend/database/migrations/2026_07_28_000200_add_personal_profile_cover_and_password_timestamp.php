@@ -8,15 +8,15 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('users')) {
+        if (! Schema::hasTable('users')) {
             return;
         }
 
         Schema::table('users', function (Blueprint $table) {
-            if (!Schema::hasColumn('users', 'profile_cover')) {
+            if (! Schema::hasColumn('users', 'profile_cover')) {
                 $table->string('profile_cover')->nullable();
             }
-            if (!Schema::hasColumn('users', 'password_updated_at')) {
+            if (! Schema::hasColumn('users', 'password_updated_at')) {
                 $table->timestamp('password_updated_at')->nullable();
             }
         });

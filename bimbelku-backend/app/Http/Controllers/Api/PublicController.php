@@ -11,16 +11,15 @@ class PublicController extends Controller
 {
     public function getFooterSettings(Request $request)
     {
-        $settings = Cache::remember('public.footer_settings.v1', now()->addMinutes(10), fn () =>
-            Setting::query()
-                ->whereIn('key', [
-                    'footer_address',
-                    'footer_phone',
-                    'footer_email',
-                    'footer_ig',
-                    'footer_tiktok',
-                ])
-                ->pluck('value', 'key')
+        $settings = Cache::remember('public.footer_settings.v1', now()->addMinutes(10), fn () => Setting::query()
+            ->whereIn('key', [
+                'footer_address',
+                'footer_phone',
+                'footer_email',
+                'footer_ig',
+                'footer_tiktok',
+            ])
+            ->pluck('value', 'key')
         );
 
         $response = response()->json($settings);

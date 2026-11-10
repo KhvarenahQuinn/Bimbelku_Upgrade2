@@ -1,5 +1,5 @@
 import { notify } from "@/lib/notify";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
@@ -17,6 +17,7 @@ import {
   UserRound,
   Users,
   WifiOff,
+  X,
 } from "lucide-react";
 import axios from "axios";
 
@@ -30,7 +31,7 @@ type Subject = {
   status: string;
   allocated_sessions: number;
   teacher?: { name: string; avatar_url?: string | null } | null;
-  sessions: Array<{ start_at: string; status: string }>;
+  sessions: Array<{ id?: number; start_at: string; status: string }>;
 };
 type PackageData = {
   id: number;
@@ -43,7 +44,16 @@ type PackageData = {
   expires_at?: string | null;
   payment_due_at?: string | null;
   subjects: Subject[];
-  latest_order?: { id: number; status: string } | null;
+  latest_order?: { id: number; status: string; payment_provider?: string | null } | null;
+  latest_refund?: {
+    id?: number;
+    status: string;
+    destination_method?: string | null;
+    destination_selected_at?: string | null;
+    stage_label?: string | null;
+    status_message?: string | null;
+    can_switch_to_balance?: boolean;
+  } | null;
 };
 type DashboardData = {
   packages: PackageData[];
@@ -71,6 +81,18 @@ type DashboardData = {
 
 const activeStatuses = ["active", "payment_submitted", "awaiting_payment", "payment_rejected", "partially_paid", "matching", "teacher_pending", "no_teacher", "refund_pending"];
 
+const DISMISSED_REFUNDS_KEY = "bimbelku_dismissed_refunds";
+
+const loadDismissedRefunds = (): Set<number> => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DISMISSED_REFUNDS_KEY) || "[]") as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((item): item is number => typeof item === "number"));
+  } catch {
+    return new Set();
+  }
+};
+
 const storedStudentName = () => {
   try {
     const value = JSON.parse(localStorage.getItem("user") || "null")?.name;
@@ -92,8 +114,22 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dismissedRefunds, setDismissedRefunds] = useState<Set<number>>(() => loadDismissedRefunds());
 
-  const load = async () => {
+  const dismissRefund = (refundId: number) => {
+    setDismissedRefunds((current) => {
+      const next = new Set(current);
+      next.add(refundId);
+      try {
+        localStorage.setItem(DISMISSED_REFUNDS_KEY, JSON.stringify([...next]));
+      } catch {
+        // Penyimpanan lokal penuh/blocked: banner tetap tersembunyi selama sesi ini.
+      }
+      return next;
+    });
+  };
+
+  const load = useCallback(async () => {
     try {
       // Nama dapat tampil dari penyimpanan lokal. Request profil tetap diperbarui
       // di belakang layar sehingga dashboard tidak menunggu endpoint kedua.
@@ -149,11 +185,23 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("bimbelku:data-changed", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("bimbelku:data-changed", refresh);
+    };
+  }, [load]);
 
   const retry = () => {
     setError(null);
@@ -208,7 +256,7 @@ export default function Dashboard() {
           <ErrorState error={error} onRetry={retry} />
         ) : (
           <>
-            <AdaptiveCard packageData={activePackage} nextSession={data.next_session} />
+            <AdaptiveCard packageData={activePackage} nextSession={data.next_session} dismissedRefundIds={dismissedRefunds} onDismissRefund={dismissRefund} />
 
             <Link to="/student/kelas-murah" className="group flex min-w-0 items-center justify-between gap-4 overflow-hidden rounded-[1.5rem] border border-violet-100 bg-gradient-to-br from-white via-violet-50 to-fuchsia-50 p-5 shadow-sm transition hover-rise-half hover-shadow-lg sm:rounded-[2rem]">
               <div className="flex min-w-0 items-center gap-4"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white shadow-lg"><Users size={21} /></span><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-violet-600">Kelas online bersama</p><h2 className="mt-1 text-lg font-black text-slate-900">Kelas Bersama</h2><p className="mt-1 text-sm text-slate-600">Lihat kelas yang dibuat admin dengan kuota dan harga hemat.</p></div></div><ArrowRight className="shrink-0 text-violet-600 transition group-hover:translate-x-1" size={20} /></Link>
@@ -330,8 +378,8 @@ export default function Dashboard() {
                   <Link to="/student/my-classes" className="shrink-0 pt-0.5 text-xs font-black text-indigo-600 sm:text-sm">Semua</Link>
                 </div>
                 <div className="mt-4 space-y-3">
-                  {nearestSubjectSessions.length ? nearestSubjectSessions.map((session) => (
-                    <div key={`${session.subject}-${session.start_at}`} className="flex min-w-0 items-center gap-3 rounded-2xl bg-slate-50 p-4">
+                  {nearestSubjectSessions.length ? nearestSubjectSessions.map((session, index) => (
+                    <div key={session.id ?? `${session.subject}-${session.start_at}-${index}`} className="flex min-w-0 items-center gap-3 rounded-2xl bg-slate-50 p-4">
                       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-indigo-600 shadow-sm"><Clock3 size={18} /></div>
                       <div className="min-w-0 flex-1"><p className="truncate text-sm font-black text-slate-800 sm:text-base">{session.subject}</p><p className="mt-1 truncate text-[11px] text-slate-500 sm:text-xs">{new Date(session.start_at).toLocaleString("id-ID", { weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p></div>
                     </div>
@@ -376,7 +424,7 @@ function DashboardSkeleton() {
   );
 }
 
-function AdaptiveCard({ packageData, nextSession }: { packageData?: PackageData; nextSession?: DashboardData["next_session"] }) {
+function AdaptiveCard({ packageData, nextSession, dismissedRefundIds = new Set<number>(), onDismissRefund }: { packageData?: PackageData; nextSession?: DashboardData["next_session"]; dismissedRefundIds?: Set<number>; onDismissRefund?: (refundId: number) => void }) {
   if (!packageData) {
     return <ActionCard icon={Radar} eyebrow="Mulai belajar" title="Pilih Paket Belajar" description="Tentukan jumlah sesi, mapel, dan jadwal sejak awal." to="/student/packages/new" action="Lihat Paket" />;
   }
@@ -397,7 +445,25 @@ function AdaptiveCard({ packageData, nextSession }: { packageData?: PackageData;
     return <ActionCard icon={RefreshCw} eyebrow="Bukti sudah masuk" title="Pembayaran Diperiksa Admin" description="Pencarian tutor akan dimulai segera setelah bukti disetujui." to="/student/history" action="Lihat Status" />;
   }
   if (packageData.status === "refund_pending") {
-    return <ActionCard icon={RefreshCw} eyebrow="Dana aman" title="Refund Sedang Diproses" description="Admin akan mengirim pengembalian dana dan bukti transfer." to="/student/history" action="Lihat Status" />;
+    const refund = packageData.latest_refund;
+    if (refund?.status === "paid") {
+      // Banner "Refund Selesai" bisa ditutup dan tidak muncul lagi setelah dibaca.
+      if (refund.id && dismissedRefundIds.has(refund.id)) return null;
+      return <ActionCard icon={RefreshCw} eyebrow="Refund selesai" title="Dana Sudah Dikembalikan" description={refund.destination_method === "bimbelku_balance" ? "Refund sudah masuk ke Saldo BimbelKu dan dapat dipakai untuk belajar." : "Pengembalian dana sudah selesai. Detail tujuan dan mutasi dapat dilihat di riwayat transaksi."} to="/student/history" action="Lihat Detail" onDismiss={refund.id && onDismissRefund ? () => onDismissRefund(refund.id) : undefined} />;
+    }
+    if (refund?.can_switch_to_balance) {
+      return <ActionCard icon={RefreshCw} eyebrow="Perlu keputusan" title="Refund ke Metode Asal Gagal" description="Pilih Saldo BimbelKu agar dana tetap dapat dipakai untuk Paket Belajar atau Kelas Bersama." to="/student/packages" action="Pilih Saldo" />;
+    }
+    if (refund && !refund.destination_selected_at) {
+      return <ActionCard icon={RefreshCw} eyebrow="Dana aman" title="Pilih Tujuan Refund" description="Pilih Saldo BimbelKu atau metode pembayaran asal. Pembayaran via Xendit (QRIS, e-wallet, VA) dikembalikan otomatis ke metode asal." to="/student/packages" action="Pilih Tujuan" />;
+    }
+    if (refund?.destination_method === "xendit_original") {
+      return <ActionCard icon={RefreshCw} eyebrow="Diproses otomatis" title="Refund ke Metode Pembayaran Asal" description="Dana dikembalikan otomatis melalui Xendit. Tidak perlu menunggu bukti transfer admin." to="/student/history" action="Lihat Status" />;
+    }
+    if (refund?.destination_method === "bimbelku_balance") {
+      return <ActionCard icon={RefreshCw} eyebrow="Diproses otomatis" title="Refund ke Saldo BimbelKu" description="Dana sedang dikreditkan ke Saldo BimbelKu. Status diperbarui otomatis tanpa persetujuan admin." to="/student/history" action="Lihat Status" />;
+    }
+    return <ActionCard icon={RefreshCw} eyebrow="Dana aman" title="Refund Sedang Diproses" description="Status pengembalian dana diperbarui otomatis. Buka riwayat transaksi untuk detail tujuan refund." to="/student/history" action="Lihat Status" />;
   }
   if (nextSession) {
     const modeIcon = nextSession.learning_mode === "online" ? Monitor : MapPin;
@@ -406,8 +472,30 @@ function AdaptiveCard({ packageData, nextSession }: { packageData?: PackageData;
   return <ActionCard icon={BookOpenCheck} eyebrow="Paket aktif" title={`${packageData.remaining_sessions} sesi masih tersedia`} description="Buka Kelas Saya untuk melihat tutor, jadwal, dan laporan." to="/student/my-classes" action="Buka Kelas Saya" />;
 }
 
-function ActionCard({ icon: Icon, eyebrow, title, description, to, action, pulse = false }: { icon: typeof Radar; eyebrow: string; title: string; description: string; to: string; action: string; pulse?: boolean }) {
-  return <section className="max-w-full overflow-hidden rounded-[2rem] border border-indigo-100 bg-gradient-to-br from-white to-indigo-50 p-5 shadow-sm sm:p-6"><div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-4"><div className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 ${pulse ? "animate-pulse" : ""}`}><Icon size={24} /></div><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.18em] text-indigo-600">{eyebrow}</p><h2 className="mt-1 break-words text-lg font-black text-slate-900 sm:text-xl">{title}</h2><p className="mt-1 break-words text-sm text-slate-500">{description}</p></div></div><Link to={to} className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white sm:w-auto">{action} <ArrowRight size={16} /></Link></div></section>;
+function ActionCard({ icon: Icon, eyebrow, title, description, to, action, pulse = false, onDismiss }: { icon: typeof Radar; eyebrow: string; title: string; description: string; to: string; action: string; pulse?: boolean; onDismiss?: () => void }) {
+  return <section className="relative max-w-full overflow-hidden rounded-[2rem] border border-indigo-100 bg-gradient-to-br from-white to-indigo-50 p-5 shadow-sm sm:p-6">
+    {onDismiss && (
+      <button
+        type="button"
+        aria-label={`Tutup notifikasi ${eyebrow}`}
+        onClick={onDismiss}
+        className="absolute right-3 top-3 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/80 text-slate-500 transition hover:bg-slate-900 hover:text-white"
+      >
+        <X size={16} />
+      </button>
+    )}
+    <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-4">
+        <div className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 ${pulse ? "animate-pulse" : ""}`}><Icon size={24} /></div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[.18em] text-indigo-600">{eyebrow}</p>
+          <h2 className="mt-1 break-words text-lg font-black text-slate-900 sm:text-xl">{title}</h2>
+          <p className="mt-1 break-words text-sm text-slate-500">{description}</p>
+        </div>
+      </div>
+      <Link to={to} className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white sm:w-auto">{action} <ArrowRight size={16} /></Link>
+    </div>
+  </section>;
 }
 
 function Summary({ icon: Icon, label, value, color }: { icon: typeof BookOpenCheck; label: string; value: string; color: string }) {

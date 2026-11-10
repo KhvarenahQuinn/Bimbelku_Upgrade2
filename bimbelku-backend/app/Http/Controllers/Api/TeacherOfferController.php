@@ -23,10 +23,17 @@ class TeacherOfferController extends Controller
         $matchingService->expireStaleOffersForTeacher($request->user()->id);
         $validated = $request->validate([
             'scope' => ['nullable', Rule::in(['active', 'history'])],
+            'status' => ['nullable', Rule::in(['all', 'accepted', 'rejected', 'expired'])],
         ]);
         $scope = $validated['scope'] ?? 'active';
+        $statusFilter = $validated['status'] ?? 'all';
         $statuses = $scope === 'history'
-            ? ['accepted', 'rejected', 'expired', 'student_rejected', 'cancelled']
+            ? match ($statusFilter) {
+                'accepted' => ['accepted'],
+                'rejected' => ['rejected'],
+                'expired' => ['expired'],
+                default => ['accepted', 'rejected', 'expired', 'student_rejected', 'cancelled'],
+            }
             : ['pending'];
 
         $offers = TeacherOffer::query()

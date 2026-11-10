@@ -20,6 +20,7 @@ class AdminSeeder extends Seeder
             $this->command?->warn(
                 'Admin tidak dibuat. Isi PRIMARY_ADMIN_EMAIL atau SEED_ADMIN_EMAIL, serta SEED_ADMIN_PASSWORD minimal 12 karakter.'
             );
+
             return;
         }
 
@@ -28,6 +29,7 @@ class AdminSeeder extends Seeder
             $this->command?->error(
                 'Admin tidak dibuat karena email tersebut sudah dipakai akun murid atau tutor.'
             );
+
             return;
         }
         $admin = User::query()->updateOrCreate(

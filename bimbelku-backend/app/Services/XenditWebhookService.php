@@ -71,12 +71,13 @@ class XenditWebhookService
                 'gateway_refund_id' => Arr::get($data, 'id') ?: $refund->gateway_refund_id,
                 'gateway_status' => $status,
                 'gateway_failure_code' => Arr::get($data, 'failure_code'),
+                'gateway_failure_message' => Arr::get($data, 'failure_message') ?: Arr::get($data, 'message'),
                 'gateway_processed_at' => now(),
             ])->save();
             if ($eventType === 'refund.succeeded' || $status === 'SUCCEEDED') {
                 $this->refunds->settle($refund->fresh(), 'xendit_original');
             } elseif (in_array($status, ['FAILED', 'REJECTED'], true)) {
-                $this->refunds->notifyManualReview($refund->fresh());
+                $this->refunds->markGatewayFailure($refund->fresh());
             }
             $event->update(['status' => 'processed', 'error' => null, 'processed_at' => now()]);
         } catch (Throwable $exception) {

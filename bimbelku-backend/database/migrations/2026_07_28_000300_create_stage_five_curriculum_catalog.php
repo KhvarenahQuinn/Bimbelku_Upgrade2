@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('curriculum_subjects')) {
+        if (! Schema::hasTable('curriculum_subjects')) {
             Schema::create('curriculum_subjects', function (Blueprint $table) {
                 $table->id();
                 $table->string('name', 150);
@@ -27,7 +27,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('curriculum_chapters')) {
+        if (! Schema::hasTable('curriculum_chapters')) {
             Schema::create('curriculum_chapters', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('curriculum_subject_id')
@@ -82,7 +82,7 @@ return new class extends Migration
 
     private function addSubjectReference(string $tableName): void
     {
-        if (!Schema::hasTable($tableName) || Schema::hasColumn($tableName, 'curriculum_subject_id')) {
+        if (! Schema::hasTable($tableName) || Schema::hasColumn($tableName, 'curriculum_subject_id')) {
             return;
         }
 
@@ -97,10 +97,10 @@ return new class extends Migration
     private function openLegacyTeacherDecisions(): void
     {
         if (
-            !Schema::hasTable('bookings')
-            || !Schema::hasTable('orders')
-            || !Schema::hasTable('booking_participants')
-            || !Schema::hasTable('booking_requests')
+            ! Schema::hasTable('bookings')
+            || ! Schema::hasTable('orders')
+            || ! Schema::hasTable('booking_participants')
+            || ! Schema::hasTable('booking_requests')
         ) {
             return;
         }

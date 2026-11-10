@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('session_reports') && !Schema::hasColumn('session_reports', 'reported_by')) {
+        if (Schema::hasTable('session_reports') && ! Schema::hasColumn('session_reports', 'reported_by')) {
             Schema::table('session_reports', function (Blueprint $table) {
                 $table->foreignId('reported_by')->nullable()->constrained('users')->nullOnDelete();
             });

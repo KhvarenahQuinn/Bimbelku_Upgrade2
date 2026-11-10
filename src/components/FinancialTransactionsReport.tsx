@@ -1,11 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
-import { FileText, Loader2, RefreshCw, Search } from "lucide-react";
+import { Check, Copy, FileText, Loader2, RefreshCw, Search } from "lucide-react";
 import http, { getApiError } from "@/lib/http";
 import { notify } from "@/lib/notify";
 import { showFilePreview } from "@/lib/filePreview";
 
 type Entry = { id: number; account_code: string; side: "debit" | "credit"; amount: string; currency: string };
-type Row = { id: number; uuid: string; event_type: string; reference_type?: string | null; reference_id?: number | null; description: string; occurred_at: string; total_debit: string | number; entries: Entry[] };
+type Row = {
+  id: number;
+  uuid: string;
+  event_type: string;
+  reference_type?: string | null;
+  reference_id?: number | null;
+  reference_label?: string | null;
+  user_name?: string | null;
+  user_email?: string | null;
+  external_references?: Array<{ label: string; value: string }>;
+  payment_channel?: string | null;
+  description: string;
+  occurred_at: string;
+  total_debit: string | number;
+  entries: Entry[];
+};
 type Report = {
   summary: { payments_received: number; platform_revenue: number; refunds_completed: number; payouts_completed: number; tutor_payable_balance: number };
   event_types: string[];
@@ -103,10 +118,87 @@ export default function FinancialTransactionsReport() {
     </form>
 
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="bg-slate-950 text-xs uppercase tracking-wide text-white"><tr><th className="px-4 py-3">Waktu</th><th className="px-4 py-3">Jenis</th><th className="px-4 py-3">Keterangan</th><th className="px-4 py-3">Jurnal</th><th className="px-4 py-3 text-right">Nilai</th></tr></thead><tbody>{loading ? <tr><td colSpan={5} className="p-12 text-center"><Loader2 className="mx-auto animate-spin text-orange-600" /></td></tr> : data?.data.length ? data.data.map((row) => <tr key={row.id} className="border-b border-slate-100 align-top"><td className="whitespace-nowrap px-4 py-4 text-xs font-semibold text-slate-600">{dateTime(row.occurred_at)}</td><td className="px-4 py-4"><p className="font-black text-slate-900">{row.event_type.replaceAll("_", " ")}</p><p className="mt-1 text-xs text-slate-400">#{row.reference_id || "-"}</p></td><td className="max-w-sm px-4 py-4"><p className="font-semibold text-slate-700">{row.description}</p><p className="mt-1 truncate text-[10px] text-slate-400">{row.uuid}</p></td><td className="px-4 py-4">{row.entries.map((entry) => <p key={entry.id} className="mb-1 text-xs"><span className="font-black text-slate-700">{entry.account_code.replaceAll("_", " ")}</span> · {entry.side === "debit" ? "Debit" : "Kredit"} · {money(entry.amount)}</p>)}</td><td className="whitespace-nowrap px-4 py-4 text-right font-black text-slate-900">{money(row.total_debit)}</td></tr>) : <tr><td colSpan={5} className="p-12 text-center text-slate-500">Tidak ada transaksi untuk filter ini.</td></tr>}</tbody></table></div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1240px] text-left text-sm">
+          <thead className="bg-slate-950 text-xs uppercase tracking-wide text-white">
+            <tr>
+              <th className="px-4 py-3">Waktu</th>
+              <th className="px-4 py-3">Jenis / referensi</th>
+              <th className="px-4 py-3">Pengguna</th>
+              <th className="px-4 py-3">Referensi Xendit</th>
+              <th className="px-4 py-3">Keterangan</th>
+              <th className="px-4 py-3">Jurnal</th>
+              <th className="px-4 py-3 text-right">Nilai</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={7} className="p-12 text-center"><Loader2 className="mx-auto animate-spin text-orange-600" /></td></tr>
+            ) : data?.data.length ? data.data.map((row) => (
+              <tr key={row.id} className="border-b border-slate-100 align-top">
+                <td className="whitespace-nowrap px-4 py-4 text-xs font-semibold text-slate-600">{dateTime(row.occurred_at)}</td>
+                <td className="px-4 py-4">
+                  <p className="font-black text-slate-900">{row.event_type.replaceAll("_", " ")}</p>
+                  <p className="mt-1 text-xs text-slate-500">{row.reference_label || `#${row.reference_id || "-"}`}</p>
+                  {row.payment_channel && <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">{row.payment_channel}</span>}
+                </td>
+                <td className="px-4 py-4">
+                  {row.user_name ? (
+                    <>
+                      <p className="font-bold text-slate-900">{row.user_name}</p>
+                      <p className="mt-1 break-all text-xs text-slate-500">{row.user_email || "Email tidak tersedia"}</p>
+                    </>
+                  ) : <span className="text-xs text-slate-400">Tidak terkait pengguna</span>}
+                </td>
+                <td className="max-w-[260px] px-4 py-4">
+                  {row.external_references?.length ? row.external_references.map((reference) => (
+                    <ExternalReference key={`${reference.label}-${reference.value}`} label={reference.label} value={reference.value} />
+                  )) : <span className="text-xs text-slate-400">Tanpa referensi eksternal</span>}
+                </td>
+                <td className="max-w-sm px-4 py-4">
+                  <p className="font-semibold text-slate-700">{row.description}</p>
+                  <p className="mt-1 truncate text-[10px] text-slate-400">{row.uuid}</p>
+                </td>
+                <td className="px-4 py-4">{row.entries.map((entry) => <p key={entry.id} className="mb-1 text-xs"><span className="font-black text-slate-700">{entry.account_code.replaceAll("_", " ")}</span> · {entry.side === "debit" ? "Debit" : "Kredit"} · {money(entry.amount)}</p>)}</td>
+                <td className="whitespace-nowrap px-4 py-4 text-right font-black text-slate-900">{money(row.total_debit)}</td>
+              </tr>
+            )) : <tr><td colSpan={7} className="p-12 text-center text-slate-500">Tidak ada transaksi untuk filter ini.</td></tr>}
+          </tbody>
+        </table>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4 text-sm"><p className="text-slate-500">Menampilkan {data?.meta.from || 0}–{data?.meta.to || 0} dari {data?.meta.total || 0} jurnal</p><div className="flex items-center gap-2"><button disabled={!data || data.meta.current_page <= 1} onClick={() => setApplied((current) => ({ ...current, page: current.page - 1 }))} className="rounded-lg border px-3 py-2 font-bold disabled:opacity-40">Sebelumnya</button><span className="font-black">Halaman {data?.meta.current_page || 1} / {data?.meta.last_page || 1}</span><button disabled={!data || data.meta.current_page >= data.meta.last_page} onClick={() => setApplied((current) => ({ ...current, page: current.page + 1 }))} className="rounded-lg border px-3 py-2 font-bold disabled:opacity-40">Berikutnya</button></div></div>
     </div>
   </div>;
+}
+
+function ExternalReference({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      notify.error("Tidak dapat menyalin — coba salin manual.");
+    }
+  };
+
+  return (
+    <p className="mb-1 flex items-start gap-1 font-mono text-xs leading-5 text-slate-700">
+      <span className="font-sans font-bold text-slate-500">{label}: </span>
+      <span className="min-w-0 break-all">{value}</span>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={`Salin ${label}`}
+        title={`Salin ${label}`}
+        className="shrink-0 rounded-md border border-slate-200 bg-white p-0.5 text-slate-400 transition hover:border-orange-300 hover:text-orange-600"
+      >
+        {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+      </button>
+    </p>
+  );
 }
 
 function Filter({ label, children }: { label: string; children: React.ReactNode }) {

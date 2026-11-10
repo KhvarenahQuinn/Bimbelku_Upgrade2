@@ -27,6 +27,32 @@ class Refund extends Model
         'last_reconciled_at' => 'datetime',
     ];
 
+    /**
+     * Refunds caused by an objective condition never wait for admin approval.
+     * Keep this rule in one place so the observer, settlement service, and
+     * scheduler cannot drift apart.
+     */
+    public function isAutomatic(): bool
+    {
+        if (in_array($this->source_type, ['teacher_replacement', 'late_gateway_payment', 'no_teacher'], true)) {
+            return true;
+        }
+
+        if ($this->order?->learning_package_id && $this->destination_method === 'bimbelku_balance') {
+            return true;
+        }
+
+        return in_array(mb_strtolower(trim((string) $this->reason)), [
+            'tutor tidak ditemukan',
+            'paket dibatalkan murid saat pencarian tutor',
+        ], true);
+    }
+
+    public function gatewayFailed(): bool
+    {
+        return in_array((string) $this->gateway_status, ['FAILED', 'REJECTED'], true);
+    }
+
     protected function automaticPublicCodeColumn(): string
     {
         return 'refund_code';

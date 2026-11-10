@@ -106,6 +106,7 @@ class PasswordResetController extends Controller
         $user = User::where('email', $email)->first();
         if ($user) {
             $user->password = Hash::make($request->password);
+            $user->has_password = true;
             $user->password_updated_at = now();
             $user->save();
             $user->tokens()->delete();

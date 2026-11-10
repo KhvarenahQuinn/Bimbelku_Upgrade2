@@ -66,11 +66,13 @@ class StageSixCFinalRegressionTest extends TestCase
         $this->postJson('/api/login', [
             'email' => $secondary->email,
             'password' => 'password',
+            'login_portal' => 'admin',
         ])->assertOk();
 
         $this->postJson('/api/login', [
             'email' => $primary->email,
             'password' => 'password',
+            'login_portal' => 'admin',
         ])->assertOk();
     }
 
@@ -122,6 +124,7 @@ class StageSixCFinalRegressionTest extends TestCase
         ])->assertOk();
         $this->assertSoftDeleted('users', ['id' => $adminId]);
     }
+
     public function test_admin_seeder_never_silently_disables_secondary_admins(): void
     {
         $seeder = (string) file_get_contents(database_path('seeders/AdminSeeder.php'));
@@ -130,6 +133,7 @@ class StageSixCFinalRegressionTest extends TestCase
         $this->assertStringNotContainsString("'admin_type' => 'legacy_disabled'", $seeder);
         $this->assertStringNotContainsString('$legacyAdmin->tokens()->delete()', $seeder);
     }
+
     public function test_student_teacher_and_admin_routes_remain_isolated(): void
     {
         $student = User::factory()->create([

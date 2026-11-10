@@ -28,7 +28,7 @@ class TutorAvailabilityController extends Controller
         ]);
 
         $allowedGrades = EducationCatalog::GRADES_BY_LEVEL[$validated['education_level']] ?? [];
-        if (!in_array($validated['grade'], $allowedGrades, true)) {
+        if (! in_array($validated['grade'], $allowedGrades, true)) {
             return response()->json([
                 'message' => 'Kelas tidak sesuai dengan jenjang yang dipilih.',
             ], 422);
@@ -60,7 +60,7 @@ class TutorAvailabilityController extends Controller
             ], 422);
         }
 
-        $preview = new BookingRequest();
+        $preview = new BookingRequest;
         $preview->forceFill([
             'subject_name' => trim($validated['subject_name']),
             'education_level' => $validated['education_level'],

@@ -218,6 +218,7 @@ class PublicWebsiteCmsTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonPath('message', 'Bukti privat wajib diunggah sebelum testimoni ke-1 ditampilkan.');
     }
+
     private function validPayload(): array
     {
         $settings = $this->getJson('/api/admin/website-settings')->assertOk()->json('settings');

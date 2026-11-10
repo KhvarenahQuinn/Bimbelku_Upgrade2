@@ -13,6 +13,10 @@ use Illuminate\Support\Facades\DB;
 
 class PartialPackageRefundService
 {
+    public function __construct(
+        private readonly ScheduleReleaseService $scheduleRelease,
+    ) {}
+
     public function queueTeacherReplacement(TeacherReplacementRequest $replacement): Refund
     {
         return DB::transaction(function () use ($replacement) {
@@ -70,6 +74,7 @@ class PartialPackageRefundService
             $locked->matchingRequest?->update(['status' => 'refund_pending', 'matched_teacher_id' => null]);
             foreach ($locked->sessions as $row) {
                 $row->packageSession->update(['status' => 'refund_pending']);
+                $this->scheduleRelease->releaseSession($row->packageSession, 'refund_pending');
                 $row->update(['status' => 'refund_pending']);
             }
             $locked->transitionTo(TeacherReplacementState::REFUND_PENDING);
@@ -95,7 +100,7 @@ class PartialPackageRefundService
             $rows = $replacement->sessions()->lockForUpdate()->get();
             PackageSession::query()->whereIn('id', $rows->pluck('package_session_id'))->lockForUpdate()->get();
             foreach ($rows as $row) {
-                $row->packageSession()->update(['status' => 'refunded', 'booking_id' => null]);
+                $this->scheduleRelease->releaseSession($row->packageSession, 'refunded');
                 $row->update(['status' => 'refunded']);
             }
             $replacement->transitionTo(TeacherReplacementState::REFUNDED, ['completed_at' => now()]);

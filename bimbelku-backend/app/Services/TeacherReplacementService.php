@@ -108,7 +108,6 @@ class TeacherReplacementService
                 $row->update(['status' => 'matching']);
             }
 
-
             $first = $rows->sortBy(fn ($row) => $row->packageSession->scheduled_start_at)->first();
             $oldRequest = $first->oldBooking->bookingRequest;
             $firstSession = $first->packageSession;
@@ -252,7 +251,10 @@ class TeacherReplacementService
                 $end = $start->copy()->addHours($duration);
                 abort_if(PackageSession::query()
                     ->whereNotIn('id', $sessionIds)
-                    ->whereHas('subject.package', fn ($query) => $query->where('student_id', $student->id))
+                    ->whereHas('subject.package', fn ($query) => $query
+                        ->where('student_id', $student->id)
+                        ->whereNotIn('status', ['cancelled', 'payment_expired', 'completed', 'refund_pending', 'refunded']))
+                    ->whereNotIn('status', ['cancelled', 'payment_expired', 'completed', 'refund_pending', 'refunded'])
                     ->where('scheduled_start_at', '<', $end)
                     ->where('scheduled_end_at', '>', $start)
                     ->exists(), 422, 'Jadwal baru bertabrakan dengan sesi belajar lain.');

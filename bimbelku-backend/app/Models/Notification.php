@@ -33,7 +33,9 @@ class Notification extends Model
     protected static function booted(): void
     {
         static::creating(function (Notification $notification) {
-            if (! $notification->target_url || $notification->attention_key) return;
+            if (! $notification->target_url || $notification->attention_key) {
+                return;
+            }
             $target = (string) $notification->target_url;
             $notification->attention_key = match (true) {
                 str_starts_with($target, '/student/packages') => 'student_order_status_changed',

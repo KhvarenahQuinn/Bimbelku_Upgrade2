@@ -32,18 +32,32 @@
   <td>Hak tutor tersisa<strong>Rp {{ number_format($summary['tutor_payable_balance'], 0, ',', '.') }}</strong></td>
 </tr></table>
 <table class="data">
-<thead><tr><th>Waktu</th><th>Jenis / referensi</th><th>Keterangan</th><th>Baris jurnal</th><th class="amount">Nilai</th></tr></thead>
+<thead><tr><th>Waktu</th><th>Jenis / referensi</th><th>Pengguna</th><th>Referensi Xendit</th><th>Keterangan</th><th>Baris jurnal</th><th class="amount">Nilai</th></tr></thead>
 <tbody>
 @forelse ($rows as $row)
 <tr>
   <td>{{ $row->occurred_at?->timezone(config('app.timezone'))->format('d/m/Y H:i') }}</td>
-  <td><strong>{{ $row->event_type }}</strong><br><span class="muted">{{ class_basename($row->reference_type ?? '') }} #{{ $row->reference_id ?? '-' }}</span></td>
+  <td><strong>{{ $row->event_type }}</strong><br><span class="muted">{{ $row->reference_label ?: (class_basename($row->reference_type ?? '').' #'.($row->reference_id ?? '-')) }}</span></td>
+  <td>
+    @if ($row->user_name)
+      <strong>{{ $row->user_name }}</strong><br><span class="muted">{{ $row->user_email }}</span>
+    @else
+      <span class="muted">-</span>
+    @endif
+  </td>
+  <td>
+    @forelse ($row->external_references ?? [] as $reference)
+      <span class="entry">{{ $reference['label'] }}: {{ $reference['value'] }}</span>
+    @empty
+      <span class="muted">-</span>
+    @endforelse
+  </td>
   <td>{{ $row->description }}<br><span class="muted">{{ $row->uuid }}</span></td>
   <td>@foreach ($row->entries as $entry)<span class="entry">{{ $entry->account_code }} · {{ strtoupper($entry->side) }} · Rp {{ number_format((float) $entry->amount, 0, ',', '.') }}</span>@endforeach</td>
   <td class="amount"><strong>Rp {{ number_format((float) $row->total_debit, 0, ',', '.') }}</strong></td>
 </tr>
 @empty
-<tr><td colspan="5">Tidak ada data untuk filter ini.</td></tr>
+<tr><td colspan="7">Tidak ada data untuk filter ini.</td></tr>
 @endforelse
 </tbody>
 </table>

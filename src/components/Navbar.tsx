@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { clearBrowserSession } from "@/lib/session";
 import {
   ArrowRight,
   BookOpenCheck,
@@ -36,8 +37,7 @@ const readStoredUser = (): StoredUser | null => {
   try {
     return JSON.parse(localStorage.getItem("user") || "null");
   } catch {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
+    clearBrowserSession();
     return null;
   }
 };

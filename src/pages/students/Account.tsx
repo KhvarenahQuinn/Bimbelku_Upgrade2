@@ -135,7 +135,8 @@ export default function Account() {
             { label: "Voucher Saya", description: "Lihat voucher yang sudah diklaim dan masa berlakunya.", to: "/student/vouchers", icon: BadgePercent, attention: voucherAttention > 0, attentionCount: voucherAttention },
           ]} />
           <Group title="Pengaturan akun" items={[
-            { label: "Profil, lokasi, dan keamanan", description: "Atur identitas, pendidikan, alamat, lokasi belajar, serta kata sandi dalam satu halaman.", to: "/student/profile", icon: UserRound, attention: profileAttention > 0, attentionCount: profileAttention },
+            { label: "Keamanan dan PIN", description: "Atur PIN pembayaran, kata sandi, dan lihat saldo BimbelKu.", to: "/student/settings", icon: ShieldCheck },
+            { label: "Profil dan lokasi", description: "Atur identitas, pendidikan, alamat, dan lokasi belajar dalam satu halaman.", to: "/student/profile", icon: UserRound, attention: profileAttention > 0, attentionCount: profileAttention },
             { label: "Notifikasi", description: unreadCount > 0 ? `${unreadCount} notifikasi belum dibaca. Buka untuk melihat isi dan tujuan yang jelas.` : "Lihat seluruh pemberitahuan akun di satu tempat.", to: "/student/notifications", icon: Bell, attention: unreadCount > 0, attentionCount: unreadCount },
             { label: "Privasi", description: "Baca kebijakan penggunaan dan perlindungan data.", to: "/privacy", state: { from: "/student/account" }, icon: ShieldCheck },
           ]} />

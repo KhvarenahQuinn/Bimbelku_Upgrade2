@@ -29,7 +29,8 @@ class TeacherSubject extends Model
     ];
 
     // Relasi WAJIB PUBLIC
-    public function teacherProfile() {
+    public function teacherProfile()
+    {
         return $this->belongsTo(TeacherProfile::class, 'teacher_profile_id');
     }
 }

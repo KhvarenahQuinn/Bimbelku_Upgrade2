@@ -398,8 +398,15 @@ export default function PackageBuilder() {
   const schedulesDoNotOverlap = sortedScheduleStarts.every((start, index) =>
     index === sortedScheduleStarts.length - 1 || start + effectiveDurationHours * 3_600_000 <= sortedScheduleStarts[index + 1]
   );
-  const scheduleRangeDays = scheduleTimestamps.length
-    ? (Math.max(...scheduleTimestamps.map((value) => new Date(value).getTime())) - Math.min(...scheduleTimestamps.map((value) => new Date(value).getTime()))) / 86_400_000
+  const scheduleDates = scheduleTimestamps
+    .map((value) => {
+      const date = new Date(value);
+      date.setHours(0, 0, 0, 0);
+      return date.getTime();
+    })
+    .filter(Number.isFinite);
+  const scheduleRangeDays = scheduleDates.length
+    ? (Math.max(...scheduleDates) - Math.min(...scheduleDates)) / 86_400_000
     : 0;
   const availableSubjects = useMemo(
     () => catalog.filter((item) =>

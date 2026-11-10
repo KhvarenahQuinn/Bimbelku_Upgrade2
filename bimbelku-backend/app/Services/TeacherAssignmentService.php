@@ -7,6 +7,7 @@ use App\Models\MatchingOperationLog;
 use App\Models\Notification;
 use App\Models\PackageSession;
 use App\Models\TeacherOffer;
+use App\Models\TeacherReplacementRequest;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -142,7 +143,7 @@ class TeacherAssignmentService
     ): array {
         return DB::transaction(function () use ($bookingRequest, $teacher, $admin, $reason) {
             if ($bookingRequest->teacher_replacement_request_id) {
-                \App\Models\TeacherReplacementRequest::query()
+                TeacherReplacementRequest::query()
                     ->lockForUpdate()
                     ->findOrFail($bookingRequest->teacher_replacement_request_id);
             }
@@ -213,14 +214,21 @@ class TeacherAssignmentService
                 );
             }
 
-            $manualOffer = TeacherOffer::create([
-                'booking_request_id' => $lockedRequest->id,
-                'teacher_id' => $teacher->id,
-                'status' => 'pending',
-                'distance_km' => $manualDistance,
-                'offered_at' => now(),
-                'expires_at' => $expiresAt,
-            ]);
+            $manualOffer = TeacherOffer::updateOrCreate(
+                [
+                    'booking_request_id' => $lockedRequest->id,
+                    'teacher_id' => $teacher->id,
+                ],
+                [
+                    'status' => 'pending',
+                    'distance_km' => $manualDistance,
+                    'offered_at' => now(),
+                    'expires_at' => $expiresAt,
+                    'reminder_sent_at' => null,
+                    'responded_at' => null,
+                    'rejection_reason' => null,
+                ]
+            );
 
             BookingRequest::query()
                 ->whereIn('id', $requestIds)
@@ -317,6 +325,8 @@ class TeacherAssignmentService
                         'payment_submitted',
                         'active',
                     ])))
+            // Released sessions (refund/cancel/expire) no longer hold the slot.
+            ->whereNotIn('status', ['cancelled', 'payment_expired', 'completed', 'refund_pending', 'refunded'])
             ->where('scheduled_start_at', '<', $end)
             ->where('scheduled_end_at', '>', $start)
             ->exists();

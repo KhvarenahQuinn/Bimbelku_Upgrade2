@@ -21,27 +21,27 @@ return new class extends Migration
 
     private function extendTemplates(): void
     {
-        if (!Schema::hasTable('cheap_class_templates')) {
+        if (! Schema::hasTable('cheap_class_templates')) {
             return;
         }
 
         Schema::table('cheap_class_templates', function (Blueprint $table) {
-            if (!Schema::hasColumn('cheap_class_templates', 'template_code')) {
+            if (! Schema::hasColumn('cheap_class_templates', 'template_code')) {
                 $table->string('template_code', 32)->nullable()->after('id');
             }
-            if (!Schema::hasColumn('cheap_class_templates', 'recurrence_enabled')) {
+            if (! Schema::hasColumn('cheap_class_templates', 'recurrence_enabled')) {
                 $table->boolean('recurrence_enabled')->default(false)->after('recurrence_days');
             }
-            if (!Schema::hasColumn('cheap_class_templates', 'recurrence_anchor_at')) {
+            if (! Schema::hasColumn('cheap_class_templates', 'recurrence_anchor_at')) {
                 $table->dateTime('recurrence_anchor_at')->nullable()->after('recurrence_enabled');
             }
-            if (!Schema::hasColumn('cheap_class_templates', 'next_publish_at')) {
+            if (! Schema::hasColumn('cheap_class_templates', 'next_publish_at')) {
                 $table->dateTime('next_publish_at')->nullable()->after('recurrence_anchor_at');
             }
-            if (!Schema::hasColumn('cheap_class_templates', 'last_published_at')) {
+            if (! Schema::hasColumn('cheap_class_templates', 'last_published_at')) {
                 $table->dateTime('last_published_at')->nullable()->after('next_publish_at');
             }
-            if (!Schema::hasColumn('cheap_class_templates', 'settings_version')) {
+            if (! Schema::hasColumn('cheap_class_templates', 'settings_version')) {
                 $table->unsignedInteger('settings_version')->default(1)->after('last_published_at');
             }
         });
@@ -49,24 +49,24 @@ return new class extends Migration
 
     private function extendPackages(): void
     {
-        if (!Schema::hasTable('cheap_classes')) {
+        if (! Schema::hasTable('cheap_classes')) {
             return;
         }
 
         Schema::table('cheap_classes', function (Blueprint $table) {
-            if (!Schema::hasColumn('cheap_classes', 'package_code')) {
+            if (! Schema::hasColumn('cheap_classes', 'package_code')) {
                 $table->string('package_code', 40)->nullable()->after('id');
             }
-            if (!Schema::hasColumn('cheap_classes', 'occurrence_week_start')) {
+            if (! Schema::hasColumn('cheap_classes', 'occurrence_week_start')) {
                 $table->date('occurrence_week_start')->nullable()->after('cheap_class_template_id');
             }
-            if (!Schema::hasColumn('cheap_classes', 'generation_source')) {
+            if (! Schema::hasColumn('cheap_classes', 'generation_source')) {
                 $table->string('generation_source', 20)->default('manual')->after('occurrence_week_start');
             }
-            if (!Schema::hasColumn('cheap_classes', 'template_settings_version')) {
+            if (! Schema::hasColumn('cheap_classes', 'template_settings_version')) {
                 $table->unsignedInteger('template_settings_version')->default(1)->after('generation_source');
             }
-            if (!Schema::hasColumn('cheap_classes', 'template_snapshot')) {
+            if (! Schema::hasColumn('cheap_classes', 'template_snapshot')) {
                 $table->json('template_snapshot')->nullable()->after('template_settings_version');
             }
         });
@@ -74,7 +74,7 @@ return new class extends Migration
 
     private function extendFinancialReferences(): void
     {
-        if (Schema::hasTable('refunds') && !Schema::hasColumn('refunds', 'refund_code')) {
+        if (Schema::hasTable('refunds') && ! Schema::hasColumn('refunds', 'refund_code')) {
             Schema::table('refunds', function (Blueprint $table) {
                 $table->string('refund_code', 40)->nullable()->after('id');
             });
@@ -83,7 +83,7 @@ return new class extends Migration
 
     private function backfillTemplates(): void
     {
-        if (!Schema::hasTable('cheap_class_templates') || !Schema::hasColumn('cheap_class_templates', 'template_code')) {
+        if (! Schema::hasTable('cheap_class_templates') || ! Schema::hasColumn('cheap_class_templates', 'template_code')) {
             return;
         }
 
@@ -100,7 +100,7 @@ return new class extends Migration
 
     private function backfillPackages(): void
     {
-        if (!Schema::hasTable('cheap_classes') || !Schema::hasColumn('cheap_classes', 'package_code')) {
+        if (! Schema::hasTable('cheap_classes') || ! Schema::hasColumn('cheap_classes', 'package_code')) {
             return;
         }
 
@@ -175,22 +175,22 @@ return new class extends Migration
 
     private function addUniqueIndexes(): void
     {
-        if (Schema::hasTable('cheap_class_templates') && !Schema::hasIndex('cheap_class_templates', 'cheap_class_templates_template_code_unique')) {
+        if (Schema::hasTable('cheap_class_templates') && ! Schema::hasIndex('cheap_class_templates', 'cheap_class_templates_template_code_unique')) {
             Schema::table('cheap_class_templates', fn (Blueprint $table) => $table->unique('template_code'));
         }
-        if (Schema::hasTable('cheap_classes') && !Schema::hasIndex('cheap_classes', 'cheap_classes_package_code_unique')) {
+        if (Schema::hasTable('cheap_classes') && ! Schema::hasIndex('cheap_classes', 'cheap_classes_package_code_unique')) {
             Schema::table('cheap_classes', fn (Blueprint $table) => $table->unique('package_code'));
         }
-        if (Schema::hasTable('cheap_classes') && !Schema::hasIndex('cheap_classes', 'cheap_class_template_period_unique')) {
+        if (Schema::hasTable('cheap_classes') && ! Schema::hasIndex('cheap_classes', 'cheap_class_template_period_unique')) {
             Schema::table('cheap_classes', fn (Blueprint $table) => $table->unique(
                 ['cheap_class_template_id', 'occurrence_week_start'],
                 'cheap_class_template_period_unique'
             ));
         }
-        if (Schema::hasTable('orders') && !Schema::hasIndex('orders', 'orders_order_id_unique')) {
+        if (Schema::hasTable('orders') && ! Schema::hasIndex('orders', 'orders_order_id_unique')) {
             Schema::table('orders', fn (Blueprint $table) => $table->unique('order_id'));
         }
-        if (Schema::hasTable('refunds') && !Schema::hasIndex('refunds', 'refunds_refund_code_unique')) {
+        if (Schema::hasTable('refunds') && ! Schema::hasIndex('refunds', 'refunds_refund_code_unique')) {
             Schema::table('refunds', fn (Blueprint $table) => $table->unique('refund_code'));
         }
     }

@@ -8,12 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('settings')) {
+        if (! Schema::hasTable('settings')) {
             return;
         }
 
         $existing = DB::table('settings')->where('key', 'maximum_search_hours')->first();
-        if (!$existing) {
+        if (! $existing) {
             DB::table('settings')->insert([
                 'key' => 'maximum_search_hours',
                 'value' => '72',

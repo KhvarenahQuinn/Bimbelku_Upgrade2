@@ -10,14 +10,20 @@ return new class extends Migration
     public function up(): void
     {
         $demoTeacher = User::query()->where('email', 'demo.tutor@bimbelku.local')->first();
-        if (!$demoTeacher) return;
+        if (! $demoTeacher) {
+            return;
+        }
 
         $profile = TeacherProfile::query()->where('user_id', $demoTeacher->id)->first();
-        if (!$profile) return;
+        if (! $profile) {
+            return;
+        }
 
         $subjects = TeacherSubject::query()->where('teacher_profile_id', $profile->id)->orderBy('id')->get();
         $keep = $subjects->first();
-        if (!$keep) return;
+        if (! $keep) {
+            return;
+        }
 
         TeacherSubject::query()
             ->where('teacher_profile_id', $profile->id)

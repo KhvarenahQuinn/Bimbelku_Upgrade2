@@ -3,35 +3,37 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
-use App\Models\User;
-use App\Models\PaymentSetting;
-use App\Models\Order;
-use App\Models\Classroom;
-use App\Models\Payout; 
-use App\Models\SocialMedia;
 use App\Models\Booking;
 use App\Models\BookingDispute;
-use App\Models\SessionReport;
 use App\Models\BookingRequest;
+use App\Models\CheapClass;
 use App\Models\Notification;
+use App\Models\Order;
+use App\Models\PaymentSetting;
+use App\Models\Payout;
 use App\Models\Refund;
-use App\Models\TeacherSubject;
-use App\Models\TeacherProfile;
+use App\Models\SessionReport;
+use App\Models\Setting;
+use App\Models\SocialMedia;
 use App\Models\TeacherPayoutRequest;
+use App\Models\TeacherProfile;
+use App\Models\TeacherSubject;
+use App\Models\User;
 use App\Services\CheapClassService;
-use App\Services\TeacherMatchingService;
-use App\Services\TeacherOfferReleaseService;
 use App\Services\PackageCheckoutService;
 use App\Services\PaymentReconciliationService;
+use App\Services\TeacherMatchingService;
+use App\Services\TeacherOfferReleaseService;
 use App\Services\XenditMoneyMovementService;
 use App\Support\AdminPermissionCatalog;
+use App\Support\PublicMedia;
 use App\Support\XenditPayoutChannelCatalog;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\DB; 
-use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
 {
@@ -42,11 +44,11 @@ class AdminController extends Controller
     public function getPendingTeachers()
     {
         $teachers = User::where('role', 'teacher')
-                        ->where('status', 'pending')
-                        ->with(['teacherProfile', 'subjects'])
-                    ->orderBy('created_at', 'desc')
-                        ->limit(300)
-                        ->get();
+            ->where('status', 'pending')
+            ->with(['teacherProfile', 'subjects'])
+            ->orderBy('created_at', 'desc')
+            ->limit(300)
+            ->get();
 
         return response()->json($teachers->map(fn (User $teacher) => $this->formatTeacherVerification($teacher)));
     }
@@ -54,11 +56,11 @@ class AdminController extends Controller
     public function getHistoryTeachers()
     {
         $teachers = User::where('role', 'teacher')
-                        ->whereIn('status', ['active', 'rejected', 'banned']) // Tambahkan banned jika ada
-                        ->with(['teacherProfile', 'subjects'])
-                        ->orderBy('updated_at', 'desc')
-                        ->limit(500)
-                        ->get();
+            ->whereIn('status', ['active', 'rejected', 'banned']) // Tambahkan banned jika ada
+            ->with(['teacherProfile', 'subjects'])
+            ->orderBy('updated_at', 'desc')
+            ->limit(500)
+            ->get();
 
         return response()->json($teachers->map(fn (User $teacher) => $this->formatTeacherVerification($teacher)));
     }
@@ -97,8 +99,12 @@ class AdminController extends Controller
             }
 
             $updates = ['verification_stage' => $validated['stage'], 'verified_by' => $request->user()->id];
-            if ($validated['stage'] === 'documents_checked') $updates['documents_checked_at'] = now();
-            if ($validated['stage'] === 'whatsapp_scheduled') $updates['whatsapp_test_scheduled_at'] = now();
+            if ($validated['stage'] === 'documents_checked') {
+                $updates['documents_checked_at'] = now();
+            }
+            if ($validated['stage'] === 'whatsapp_scheduled') {
+                $updates['whatsapp_test_scheduled_at'] = now();
+            }
             if ($validated['stage'] === 'whatsapp_passed') {
                 $updates['whatsapp_test_passed_at'] = now();
                 $updates['verification_notes'] = trim((string) $validated['notes']);
@@ -108,15 +114,15 @@ class AdminController extends Controller
 
         return response()->json(['message' => 'Tahap verifikasi tutor diperbarui.']);
     }
+
     public function verifyTeacher(
         Request $request,
         TeacherOfferReleaseService $offerReleaseService,
         TeacherMatchingService $matchingService
-    )
-    {
+    ) {
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
-            'status'  => 'required|in:active,rejected',
+            'status' => 'required|in:active,rejected',
             'notes' => 'nullable|string|max:2000',
             'screening_passed' => 'nullable|boolean',
         ]);
@@ -153,7 +159,7 @@ class AdminController extends Controller
                 ->where('user_id', $user->id)
                 ->lockForUpdate()
                 ->first();
-            if (!$profile) {
+            if (! $profile) {
                 abort(422, 'Profil tutor tidak ditemukan.');
             }
 
@@ -166,13 +172,13 @@ class AdminController extends Controller
                 ];
                 $subject = $user->subjects->first();
                 $documentsIncomplete = collect($requiredDocuments)->contains(
-                    fn ($path) => blank($path) || !Storage::disk('local')->exists($path)
+                    fn ($path) => blank($path) || ! Storage::disk('local')->exists($path)
                 );
                 $subjectIncomplete = $user->subjects->count() !== 1
-                    || !$subject?->is_active
-                    || !is_array($subject?->levels)
+                    || ! $subject?->is_active
+                    || ! is_array($subject?->levels)
                     || count($subject->levels) === 0
-                    || (!$subject->is_online && !$subject->is_offline);
+                    || (! $subject->is_online && ! $subject->is_offline);
                 if ($documentsIncomplete || $subjectIncomplete) {
                     abort(
                         422,
@@ -222,7 +228,7 @@ class AdminController extends Controller
                 )
                 ->each(fn ($bookingRequest) => $matchingService->dispatchNextOffer($bookingRequest));
         }
-        
+
         return response()->json(['message' => 'Status tutor berhasil diperbarui.']);
     }
 
@@ -247,7 +253,7 @@ class AdminController extends Controller
             'phone' => $profile?->phone ?? $profile?->whatsapp_number,
             'verification_notes' => $profile?->verification_notes,
             'verification_stage' => $profile?->verification_stage ?? 'submitted',
-            'photo_url' => \App\Support\PublicMedia::url($profile?->photo),
+            'photo_url' => PublicMedia::url($profile?->photo),
             'identity_document_url' => $documentUrl($profile?->identity_document, 'identity_document'),
             'live_selfie_url' => $documentUrl($profile?->live_selfie, 'live_selfie'),
             'qualification_document_url' => $documentUrl($profile?->qualification_document, 'qualification_document'),
@@ -277,18 +283,15 @@ class AdminController extends Controller
             ->where('role', $role)
             ->where('status', '!=', 'pending')
             ->with(['teacherProfile', 'subjects'])
-            ->when($subjectFilter !== '' && $role === 'teacher', fn ($builder) =>
-                $builder->whereHas('subjects', fn ($subjects) =>
-                    $subjects->where('name', $subjectFilter)->where('is_active', true)
-                )
+            ->when($subjectFilter !== '' && $role === 'teacher', fn ($builder) => $builder->whereHas('subjects', fn ($subjects) => $subjects->where('name', $subjectFilter)->where('is_active', true)
+            )
             )
             ->when($search !== '', function ($builder) use ($search, $role) {
                 $builder->where(function ($searchQuery) use ($search, $role) {
                     $searchQuery->where('name', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%");
                     if ($role === 'teacher') {
-                        $searchQuery->orWhereHas('subjects', fn ($subjects) =>
-                            $subjects->where('name', 'like', "%{$search}%")->where('is_active', true)
+                        $searchQuery->orWhereHas('subjects', fn ($subjects) => $subjects->where('name', 'like', "%{$search}%")->where('is_active', true)
                         );
                     }
                 });
@@ -313,15 +316,16 @@ class AdminController extends Controller
                 $u->setAttribute('subject_data_warning', $activeSubjects->count() > 1 ? 'Tutor memiliki lebih dari satu mapel aktif dan perlu ditinjau.' : null);
                 $u->setAttribute('profile_cover_url', $u->profile_cover_use_default
                     ? null
-                    : \App\Support\PublicMedia::url($u->profile_cover));
-                $u->setAttribute('personal_profile_cover_url', \App\Support\PublicMedia::url($u->profile_cover));
+                    : PublicMedia::url($u->profile_cover));
+                $u->setAttribute('personal_profile_cover_url', PublicMedia::url($u->profile_cover));
             }
             if ($u->role === 'teacher' && $u->teacherProfile) {
-                $u->photo_url = \App\Support\PublicMedia::url($u->teacherProfile->photo);
+                $u->photo_url = PublicMedia::url($u->teacherProfile->photo);
                 $u->teacherProfile->setAttribute('cv_url', $u->teacherProfile->cv_file
                     ? "/teachers/{$u->id}/documents/cv_file"
                     : null);
             }
+
             return $u;
         });
 
@@ -354,6 +358,7 @@ class AdminController extends Controller
                 $lockedTeacher->profile_cover = $path;
                 $lockedTeacher->profile_cover_use_default = false;
                 $lockedTeacher->save();
+
                 return $oldPath;
             }, 3);
         } catch (\Throwable $exception) {
@@ -366,7 +371,7 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'Sampul tutor berhasil diperbarui.',
-            'profile_cover_url' => \App\Support\PublicMedia::url($path),
+            'profile_cover_url' => PublicMedia::url($path),
         ]);
     }
 
@@ -385,7 +390,7 @@ class AdminController extends Controller
     public function restoreTeacherProfileCover(int $id)
     {
         $teacher = User::query()->where('role', 'teacher')->findOrFail($id);
-        if (!$teacher->profile_cover || !Storage::disk('public')->exists($teacher->profile_cover)) {
+        if (! $teacher->profile_cover || ! Storage::disk('public')->exists($teacher->profile_cover)) {
             return response()->json(['message' => 'Tutor belum mempunyai sampul pribadi yang dapat dipulihkan.'], 422);
         }
         $teacher->profile_cover_use_default = false;
@@ -393,15 +398,15 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'Sampul pribadi tutor kembali dipakai.',
-            'profile_cover_url' => \App\Support\PublicMedia::url($teacher->profile_cover),
+            'profile_cover_url' => PublicMedia::url($teacher->profile_cover),
         ]);
     }
+
     public function updateUserStatus(
         Request $request,
         TeacherOfferReleaseService $offerReleaseService,
         TeacherMatchingService $matchingService
-    )
-    {
+    ) {
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'status' => 'required|in:active,banned',
@@ -426,7 +431,7 @@ class AdminController extends Controller
             if (
                 $request->status === 'active'
                 && $user->role === 'teacher'
-                && (!$profile?->verified_at)
+                && (! $profile?->verified_at)
             ) {
                 abort(422, 'Tutor hanya dapat diaktifkan jika verifikasi masih berlaku.');
             }
@@ -467,31 +472,31 @@ class AdminController extends Controller
     public function getOrders()
     {
         $orders = Order::with(['user', 'classroom', 'booking.teacher', 'refund'])
-                    ->orderBy('created_at', 'desc')
-                    ->limit(200)
-                    ->get();
-                    
+            ->orderBy('created_at', 'desc')
+            ->limit(200)
+            ->get();
+
         return response()->json($orders);
     }
 
-    public function getPendingPayments() 
+    public function getPendingPayments()
     {
         $orders = Order::where('status', 'submitted')
-                    ->whereNotNull('payment_proof')
-                    ->where('payment_proof', '!=', '')
-                    ->with('user')
-                    ->orderBy('updated_at', 'desc')
-                    ->limit(100)
-                    ->get();
+            ->whereNotNull('payment_proof')
+            ->where('payment_proof', '!=', '')
+            ->with('user')
+            ->orderBy('updated_at', 'desc')
+            ->limit(100)
+            ->get();
 
-        $formatted = $orders->map(function($order) {
+        $formatted = $orders->map(function ($order) {
             $details = $this->orderDetails($order);
-            
+
             $subject = $details['subject'] ?? 'Kelas';
             $teacher = $details['teacher_name'] ?? 'Tutor';
             $student = $details['student_name'] ?? $order->user->name ?? 'Murid';
-            
-            $title = "";
+
+            $title = '';
             if (($details['type'] ?? '') === 'Privat') {
                 $title = "{$subject} - {$teacher} ({$student})";
             } else {
@@ -513,11 +518,11 @@ class AdminController extends Controller
                 'subject' => $subject,
                 'teacher_name' => $teacher,
                 'type' => $details['type'] ?? 'Privat',
-                'title' => $title, 
+                'title' => $title,
                 'classroom' => [
                     'title' => $title,
-                    'subject' => $subject
-                ]
+                    'subject' => $subject,
+                ],
             ];
         });
 
@@ -530,8 +535,7 @@ class AdminController extends Controller
         PackageCheckoutService $packageCheckoutService,
         CheapClassService $cheapClassService,
         PaymentReconciliationService $reconciliation
-    )
-    {
+    ) {
         $validated = $request->validate([
             'order_id' => 'required|exists:orders,id',
             'status' => 'required|in:paid,rejected',
@@ -558,7 +562,7 @@ class AdminController extends Controller
             ], 409);
         }
 
-        if (!$order->payment_proof) {
+        if (! $order->payment_proof) {
             return response()->json(['message' => 'Bukti pembayaran belum diunggah.'], 422);
         }
 
@@ -597,6 +601,7 @@ class AdminController extends Controller
         if ($order->learning_package_id) {
             if ($validated['status'] === 'rejected') {
                 $packageCheckoutService->rejectPackagePayment($order, $reason, $request->user());
+
                 return response()->json(['message' => 'Pembayaran paket ditolak.']);
             }
             $result = $packageCheckoutService->activatePaidPackage($order, $request->user());
@@ -610,6 +615,7 @@ class AdminController extends Controller
                     'target_url' => '/student/history',
                 ]);
             }
+
             return response()->json([
                 'message' => $result === 'refund_pending'
                     ? 'Pembayaran tercatat, tetapi sesi pertama sudah dimulai. Refund penuh masuk antrean admin.'
@@ -629,8 +635,8 @@ class AdminController extends Controller
                 $reason,
                 $request->user()
             );
-            if (!empty($result['class_id'])) {
-                $cheapClass = \App\Models\CheapClass::find($result['class_id']);
+            if (! empty($result['class_id'])) {
+                $cheapClass = CheapClass::find($result['class_id']);
                 if ($cheapClass) {
                     $cheapClassService->finalizeIfReady($cheapClass);
                 }
@@ -647,6 +653,7 @@ class AdminController extends Controller
                     'target_url' => '/student/history',
                 ]);
             }
+
             return response()->json([
                 'message' => $result['message'].($surplus > 0 ? ' Kelebihan Rp'.number_format($surplus, 0, ',', '.').' masuk ke Saldo BimbelKu.' : ''),
                 'reconciliation' => $order->fresh()->payment_reconciliation_status,
@@ -677,7 +684,7 @@ class AdminController extends Controller
         $path = $settings?->qris_image;
 
         abort_if(
-            blank($path) || !Storage::disk('public')->exists($path),
+            blank($path) || ! Storage::disk('public')->exists($path),
             404,
             'QRIS pembayaran belum tersedia.'
         );
@@ -687,7 +694,7 @@ class AdminController extends Controller
 
         return response($contents, 200, [
             'Content-Type' => $mimeType,
-            'Content-Disposition' => 'inline; filename="qris-bimbelku.' . pathinfo($path, PATHINFO_EXTENSION) . '"',
+            'Content-Disposition' => 'inline; filename="qris-bimbelku.'.pathinfo($path, PATHINFO_EXTENSION).'"',
             'Cache-Control' => 'private, max-age=300',
             'X-Content-Type-Options' => 'nosniff',
         ]);
@@ -696,11 +703,11 @@ class AdminController extends Controller
     public function updatePaymentSettings(Request $request)
     {
         $request->validate([
-            'merchant_name'  => ['required', 'string', 'max:100', 'regex:/\pL/u'],
-            'bank_name'      => ['required', 'string', 'max:100', 'regex:/\pL/u'],
+            'merchant_name' => ['required', 'string', 'max:100', 'regex:/\pL/u'],
+            'bank_name' => ['required', 'string', 'max:100', 'regex:/\pL/u'],
             'account_number' => ['required', 'string', 'max:50', 'regex:/^[0-9]{6,50}$/'],
-            'account_name'   => ['required', 'string', 'max:150', 'regex:/\pL/u', 'not_regex:/\d/u'],
-            'qris_image'     => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048'
+            'account_name' => ['required', 'string', 'max:150', 'regex:/\pL/u', 'not_regex:/\d/u'],
+            'qris_image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ], [
             'merchant_name.regex' => 'Nama merchant wajib mengandung huruf.',
             'bank_name.regex' => 'Nama bank atau e-wallet wajib mengandung huruf.',
@@ -807,7 +814,7 @@ class AdminController extends Controller
             'account_name' => $settings->account_name,
             'qris_available' => $qrisAvailable,
             'qris_endpoint' => $qrisAvailable
-                ? '/payment-settings/qris?v=' . optional($settings->updated_at)->timestamp
+                ? '/payment-settings/qris?v='.optional($settings->updated_at)->timestamp
                 : null,
             'updated_at' => $settings->updated_at,
         ];
@@ -825,7 +832,8 @@ class AdminController extends Controller
     public function updateCommissionSetting(Request $request)
     {
         $request->validate(['admin_fee' => ['required', 'numeric', 'in:20']]);
-        \App\Models\Setting::query()->updateOrCreate(['key' => 'admin_fee'], ['value' => '20']);
+        Setting::query()->updateOrCreate(['key' => 'admin_fee'], ['value' => '20']);
+
         return response()->json(['message' => 'Komisi tetap 20%; hak tutor tetap 80%.']);
     }
 
@@ -913,7 +921,7 @@ class AdminController extends Controller
         $channelCode = $teacher?->teacherProfile?->payout_channel_code
             ?: XenditPayoutChannelCatalog::inferCode($teacher?->teacherProfile?->bank_name);
         if (
-            !$teacher
+            ! $teacher
             || blank($channelCode)
             || blank($teacher->teacherProfile?->account_number)
             || blank($teacher->teacherProfile?->account_name)
@@ -941,7 +949,7 @@ class AdminController extends Controller
                     ->lockForUpdate()
                     ->first();
                 if (
-                    !$profile
+                    ! $profile
                     || blank($channelCode)
                     || blank($profile->account_number)
                     || blank($profile->account_name)
@@ -956,7 +964,9 @@ class AdminController extends Controller
                         .' WIB.'
                     );
                 }
-                if (blank($profile->payout_channel_code)) $profile->forceFill(['payout_channel_code' => $channelCode])->save();
+                if (blank($profile->payout_channel_code)) {
+                    $profile->forceFill(['payout_channel_code' => $channelCode])->save();
+                }
 
                 $bookings = Booking::query()
                     ->where('teacher_id', $validated['teacher_id'])
@@ -1037,10 +1047,12 @@ class AdminController extends Controller
                     TeacherPayoutRequest::query()->where('payout_id', $payout->id)->update(['status' => 'failed', 'processed_at' => now(), 'review_notes' => $exception->getMessage()]);
                 });
             }
+
             return response()->json(['message' => $exception->getMessage()], 502);
         }
 
         $payload = $payout->toArray();
+
         return response()->json(['message' => 'Pencairan diterima dan sedang diproses.', 'data' => $payload], 202);
     }
 
@@ -1109,7 +1121,7 @@ class AdminController extends Controller
                 ->count()
             : 0;
         $pendingRefunds = $canRefunds ? Refund::query()
-            ->where('status', 'pending')
+            ->whereIn('status', ['pending', 'failed'])
             ->whereNotNull('destination_selected_at')
             ->where(function ($refunds) {
                 $refunds->whereIn('destination_method', ['bank_transfer', 'bimbelku_balance'])
@@ -1225,8 +1237,10 @@ class AdminController extends Controller
             $inProgress = $canClasses ? Booking::query()->whereDate('start_at', $date)->whereIn('status', ['in_progress', 'teacher_ready', 'student_ready'])->count() : 0;
             $confirmed = $canClasses ? Booking::query()->whereDate('start_at', $date)->whereIn('status', ['confirmed', 'scheduled'])->count() : 0;
             $attention = $canClasses ? Booking::query()->whereDate('start_at', $date)->whereIn('status', ['disputed', 'absence_review', 'admin_review_required', 'refund_pending', 'emergency_refund_pending'])->count() : 0;
+
             return ['date' => $date->toDateString(), 'label' => $date->isoFormat('dd D'), 'sessions' => $sessions, 'orders' => $orders, 'confirmed' => $confirmed, 'in_progress' => $inProgress, 'completed' => $completed, 'attention' => $attention];
         })->values();
+
         return response()->json([
             'revenue' => [
                 'today' => (float) $revenueToday,
@@ -1264,7 +1278,7 @@ class AdminController extends Controller
     // =========================================================================
     // 6. FOOTER SETTINGS (ALAMAT & KONTAK SAJA)
     // =========================================================================
-    
+
     public function updateFooterSettings(Request $request)
     {
         $data = $request->validate([
@@ -1276,13 +1290,13 @@ class AdminController extends Controller
         ]);
 
         DB::transaction(function () use ($data) {
-            \App\Models\Setting::query()
+            Setting::query()
                 ->whereIn('key', array_keys($data))
                 ->orderBy('key')
                 ->lockForUpdate()
                 ->get();
             foreach ($data as $key => $value) {
-                \App\Models\Setting::updateOrCreate(
+                Setting::updateOrCreate(
                     ['key' => $key],
                     ['value' => $value]
                 );
@@ -1299,9 +1313,8 @@ class AdminController extends Controller
 
     public function getSocials(Request $request)
     {
-        $socials = Cache::remember('public.socials.v1', now()->addMinutes(10), fn () =>
-            SocialMedia::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->get()
-                ->map(fn (SocialMedia $item) => $this->socialPayload($item, false))->values()->all()
+        $socials = Cache::remember('public.socials.v1', now()->addMinutes(10), fn () => SocialMedia::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->get()
+            ->map(fn (SocialMedia $item) => $this->socialPayload($item, false))->values()->all()
         );
         $response = response()->json($socials);
         $response->setEtag(sha1((string) json_encode($socials)));
@@ -1309,6 +1322,7 @@ class AdminController extends Controller
         $response->setMaxAge(300);
         $response->headers->addCacheControlDirective('stale-while-revalidate', '60');
         $response->isNotModified($request);
+
         return $response;
     }
 
@@ -1342,6 +1356,7 @@ class AdminController extends Controller
             throw $exception;
         }
         Cache::forget('public.socials.v1');
+
         return response()->json(['message' => 'Sosmed berhasil ditambah!', 'data' => $this->socialPayload($social, true)]);
     }
 
@@ -1361,12 +1376,26 @@ class AdminController extends Controller
         $newIcon = $this->resolveSocialIcon($request, false);
         $social->name = trim((string) $data['name']);
         $social->link = trim((string) $data['link']);
-        if ($newIcon !== null) $social->icon = $newIcon;
-        if (array_key_exists('is_active', $data)) $social->is_active = (bool) $data['is_active'];
-        if (array_key_exists('sort_order', $data)) $social->sort_order = (int) $data['sort_order'];
-        try { $social->save(); } catch (\Throwable $exception) { $this->deleteSocialIcon($newIcon); throw $exception; }
-        if ($newIcon !== null && $oldIcon !== $newIcon) $this->deleteSocialIcon($oldIcon);
+        if ($newIcon !== null) {
+            $social->icon = $newIcon;
+        }
+        if (array_key_exists('is_active', $data)) {
+            $social->is_active = (bool) $data['is_active'];
+        }
+        if (array_key_exists('sort_order', $data)) {
+            $social->sort_order = (int) $data['sort_order'];
+        }
+        try {
+            $social->save();
+        } catch (\Throwable $exception) {
+            $this->deleteSocialIcon($newIcon);
+            throw $exception;
+        }
+        if ($newIcon !== null && $oldIcon !== $newIcon) {
+            $this->deleteSocialIcon($oldIcon);
+        }
         Cache::forget('public.socials.v1');
+
         return response()->json(['message' => 'Sosmed berhasil diperbarui.', 'data' => $this->socialPayload($social->fresh(), true)]);
     }
 
@@ -1374,9 +1403,12 @@ class AdminController extends Controller
     {
         $data = $request->validate(['items' => ['required', 'array', 'max:100'], 'items.*.id' => ['required', 'integer', 'exists:social_medias,id'], 'items.*.sort_order' => ['required', 'integer', 'min:0', 'max:1000']]);
         DB::transaction(function () use ($data) {
-            foreach ($data['items'] as $item) SocialMedia::whereKey($item['id'])->update(['sort_order' => $item['sort_order']]);
+            foreach ($data['items'] as $item) {
+                SocialMedia::whereKey($item['id'])->update(['sort_order' => $item['sort_order']]);
+            }
         });
         Cache::forget('public.socials.v1');
+
         return response()->json(['message' => 'Urutan sosial media disimpan.']);
     }
 
@@ -1387,21 +1419,32 @@ class AdminController extends Controller
 
     private function resolveSocialIcon(Request $request, bool $required = true): ?string
     {
-        if ($request->filled('icon_key')) return 'catalog:'.strtolower(trim((string) $request->input('icon_key')));
-        if ($request->filled('icon_url')) return trim((string) $request->input('icon_url'));
-        if ($request->hasFile('icon')) return $request->file('icon')->store('social_icons', 'public');
+        if ($request->filled('icon_key')) {
+            return 'catalog:'.strtolower(trim((string) $request->input('icon_key')));
+        }
+        if ($request->filled('icon_url')) {
+            return trim((string) $request->input('icon_url'));
+        }
+        if ($request->hasFile('icon')) {
+            return $request->file('icon')->store('social_icons', 'public');
+        }
+
         return $required ? null : null;
     }
 
     private function deleteSocialIcon(?string $icon): void
     {
-        if ($icon && !str_starts_with((string) $icon, 'catalog:') && !preg_match('#^https?://#i', (string) $icon)) Storage::disk('public')->delete($icon);
+        if ($icon && ! str_starts_with((string) $icon, 'catalog:') && ! preg_match('#^https?://#i', (string) $icon)) {
+            Storage::disk('public')->delete($icon);
+        }
     }
 
     private function socialPayload(SocialMedia $item, bool $admin): array
     {
         $iconKey = str_starts_with((string) $item->icon, 'catalog:') ? substr((string) $item->icon, 8) : null;
-        if ($iconKey === 'twitter') $iconKey = 'x';
+        if ($iconKey === 'twitter') {
+            $iconKey = 'x';
+        }
         $payload = [
             'id' => $item->id,
             'name' => $item->name,
@@ -1409,16 +1452,24 @@ class AdminController extends Controller
             'icon_key' => $iconKey,
             'icon_url' => $this->socialIconUrl($item->icon),
         ];
-        if ($admin) { $payload['is_active'] = (bool) $item->is_active; $payload['sort_order'] = (int) $item->sort_order; }
+        if ($admin) {
+            $payload['is_active'] = (bool) $item->is_active;
+            $payload['sort_order'] = (int) $item->sort_order;
+        }
+
         return $payload;
     }
 
     private function socialIconUrl(?string $icon): ?string
     {
-        if (blank($icon)) return null;
+        if (blank($icon)) {
+            return null;
+        }
         if (str_starts_with($icon, 'catalog:')) {
             $key = strtolower(substr($icon, 8));
-            if ($key === 'twitter') $key = 'x';
+            if ($key === 'twitter') {
+                $key = 'x';
+            }
             $colors = [
                 'instagram' => 'E4405F',
                 'facebook' => '1877F2',
@@ -1428,24 +1479,33 @@ class AdminController extends Controller
                 'linkedin' => '0A66C2',
                 'x' => '000000',
             ];
+
             return 'https://cdn.simpleicons.org/'.rawurlencode($key).'/'.($colors[$key] ?? '111827');
         }
-        return \App\Support\PublicMedia::url($icon);
+
+        return PublicMedia::url($icon);
     }
 
     public function deleteSocial($id)
     {
         $social = SocialMedia::find($id);
-        if ($social) { $icon = $social->icon; $social->delete(); $this->deleteSocialIcon($icon); Cache::forget('public.socials.v1'); }
+        if ($social) {
+            $icon = $social->icon;
+            $social->delete();
+            $this->deleteSocialIcon($icon);
+            Cache::forget('public.socials.v1');
+        }
+
         return response()->json(['message' => 'Sosmed dihapus.']);
     }
+
     private function orderDetails(Order $order): array
     {
         if (is_array($order->class_details_snapshot)) {
             return $order->class_details_snapshot;
         }
 
-        if (!$order->class_details_snapshot) {
+        if (! $order->class_details_snapshot) {
             return [];
         }
 

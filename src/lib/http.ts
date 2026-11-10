@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 import { API_BASE_URL, STORAGE_BASE_URL } from "@/lib/apiBase";
-import { SESSION_MARKER } from "@/lib/session";
+import { SESSION_MARKER, SESSION_UPDATED_EVENT, isAuthTransitionPath } from "@/lib/session";
 
 export { API_BASE_URL, STORAGE_BASE_URL } from "@/lib/apiBase";
 
@@ -197,6 +197,39 @@ http.interceptors.request.use((config) => {
   return config;
 });
 
+/**
+ * Endpoint latar yang tidak boleh memicu logout paksa. Kegagalan di sini
+ * ditangani komponennya masing-masing; request kritis lain tetap memvalidasi
+ * sesi dan akan memicu logout bila token benar-benar kedaluwarsa.
+ */
+const NON_CRITICAL_SESSION_PATHS = new Set([
+  "/active-order",
+  "/session-action/next",
+]);
+
+const bearerFromHeaders = (headers: unknown): string | null => {
+  if (!headers || typeof headers !== "object") return null;
+  const record = headers as Record<string, unknown> & { get?: (name: string) => unknown };
+  const raw = typeof record.get === "function"
+    ? record.get("Authorization")
+    : record.Authorization ?? record.authorization;
+  return typeof raw === "string" && raw.startsWith("Bearer ")
+    ? raw.slice("Bearer ".length).trim()
+    : null;
+};
+
+// Cache response terikat pada token saat request dibuat. Saat token berganti,
+// buang cache agar halaman baru tidak membaca data milik sesi sebelumnya.
+let lastKnownSessionToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+if (typeof window !== "undefined") {
+  window.addEventListener(SESSION_UPDATED_EVENT, () => {
+    const token = localStorage.getItem("token");
+    if (token === lastKnownSessionToken) return;
+    lastKnownSessionToken = token;
+    clearApiCache();
+  });
+}
+
 const handleRejectedResponse = (error: unknown) => {
   if (axios.isAxiosError(error)) {
     const financeSlot = (error.config as FinancialRequestConfig | undefined)
@@ -205,11 +238,29 @@ const handleRejectedResponse = (error: unknown) => {
       financialMutationKeys.delete(financeSlot);
     }
     const requestUrl = String(error.config?.url || "");
-    const ignoresExpiredSession = requestUrl.endsWith("/login") || requestUrl.endsWith("/logout");
+    const requestPath = requestPathname(requestUrl);
+    const ignoresExpiredSession = requestUrl.endsWith("/login")
+      || requestUrl.endsWith("/logout")
+      || requestUrl.endsWith("/logout-all")
+      || requestUrl.endsWith("/auth/google/exchange");
+    const storedToken = localStorage.getItem("token");
+    const activeToken = storedToken && storedToken !== SESSION_MARKER ? storedToken : null;
+    const requestToken = bearerFromHeaders(error.config?.headers);
+
+    // Token berubah saat request masih terbang (mis. callback OAuth baru saja
+    // menyimpan sesi baru). 401 dari token lama bukan alasan untuk menghapus
+    // sesi yang baru.
+    const tokenChanged = Boolean(activeToken && activeToken !== requestToken);
+    const nonCriticalRequest = NON_CRITICAL_SESSION_PATHS.has(requestPath);
+    const authTransition = isAuthTransitionPath();
+
     if (
       error.response?.status === 401
-      && localStorage.getItem("token")
+      && storedToken
       && !ignoresExpiredSession
+      && !nonCriticalRequest
+      && !authTransition
+      && !tokenChanged
     ) {
       clearApiCache();
       window.dispatchEvent(new Event("bimbelku:session-expired"));

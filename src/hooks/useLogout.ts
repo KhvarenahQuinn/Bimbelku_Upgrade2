@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { notify } from "@/lib/notify";
+import { clearBrowserSession } from "@/lib/session";
 
 export type LogoutScope = "current" | "all";
 
@@ -40,8 +41,7 @@ export function useLogout() {
     }
 
     clearApiCache();
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    clearBrowserSession();
     notify.success(allDevices
       ? "Semua sesi akun telah diputus."
       : "Anda telah keluar dari akun.");

@@ -10,8 +10,8 @@ return new class extends Migration
     {
         Schema::table('locations', function (Blueprint $table) {
             // Cek dulu, kalau kolom 'maps_link' BELUM ada, baru kita buat
-            if (!Schema::hasColumn('locations', 'maps_link')) {
-                $table->string('maps_link')->nullable()->after('address'); 
+            if (! Schema::hasColumn('locations', 'maps_link')) {
+                $table->string('maps_link')->nullable()->after('address');
             }
         });
     }

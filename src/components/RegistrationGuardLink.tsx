@@ -1,6 +1,7 @@
 import { type ComponentProps, type MouseEvent, useState } from "react";
 import { CircleCheckBig, LayoutDashboard } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { clearBrowserSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,8 +25,7 @@ const readStoredUser = (): StoredUser | null => {
     const parsed = JSON.parse(storedUser);
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
+    clearBrowserSession();
     return null;
   }
 };

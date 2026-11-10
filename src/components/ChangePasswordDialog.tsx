@@ -17,6 +17,7 @@ import { formatAccountDate } from "@/lib/date";
 import http, { getApiError } from "@/lib/http";
 
 interface ChangePasswordDialogProps {
+  hasPassword?: boolean;
   passwordUpdatedAt?: string | null;
   onUpdated?: (timestamp: string | null) => void;
 }
@@ -28,6 +29,7 @@ const emptyForm = {
 };
 
 export default function ChangePasswordDialog({
+  hasPassword = true,
   passwordUpdatedAt,
   onUpdated,
 }: ChangePasswordDialogProps) {
@@ -54,7 +56,7 @@ export default function ChangePasswordDialog({
       notify.error("Kata sandi baru minimal 8 karakter.");
       return;
     }
-    if (form.password === form.current_password) {
+    if (hasPassword && form.password === form.current_password) {
       notify.error("Kata sandi baru harus berbeda dari kata sandi saat ini.");
       return;
     }
@@ -65,12 +67,20 @@ export default function ChangePasswordDialog({
 
     setSaving(true);
     try {
-      const response = await http.put("/user/password", form);
+      const response = hasPassword
+        ? await http.put("/user/password", form)
+        : await http.post("/user/set-initial-password", {
+            new_password: form.password,
+            new_password_confirmation: form.password_confirmation,
+          });
       notify.success(response.data.message);
       onUpdated?.(response.data.password_updated_at || null);
       changeOpen(false);
     } catch (error) {
-      notify.error(getApiError(error, "Kata sandi gagal diperbarui."));
+      notify.error(getApiError(
+        error,
+        hasPassword ? "Kata sandi gagal diperbarui." : "Kata sandi gagal dibuat.",
+      ));
     } finally {
       setSaving(false);
     }
@@ -81,7 +91,7 @@ export default function ChangePasswordDialog({
       <DialogTrigger asChild>
         <Button type="button" className="h-11 rounded-xl bg-slate-900 px-5 font-bold hover:bg-indigo-700">
           <KeyRound className="mr-2" size={17} />
-          Ubah Kata Sandi
+          {hasPassword ? "Ubah Kata Sandi" : "Buat Kata Sandi"}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md rounded-3xl border-0 p-7">
@@ -89,21 +99,27 @@ export default function ChangePasswordDialog({
           <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-600">
             <ShieldCheck size={23} />
           </div>
-          <DialogTitle className="text-2xl font-black text-slate-900">Ubah kata sandi</DialogTitle>
+          <DialogTitle className="text-2xl font-black text-slate-900">
+            {hasPassword ? "Ubah kata sandi" : "Buat Password Akun"}
+          </DialogTitle>
           <DialogDescription className="leading-6">
-            Kata sandi disimpan melalui proses terpisah. Sesi lain akan ditutup setelah perubahan berhasil.
+            {hasPassword
+              ? "Kata sandi disimpan melalui proses terpisah. Sesi lain akan ditutup setelah perubahan berhasil."
+              : "Akun yang masuk lewat Google belum memiliki kata sandi lokal. Buat sekarang agar bisa masuk dengan email dan mengatur PIN pembayaran."}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={submit} className="mt-2 space-y-5">
-          <PasswordField
-            label="Kata sandi saat ini"
-            value={form.current_password}
-            visible={showCurrent}
-            onVisibleChange={setShowCurrent}
-            onChange={(value) => setForm((current) => ({ ...current, current_password: value }))}
-            autoComplete="current-password"
-          />
+          {hasPassword && (
+            <PasswordField
+              label="Kata sandi saat ini"
+              value={form.current_password}
+              visible={showCurrent}
+              onVisibleChange={setShowCurrent}
+              onChange={(value) => setForm((current) => ({ ...current, current_password: value }))}
+              autoComplete="current-password"
+            />
+          )}
           <PasswordField
             label="Kata sandi baru"
             value={form.password}
@@ -133,12 +149,12 @@ export default function ChangePasswordDialog({
             </Button>
             <Button disabled={saving} className="h-11 rounded-xl bg-indigo-600 font-bold hover:bg-indigo-700">
               {saving && <Loader2 className="mr-2 animate-spin" size={17} />}
-              Perbarui Kata Sandi
+              {hasPassword ? "Perbarui Kata Sandi" : "Buat Kata Sandi"}
             </Button>
           </DialogFooter>
         </form>
 
-        {passwordUpdatedAt && (
+        {hasPassword && passwordUpdatedAt && (
           <p className="text-xs text-slate-400">
             Pembaruan terakhir: {formatAccountDate(passwordUpdatedAt)}
           </p>

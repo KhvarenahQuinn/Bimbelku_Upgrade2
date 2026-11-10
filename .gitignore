@@ -12,6 +12,7 @@ dist
 dist-payment-preview
 dist-ssr
 *.local
+.run/
 
 # Editor directories and files
 .vscode/*

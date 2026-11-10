@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('cheap_class_sessions')) {
+        if (! Schema::hasTable('cheap_class_sessions')) {
             return;
         }
 
@@ -33,27 +33,27 @@ return new class extends Migration
             $hasReviewedBy,
             $hasRevisionCount
         ) {
-            if (!$hasAttended) {
+            if (! $hasAttended) {
                 $table->unsignedSmallInteger('attended_participants_count')->nullable()->after('progress_recorded_by');
             }
-            if (!$hasSubmittedAt) {
+            if (! $hasSubmittedAt) {
                 $table->dateTime('report_submitted_at')->nullable()->after('attended_participants_count');
             }
-            if (!$hasSubmittedBy) {
+            if (! $hasSubmittedBy) {
                 $table->foreignId('report_submitted_by')->nullable()->after('report_submitted_at')
                     ->constrained('users')->nullOnDelete();
             }
-            if (!$hasReviewNotes) {
+            if (! $hasReviewNotes) {
                 $table->text('admin_review_notes')->nullable()->after('report_submitted_by');
             }
-            if (!$hasReviewedAt) {
+            if (! $hasReviewedAt) {
                 $table->dateTime('admin_reviewed_at')->nullable()->after('admin_review_notes');
             }
-            if (!$hasReviewedBy) {
+            if (! $hasReviewedBy) {
                 $table->foreignId('admin_reviewed_by')->nullable()->after('admin_reviewed_at')
                     ->constrained('users')->nullOnDelete();
             }
-            if (!$hasRevisionCount) {
+            if (! $hasRevisionCount) {
                 $table->unsignedSmallInteger('report_revision_count')->default(0)->after('admin_reviewed_by');
             }
         });
@@ -61,7 +61,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (!Schema::hasTable('cheap_class_sessions')) {
+        if (! Schema::hasTable('cheap_class_sessions')) {
             return;
         }
 
@@ -75,7 +75,7 @@ return new class extends Migration
             'report_revision_count',
         ])->filter(fn (string $column) => Schema::hasColumn('cheap_class_sessions', $column))->all();
 
-        if (!$hasReviewedBy && !$hasSubmittedBy && $columns === []) {
+        if (! $hasReviewedBy && ! $hasSubmittedBy && $columns === []) {
             return;
         }
 

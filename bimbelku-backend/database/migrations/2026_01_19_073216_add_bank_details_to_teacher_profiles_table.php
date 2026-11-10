@@ -12,17 +12,17 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('teacher_profiles', function (Blueprint $table) {
-            
+
             // Tambahkan data bank jika belum tersedia.
-            if (!Schema::hasColumn('teacher_profiles', 'bank_name')) {
+            if (! Schema::hasColumn('teacher_profiles', 'bank_name')) {
                 $table->string('bank_name')->nullable();
             }
-            
-            if (!Schema::hasColumn('teacher_profiles', 'account_number')) {
+
+            if (! Schema::hasColumn('teacher_profiles', 'account_number')) {
                 $table->string('account_number')->nullable();
             }
-            
-            if (!Schema::hasColumn('teacher_profiles', 'account_name')) {
+
+            if (! Schema::hasColumn('teacher_profiles', 'account_name')) {
                 $table->string('account_name')->nullable();
             }
         });
@@ -35,12 +35,18 @@ return new class extends Migration
     {
         Schema::table('teacher_profiles', function (Blueprint $table) {
             $columnsToDrop = [];
-            
-            if (Schema::hasColumn('teacher_profiles', 'bank_name')) $columnsToDrop[] = 'bank_name';
-            if (Schema::hasColumn('teacher_profiles', 'account_number')) $columnsToDrop[] = 'account_number';
-            if (Schema::hasColumn('teacher_profiles', 'account_name')) $columnsToDrop[] = 'account_name';
 
-            if (!empty($columnsToDrop)) {
+            if (Schema::hasColumn('teacher_profiles', 'bank_name')) {
+                $columnsToDrop[] = 'bank_name';
+            }
+            if (Schema::hasColumn('teacher_profiles', 'account_number')) {
+                $columnsToDrop[] = 'account_number';
+            }
+            if (Schema::hasColumn('teacher_profiles', 'account_name')) {
+                $columnsToDrop[] = 'account_name';
+            }
+
+            if (! empty($columnsToDrop)) {
                 $table->dropColumn($columnsToDrop);
             }
         });

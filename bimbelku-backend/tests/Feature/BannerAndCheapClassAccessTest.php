@@ -2,10 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Models\DynamicBanner;
+use App\Models\CheapClassTemplate;
 use App\Models\CurriculumChapter;
 use App\Models\CurriculumSubject;
-use App\Models\CheapClassTemplate;
+use App\Models\DynamicBanner;
 use App\Models\TeacherProfile;
 use App\Models\TeacherSubject;
 use App\Models\User;

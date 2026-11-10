@@ -47,6 +47,7 @@ class PrivateParticipantPricingController extends Controller
             $discount = $data['tiers'][(string) $count]['discount_percent'] ?? null;
             if ($discount === null) {
                 $incomplete = true;
+
                 continue;
             }
             $discount = (float) $discount;

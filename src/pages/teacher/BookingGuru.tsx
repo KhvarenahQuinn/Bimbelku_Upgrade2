@@ -74,6 +74,8 @@ const statusClasses: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 border-amber-100",
   accepted: "bg-emerald-50 text-emerald-700 border-emerald-100",
   rejected: "bg-rose-50 text-rose-700 border-rose-100",
+  student_rejected: "bg-rose-50 text-rose-700 border-rose-100",
+  cancelled: "bg-slate-100 text-slate-600 border-slate-200",
   expired: "bg-slate-100 text-slate-600 border-slate-200",
 };
 
@@ -81,8 +83,19 @@ const statusLabels: Record<string, string> = {
   pending: "Menunggu jawaban",
   accepted: "Diterima",
   rejected: "Ditolak",
+  student_rejected: "Ditolak murid",
+  cancelled: "Dibatalkan",
   expired: "Kedaluwarsa",
 };
+
+const historyFilters = [
+  { value: "all", label: "Semua" },
+  { value: "accepted", label: "Diterima" },
+  { value: "rejected", label: "Ditolak" },
+  { value: "expired", label: "Kedaluwarsa" },
+] as const;
+
+type HistoryFilter = (typeof historyFilters)[number]["value"];
 
 const formatCurrency = (value?: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value || 0);
@@ -98,6 +111,11 @@ export default function BookingGuru() {
   const [note, setNote] = useState("");
   const [now, setNow] = useState(Date.now());
   const scope = searchParams.get("scope") === "history" ? "history" : "active";
+  const requestedStatus = searchParams.get("status");
+  const historyFilter: HistoryFilter =
+    requestedStatus === "accepted" || requestedStatus === "rejected" || requestedStatus === "expired"
+      ? requestedStatus
+      : "all";
   const [counts, setCounts] = useState({ active: 0, history: 0 });
 
   const pendingCount = useMemo(() => offers.filter((offer) => offer.status === "pending").length, [offers]);
@@ -105,7 +123,11 @@ export default function BookingGuru() {
   const fetchOffers = useCallback(async (showLoader = true) => {
     if (showLoader) setLoading(true);
     try {
-      const response = await http.get("/teacher/offers", { params: { scope } });
+      const response = await http.get("/teacher/offers", {
+        params: scope === "history" && historyFilter !== "all"
+          ? { scope, status: historyFilter }
+          : { scope },
+      });
       setOffers(response.data.data || []);
       setCounts({
         active: Number(response.data.active_count || 0),
@@ -116,18 +138,31 @@ export default function BookingGuru() {
     } finally {
       if (showLoader) setLoading(false);
     }
-  }, [scope]);
+  }, [scope, historyFilter]);
+
+  const selectHistoryFilter = (value: HistoryFilter) => {
+    setSearchParams(
+      value === "all" ? { scope: "history" } : { scope: "history", status: value },
+      { replace: true }
+    );
+  };
 
   useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void fetchOffers(false);
+    };
+
     void fetchOffers();
     const countdownTimer = window.setInterval(() => setNow(Date.now()), 1000);
-    const refreshTimer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void fetchOffers(false);
-    }, 60000);
+    const refreshTimer = window.setInterval(refreshWhenVisible, 15000);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
 
     return () => {
       window.clearInterval(countdownTimer);
       window.clearInterval(refreshTimer);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [fetchOffers]);
 
@@ -185,6 +220,25 @@ export default function BookingGuru() {
           </button>
         </section>
 
+        {scope === "history" && (
+          <section aria-label="Filter riwayat permintaan" className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm sm:grid-cols-4">
+            {historyFilters.map((filter) => {
+              const active = historyFilter === filter.value;
+              return (
+                <button
+                  key={filter.value}
+                  type="button"
+                  onClick={() => selectHistoryFilter(filter.value)}
+                  aria-pressed={active}
+                  className={`min-h-11 rounded-xl px-4 text-sm font-black transition ${active ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                >
+                  {filter.label}
+                </button>
+              );
+            })}
+          </section>
+        )}
+
         {loading ? (
           <div className="min-h-[360px] flex items-center justify-center rounded-[2rem] border border-slate-100 bg-white">
             <Loader2 className="h-9 w-9 animate-spin text-indigo-600" />
@@ -192,8 +246,20 @@ export default function BookingGuru() {
         ) : offers.length === 0 ? (
           <div className="rounded-[2rem] border-2 border-dashed border-slate-200 bg-white px-6 py-20 text-center">
             <BookOpen className="mx-auto h-11 w-11 text-slate-300" />
-            <h2 className="mt-4 text-xl font-black text-slate-800">{scope === "active" ? "Belum ada permintaan aktif" : "Riwayat masih kosong"}</h2>
-            <p className="mt-2 text-sm text-slate-500">{scope === "active" ? "Permintaan yang sesuai jadwal dan mata pelajaran akan muncul di sini." : "Penawaran yang selesai, ditolak, atau kedaluwarsa akan disimpan di sini."}</p>
+            <h2 className="mt-4 text-xl font-black text-slate-800">
+              {scope === "active"
+                ? "Belum ada permintaan aktif"
+                : historyFilter === "all"
+                  ? "Riwayat masih kosong"
+                  : "Tidak ada riwayat pada filter ini"}
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              {scope === "active"
+                ? "Permintaan yang sesuai jadwal dan mata pelajaran akan muncul di sini."
+                : historyFilter === "all"
+                  ? "Penawaran yang selesai, ditolak, atau kedaluwarsa akan disimpan di sini."
+                  : "Coba pilih status riwayat lain atau kembali ke semua riwayat."}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

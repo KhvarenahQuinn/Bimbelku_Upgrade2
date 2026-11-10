@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\CustomerWallet;
+use App\Models\FinancialJournal;
 use App\Models\LearningPackage;
 use App\Models\Order;
 use App\Models\PackagePlan;
@@ -275,7 +276,7 @@ class StageTwoCustomerWalletPaymentTest extends TestCase
 
         $event = "order:{$order->id}:payment_received";
         $this->assertDatabaseHas('financial_journals', ['event_key' => $event]);
-        $journalId = (int) \App\Models\FinancialJournal::query()->where('event_key', $event)->value('id');
+        $journalId = (int) FinancialJournal::query()->where('event_key', $event)->value('id');
         $this->assertDatabaseHas('financial_ledger_entries', [
             'financial_journal_id' => $journalId,
             'account_code' => 'customer_wallet_liability',
@@ -467,7 +468,7 @@ class StageTwoCustomerWalletPaymentTest extends TestCase
             'amount' => 150000,
         ]);
 
-        $journal = \App\Models\FinancialJournal::query()
+        $journal = FinancialJournal::query()
             ->where('event_key', "refund:{$refund->id}:paid")
             ->firstOrFail();
         $this->assertDatabaseHas('financial_ledger_entries', [

@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class SessionReport extends Model
 {
     protected $guarded = ['id'];
+
     protected $hidden = ['evidence'];
+
     protected $appends = ['evidence_url', 'has_evidence'];
 
     protected $casts = [
@@ -47,6 +49,6 @@ class SessionReport extends Model
 
     public function getHasEvidenceAttribute(): bool
     {
-        return !empty($this->evidence);
+        return ! empty($this->evidence);
     }
 }

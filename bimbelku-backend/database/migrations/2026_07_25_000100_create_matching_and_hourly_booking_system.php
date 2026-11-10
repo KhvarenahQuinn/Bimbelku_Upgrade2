@@ -10,51 +10,51 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            if (!Schema::hasColumn('users', 'latitude')) {
+            if (! Schema::hasColumn('users', 'latitude')) {
                 $table->decimal('latitude', 10, 7)->nullable()->after('maps_link');
             }
-            if (!Schema::hasColumn('users', 'longitude')) {
+            if (! Schema::hasColumn('users', 'longitude')) {
                 $table->decimal('longitude', 10, 7)->nullable()->after('latitude');
             }
         });
 
         Schema::table('teacher_profiles', function (Blueprint $table) {
-            if (!Schema::hasColumn('teacher_profiles', 'latitude')) {
+            if (! Schema::hasColumn('teacher_profiles', 'latitude')) {
                 $table->decimal('latitude', 10, 7)->nullable();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'longitude')) {
+            if (! Schema::hasColumn('teacher_profiles', 'longitude')) {
                 $table->decimal('longitude', 10, 7)->nullable();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'max_travel_km')) {
+            if (! Schema::hasColumn('teacher_profiles', 'max_travel_km')) {
                 $table->unsignedSmallInteger('max_travel_km')->default(12);
             }
-            if (!Schema::hasColumn('teacher_profiles', 'assignment_count')) {
+            if (! Schema::hasColumn('teacher_profiles', 'assignment_count')) {
                 $table->unsignedInteger('assignment_count')->default(0);
             }
-            if (!Schema::hasColumn('teacher_profiles', 'last_assigned_at')) {
+            if (! Schema::hasColumn('teacher_profiles', 'last_assigned_at')) {
                 $table->timestamp('last_assigned_at')->nullable();
             }
-            if (!Schema::hasColumn('teacher_profiles', 'is_accepting_requests')) {
+            if (! Schema::hasColumn('teacher_profiles', 'is_accepting_requests')) {
                 $table->boolean('is_accepting_requests')->default(true);
             }
         });
 
         Schema::table('teacher_subjects', function (Blueprint $table) {
-            if (!Schema::hasColumn('teacher_subjects', 'levels')) {
+            if (! Schema::hasColumn('teacher_subjects', 'levels')) {
                 $table->json('levels')->nullable();
             }
         });
 
         Schema::table('teacher_availabilities', function (Blueprint $table) {
-            if (!Schema::hasColumn('teacher_availabilities', 'start_time')) {
+            if (! Schema::hasColumn('teacher_availabilities', 'start_time')) {
                 $table->time('start_time')->nullable();
             }
-            if (!Schema::hasColumn('teacher_availabilities', 'end_time')) {
+            if (! Schema::hasColumn('teacher_availabilities', 'end_time')) {
                 $table->time('end_time')->nullable();
             }
         });
 
-        if (!Schema::hasTable('hourly_rates')) {
+        if (! Schema::hasTable('hourly_rates')) {
             Schema::create('hourly_rates', function (Blueprint $table) {
                 $table->id();
                 $table->string('subject_name', 120);
@@ -67,7 +67,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('booking_requests')) {
+        if (! Schema::hasTable('booking_requests')) {
             Schema::create('booking_requests', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('student_id')->constrained('users')->cascadeOnDelete();
@@ -99,7 +99,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('teacher_offers')) {
+        if (! Schema::hasTable('teacher_offers')) {
             Schema::create('teacher_offers', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('booking_request_id')->constrained()->cascadeOnDelete();
@@ -116,7 +116,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('bookings')) {
+        if (! Schema::hasTable('bookings')) {
             Schema::create('bookings', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('booking_request_id')->unique()->constrained()->cascadeOnDelete();
@@ -161,11 +161,15 @@ return new class extends Migration
 
         Schema::table('teacher_availabilities', function (Blueprint $table) {
             $columns = array_filter(['start_time', 'end_time'], fn ($column) => Schema::hasColumn('teacher_availabilities', $column));
-            if ($columns) $table->dropColumn($columns);
+            if ($columns) {
+                $table->dropColumn($columns);
+            }
         });
 
         Schema::table('teacher_subjects', function (Blueprint $table) {
-            if (Schema::hasColumn('teacher_subjects', 'levels')) $table->dropColumn('levels');
+            if (Schema::hasColumn('teacher_subjects', 'levels')) {
+                $table->dropColumn('levels');
+            }
         });
 
         Schema::table('teacher_profiles', function (Blueprint $table) {
@@ -173,12 +177,16 @@ return new class extends Migration
                 ['latitude', 'longitude', 'max_travel_km', 'assignment_count', 'last_assigned_at', 'is_accepting_requests'],
                 fn ($column) => Schema::hasColumn('teacher_profiles', $column)
             );
-            if ($columns) $table->dropColumn($columns);
+            if ($columns) {
+                $table->dropColumn($columns);
+            }
         });
 
         Schema::table('users', function (Blueprint $table) {
             $columns = array_filter(['latitude', 'longitude'], fn ($column) => Schema::hasColumn('users', $column));
-            if ($columns) $table->dropColumn($columns);
+            if ($columns) {
+                $table->dropColumn($columns);
+            }
         });
     }
 };

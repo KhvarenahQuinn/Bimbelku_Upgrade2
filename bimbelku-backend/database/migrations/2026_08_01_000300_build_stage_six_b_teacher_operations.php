@@ -10,28 +10,28 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('notifications', function (Blueprint $table) {
-            if (!Schema::hasColumn('notifications', 'target_url')) {
+            if (! Schema::hasColumn('notifications', 'target_url')) {
                 $table->string('target_url', 500)->nullable()->after('type');
             }
-            if (!Schema::hasColumn('notifications', 'unique_key')) {
+            if (! Schema::hasColumn('notifications', 'unique_key')) {
                 $table->string('unique_key', 190)->nullable()->unique()->after('target_url');
             }
         });
 
         Schema::table('classroom_messages', function (Blueprint $table) {
-            if (!Schema::hasColumn('classroom_messages', 'attachment_path')) {
+            if (! Schema::hasColumn('classroom_messages', 'attachment_path')) {
                 $table->string('attachment_path')->nullable()->after('body');
             }
-            if (!Schema::hasColumn('classroom_messages', 'attachment_name')) {
+            if (! Schema::hasColumn('classroom_messages', 'attachment_name')) {
                 $table->string('attachment_name', 255)->nullable()->after('attachment_path');
             }
-            if (!Schema::hasColumn('classroom_messages', 'attachment_mime')) {
+            if (! Schema::hasColumn('classroom_messages', 'attachment_mime')) {
                 $table->string('attachment_mime', 120)->nullable()->after('attachment_name');
             }
-            if (!Schema::hasColumn('classroom_messages', 'attachment_size')) {
+            if (! Schema::hasColumn('classroom_messages', 'attachment_size')) {
                 $table->unsignedBigInteger('attachment_size')->nullable()->after('attachment_mime');
             }
-            if (!Schema::hasColumn('classroom_messages', 'client_token')) {
+            if (! Schema::hasColumn('classroom_messages', 'client_token')) {
                 $table->uuid('client_token')->nullable()->after('attachment_size');
                 $table->unique(
                     ['booking_id', 'sender_id', 'client_token'],
@@ -40,7 +40,7 @@ return new class extends Migration
             }
         });
 
-        if (!Schema::hasTable('classroom_message_reads')) {
+        if (! Schema::hasTable('classroom_message_reads')) {
             Schema::create('classroom_message_reads', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('classroom_message_id')->constrained()->cascadeOnDelete();
@@ -55,7 +55,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('participant_attendances')) {
+        if (! Schema::hasTable('participant_attendances')) {
             Schema::create('participant_attendances', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('booking_id')->constrained()->cascadeOnDelete();
@@ -72,7 +72,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('schedule_change_requests')) {
+        if (! Schema::hasTable('schedule_change_requests')) {
             Schema::create('schedule_change_requests', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('booking_id')->constrained()->cascadeOnDelete();
@@ -92,7 +92,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('schedule_change_responses')) {
+        if (! Schema::hasTable('schedule_change_responses')) {
             Schema::create('schedule_change_responses', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('schedule_change_request_id')
@@ -110,7 +110,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('teacher_payout_requests')) {
+        if (! Schema::hasTable('teacher_payout_requests')) {
             Schema::create('teacher_payout_requests', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('teacher_id')->constrained('users')->cascadeOnDelete();
@@ -134,13 +134,13 @@ return new class extends Migration
         }
 
         Schema::table('bookings', function (Blueprint $table) {
-            if (!Schema::hasColumn('bookings', 'completion_capture_source')) {
+            if (! Schema::hasColumn('bookings', 'completion_capture_source')) {
                 $table->string('completion_capture_source', 30)->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'completion_captured_at')) {
+            if (! Schema::hasColumn('bookings', 'completion_captured_at')) {
                 $table->timestamp('completion_captured_at')->nullable();
             }
-            if (!Schema::hasColumn('bookings', 'payout_request_id')) {
+            if (! Schema::hasColumn('bookings', 'payout_request_id')) {
                 $table->foreignId('payout_request_id')
                     ->nullable()
                     ->constrained('teacher_payout_requests')

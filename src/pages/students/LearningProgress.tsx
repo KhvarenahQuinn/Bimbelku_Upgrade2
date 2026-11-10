@@ -58,9 +58,11 @@ export default function LearningProgress() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const load = useCallback(async (force = false) => {
-    setLoading(true);
-    setError(false);
+  const load = useCallback(async (force = false, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError(false);
+    }
     try {
       const [packageResponse, cheapClassResponse] = await Promise.all([
         getCached<PackageListResponse>("/student/packages", { params: { per_page: 100 }, maxAgeMs: 10_000, force }),
@@ -69,14 +71,30 @@ export default function LearningProgress() {
       setPackages(readPackageRows(packageResponse.data).filter(isPackageProgressVisible));
       setCheapClasses((Array.isArray(cheapClassResponse.data) ? cheapClassResponse.data : []).filter(isCheapClassProgressVisible));
     } catch (requestError) {
-      setError(true);
-      notify.error(getApiError(requestError, "Perkembangan belajar gagal dimuat."));
+      if (!silent) {
+        setError(true);
+        notify.error(getApiError(requestError, "Perkembangan belajar gagal dimuat."));
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(true, true);
+    };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("bimbelku:data-changed", refresh);
+    const timer = window.setInterval(refresh, 30_000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("bimbelku:data-changed", refresh);
+      window.clearInterval(timer);
+    };
+  }, [load]);
 
   const programs = useMemo<ProgressProgram[]>(() => {
     const rows: ProgressProgram[] = [

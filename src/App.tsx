@@ -6,7 +6,7 @@ import { ConfirmDialogProvider } from "./components/ConfirmDialogProvider";
 import SessionLifecycle from "./components/SessionLifecycle";
 import DeferredToaster from "./components/DeferredToaster";
 import { WebsiteContentProvider } from "./components/WebsiteContentProvider";
-import { scheduleNonCriticalTask } from "./lib/schedule";
+import { useSessionReady } from "./hooks/useSessionReady";
 import RouteSeoManager from "./components/RouteSeoManager";
 
 // =================================================================
@@ -58,8 +58,10 @@ const TermsConditions = routeLazy(exactPath("/terms"), () => import("./pages/rul
 const Register = routeLazy(exactPath("/register"), () => import("./pages/Register"));
 const JadiTutor = routeLazy(exactPath("/jadi-tutor"), () => import("./pages/JadiTutor"));
 const Login = routeLazy(exactPath("/login"), () => import("./pages/Login"));
+const AdminLogin = routeLazy(exactPath("/admin/login"), () => import("./pages/AdminLogin"));
 const ForgotPassword = routeLazy(exactPath("/forgot-password"), () => import("./pages/ForgotPassword"));
 const ResetPassword = routeLazy(exactPath("/reset-password"), () => import("./pages/ResetPassword"));
+const ResetPaymentPin = routeLazy(exactPath("/reset-pin"), () => import("./pages/ResetPaymentPin"));
 const GoogleAuthCallback = routeLazy(exactPath("/oauth/google/callback"), () => import("./pages/GoogleAuthCallback"));
 const CompleteGoogleProfile = routeLazy(exactPath("/complete-profile"), () => import("./pages/CompleteGoogleProfile"));
 
@@ -114,6 +116,7 @@ const PackageProcess = routeLazy(exactPath("/student/packages"), () => import(".
 const TransactionHistory = routeLazy(exactPath("/student/history"), () => import("./pages/students/TransactionHistory"));
 const Profile = routeLazy(exactPath("/student/profile"), () => import("./pages/students/Profile"));
 const Account = routeLazy(exactPath("/student/account"), () => import("./pages/students/Account"));
+const Settings = routeLazy(exactPath("/student/settings"), () => import("./pages/students/Settings"));
 const PackageBuilder = routeLazy(exactPath("/student/packages/new", "/search", "/student/find", "/pesan"), () => import("./pages/students/PackageBuilder"));
 const PackageReschedule = routeLazy(pathPattern(/^\/student\/packages\/[^/]+\/reschedule$/), () => import("./pages/students/PackageReschedule"));
 const Vouchers = routeLazy(exactPath("/student/vouchers"), () => import("./pages/students/Vouchers"));
@@ -176,11 +179,6 @@ const LegacyPackageRedirect = () => {
   return <Navigate to={`/student/packages/new${query ? `?${query}` : ""}`} replace />;
 };
 
-const LegacyAdminLoginRedirect = () => {
-  const location = useLocation();
-  return <Navigate to={`/login${location.search}${location.hash}`} state={location.state} replace />;
-};
-
 const LegacyTeacherCheapClassRedirect = () => {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
@@ -189,27 +187,12 @@ const LegacyTeacherCheapClassRedirect = () => {
 };
 
 const StudentRuntime = () => {
-  // Pemeriksaan peran tetap mengikuti perpindahan halaman, tetapi widget pembayaran
-  // ditunda sampai pekerjaan utama halaman selesai agar tidak berebut request awal.
-  useLocation();
-  const [ready, setReady] = useState(false);
-  let role = "";
-  try {
-    role = JSON.parse(localStorage.getItem("user") || "null")?.role || "";
-  } catch {
-    role = "";
-  }
+  // Widget pembayaran hanya dipasang setelah sesi murid benar-benar siap.
+  // Halaman login/transisi OAuth tidak boleh memicu request latar yang masih
+  // memakai token lama.
+  const ready = useSessionReady(["student"]);
 
-  useEffect(() => {
-    if (role !== "student") {
-      setReady(false);
-      return;
-    }
-
-    return scheduleNonCriticalTask(() => setReady(true));
-  }, [role]);
-
-  return role === "student" && ready ? (
+  return ready ? (
     <Suspense fallback={null}>
       <PendingPaymentPopup />
     </Suspense>
@@ -218,22 +201,7 @@ const StudentRuntime = () => {
 
 
 const SessionActionRuntime = () => {
-  useLocation();
-  const [ready, setReady] = useState(false);
-  let role = "";
-  try {
-    role = JSON.parse(localStorage.getItem("user") || "null")?.role || "";
-  } catch {
-    role = "";
-  }
-
-  useEffect(() => {
-    if (!["student", "teacher", "admin"].includes(role)) {
-      setReady(false);
-      return;
-    }
-    return scheduleNonCriticalTask(() => setReady(true));
-  }, [role]);
+  const ready = useSessionReady(["student", "teacher", "admin"]);
 
   return ready ? (
     <Suspense fallback={null}>
@@ -295,9 +263,10 @@ export const AppContent = () => (
             <Route path="/register" element={<WebsiteContentProvider><Register /></WebsiteContentProvider>} />
             <Route path="/jadi-tutor" element={<WebsiteContentProvider><JadiTutor /></WebsiteContentProvider>} />
             <Route path="/login" element={<WebsiteContentProvider><Login /></WebsiteContentProvider>} />
-            <Route path="/admin/login" element={<LegacyAdminLoginRedirect />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/reset-pin" element={<ResetPaymentPin />} />
             <Route path="/oauth/google/callback" element={<GoogleAuthCallback />} />
             <Route path="/complete-profile" element={<CompleteGoogleProfile />} />
             
@@ -392,6 +361,7 @@ export const AppContent = () => (
                ========================================= */}
             <Route element={<PrivateRoute allowedRoles={['student']} />}>
               <Route path="/student/dashboard" element={<Dashboard />} />
+              <Route path="/murid" element={<Dashboard />} />
               <Route path="/student/packages" element={<PackageProcess />} />
               <Route path="/student/my-classes" element={<MyClasses />} />
               <Route path="/student/messages" element={<Messages />} />
@@ -402,6 +372,7 @@ export const AppContent = () => (
               <Route path="/student/history" element={<TransactionHistory />} />
               <Route path="/student/profile" element={<Profile />} />
               <Route path="/student/account" element={<Account />} />
+              <Route path="/student/settings" element={<Settings />} />
               <Route path="/student/packages/:id/reschedule" element={<PackageReschedule />} />
               <Route path="/student/vouchers" element={<Vouchers />} />
               <Route path="/student/offers/:id" element={<PromotionDetail />} />

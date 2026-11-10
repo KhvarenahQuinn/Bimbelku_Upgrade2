@@ -22,12 +22,14 @@ use App\Models\Refund;
 use App\Models\SessionReport;
 use App\Models\Setting;
 use App\Models\SocialMedia;
+use App\Models\TeacherReplacementRequest;
 use App\Models\Tutorial;
 use App\Models\TutorialStep;
 use App\Models\User;
 use App\Support\AdminPermissionCatalog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -284,7 +286,7 @@ class AdminAuditService
     {
         return match ($parameter) {
             'bookingRequest' => BookingRequest::class,
-            'teacherReplacement' => \App\Models\TeacherReplacementRequest::class,
+            'teacherReplacement' => TeacherReplacementRequest::class,
             'refund' => Refund::class,
             'payoutApproval' => PayoutApproval::class,
             'booking' => Booking::class,
@@ -330,7 +332,7 @@ class AdminAuditService
 
                 continue;
             }
-            if ($value instanceof \Illuminate\Http\UploadedFile) {
+            if ($value instanceof UploadedFile) {
                 $payload[$key] = [
                     'file_name' => $value->getClientOriginalName(),
                     'size' => $value->getSize(),

@@ -5,22 +5,22 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\BookingParticipant;
+use App\Models\CheapClassSession;
 use App\Models\ClassroomConversationState;
 use App\Models\ClassroomMessage;
 use App\Models\ClassroomMessageRead;
-use App\Models\CheapClassSession;
 use App\Models\LearningProgressReport;
 use App\Models\Notification;
 use App\Models\PackageChapter;
 use App\Models\PackageSession;
 use App\Models\PackageSessionChapterLog;
 use App\Models\ParticipantAttendance;
-use App\Models\ScheduleChangeRequest;
 use App\Models\SessionAttendance;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\ClassroomSystemMessageService;
 use App\Support\PackageChapterProgress;
+use App\Support\PublicMedia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -30,9 +30,7 @@ use Illuminate\Validation\ValidationException;
 
 class LearningSessionController extends Controller
 {
-    public function __construct(private readonly ClassroomSystemMessageService $systemMessages)
-    {
-    }
+    public function __construct(private readonly ClassroomSystemMessageService $systemMessages) {}
 
     public function conversations(Request $request)
     {
@@ -83,7 +81,7 @@ class LearningSessionController extends Controller
 
                 // Percakapan yang dihapus hanya disembunyikan untuk pengguna tersebut.
                 // Percakapan muncul kembali ketika ada pesan baru setelah titik penghapusan.
-                if (!$latest && $state) {
+                if (! $latest && $state) {
                     return null;
                 }
 
@@ -91,7 +89,7 @@ class LearningSessionController extends Controller
                     ? $conversationBookings->firstWhere('id', $latest->booking_id)
                     : null;
                 $canonical ??= $conversationBookings->sortByDesc('start_at')->first();
-                if (!$canonical) {
+                if (! $canonical) {
                     return null;
                 }
 
@@ -130,7 +128,7 @@ class LearningSessionController extends Controller
                         : ($canonical->bookingRequest?->chapter ?: 'Ruang belajar'),
                     'counterpart_name' => $counterpartName,
                     'counterpart_avatar' => $user->role === 'student'
-                        ? \App\Support\PublicMedia::url($canonical->teacher?->teacherProfile?->photo)
+                        ? PublicMedia::url($canonical->teacher?->teacherProfile?->photo)
                         : null,
                     'class_type' => 'private',
                     'status' => $canonical->status,
@@ -238,12 +236,15 @@ class LearningSessionController extends Controller
                 if ($left['priority'] !== $right['priority']) {
                     return $right['priority'] <=> $left['priority'];
                 }
+
                 return ($left['sort_at'] ?? PHP_INT_MAX) <=> ($right['sort_at'] ?? PHP_INT_MAX);
             })
             ->values();
 
         $next = $actions->first();
-        if ($next) unset($next['priority'], $next['sort_at']);
+        if ($next) {
+            unset($next['priority'], $next['sort_at']);
+        }
 
         return response()->json([
             'data' => $next,
@@ -279,7 +280,9 @@ class LearningSessionController extends Controller
             'participants.order:id,status',
             'learningProgressReports' => function ($query) use ($role, $request) {
                 $query->with(['student:id,name', 'chapterLogs.chapter'])->oldest('session_number');
-                if ($role === 'student') $query->where('student_id', $request->user()->id);
+                if ($role === 'student') {
+                    $query->where('student_id', $request->user()->id);
+                }
             },
             'sessionAttendances.user:id,name',
             'participantAttendances',
@@ -314,8 +317,11 @@ class LearningSessionController extends Controller
         $teacherAttendance = $booking->sessionAttendances->firstWhere('user_id', $booking->teacher_id);
         $paidParticipants = $booking->participants->filter(fn ($item) => $item->order?->status === 'paid');
         $participantPayload = $paidParticipants->map(function ($item) use ($booking, $role, $request) {
-            if ($role === 'student' && (int) $item->student_id !== (int) $request->user()->id) return null;
+            if ($role === 'student' && (int) $item->student_id !== (int) $request->user()->id) {
+                return null;
+            }
             $attendance = $booking->participantAttendances->firstWhere('booking_participant_id', $item->id);
+
             return [
                 'participant_id' => $item->id,
                 'student_id' => $item->student_id,
@@ -330,6 +336,7 @@ class LearningSessionController extends Controller
 
         $scheduleChanges = $booking->scheduleChangeRequests->map(function ($change) use ($request) {
             $myResponse = $change->responses->firstWhere('user_id', $request->user()->id);
+
             return [
                 'id' => $change->id,
                 'requested_by' => $change->requested_by,
@@ -346,7 +353,7 @@ class LearningSessionController extends Controller
                 'expires_at' => $change->expires_at,
                 'my_decision' => $myResponse?->decision,
                 'can_respond' => $change->status === 'pending' && $myResponse?->decision === 'pending'
-                    && (!$change->expires_at || $change->expires_at->isFuture()),
+                    && (! $change->expires_at || $change->expires_at->isFuture()),
                 'responses' => $change->responses->map(fn ($response) => [
                     'user_name' => $response->user?->name ?? 'Pengguna',
                     'role' => $response->user?->role,
@@ -414,6 +421,7 @@ class LearningSessionController extends Controller
             ])->values(),
             'learning_chapters' => PackageChapterProgress::chapters($packageChapters)->map(function (array $chapter) use ($currentChapterLogs) {
                 $sessionLog = $currentChapterLogs->get($chapter['chapter']);
+
                 return [
                     ...$chapter,
                     'session_status' => $sessionLog['status_after'] ?? null,
@@ -429,10 +437,10 @@ class LearningSessionController extends Controller
             'permissions' => [
                 'can_chat' => in_array($booking->status, $this->interactiveStatuses(), true),
                 'can_mark_ready' => $role === 'teacher' && $booking->status === 'confirmed'
-                    && $this->withinCheckInWindow($booking) && !$booking->student_confirmed_at,
+                    && $this->withinCheckInWindow($booking) && ! $booking->student_confirmed_at,
                 'can_confirm_presence' => $role === 'student' && $booking->status === 'confirmed'
-                    && $this->withinCheckInWindow($booking) && $booking->tutor_ready_at && !$booking->student_confirmed_at,
-                'can_check_out' => $role === 'teacher' && $teacherAttendance && !$teacherAttendance->check_out_at,
+                    && $this->withinCheckInWindow($booking) && $booking->tutor_ready_at && ! $booking->student_confirmed_at,
+                'can_check_out' => $role === 'teacher' && $teacherAttendance && ! $teacherAttendance->check_out_at,
                 'can_report_progress' => $this->canReportProgress($booking, $role, $teacherAttendance),
                 'can_request_schedule_change' => in_array($role, ['student', 'teacher'], true)
                     && $booking->status === 'confirmed' && now()->lt($booking->start_at),
@@ -524,7 +532,9 @@ class LearningSessionController extends Controller
                 return $record;
             }, 3);
         } catch (\Throwable $exception) {
-            if ($path) Storage::disk('local')->delete($path);
+            if ($path) {
+                Storage::disk('local')->delete($path);
+            }
             throw $exception;
         }
 
@@ -629,6 +639,7 @@ class LearningSessionController extends Controller
                 $attendance = $locked->sessionAttendances()
                     ->where('user_id', $locked->teacher_id)
                     ->first();
+
                 return [$locked, $attendance, $participant];
             }
 
@@ -700,7 +711,7 @@ class LearningSessionController extends Controller
                 ->lockForUpdate()
                 ->first();
 
-            if (!$attendance) {
+            if (! $attendance) {
                 throw ValidationException::withMessages(['session' => 'Check-in harus dilakukan terlebih dahulu.']);
             }
             if ($attendance->check_out_at) {
@@ -779,14 +790,17 @@ class LearningSessionController extends Controller
 
         $noMaterialChange = (bool) ($validated['no_material_change'] ?? false);
         if ($tracksChapters) {
-            if (!$noMaterialChange && empty($validated['chapter_updates'])) {
+            if (! $noMaterialChange && empty($validated['chapter_updates'])) {
                 throw ValidationException::withMessages(['chapter_updates' => 'Pilih sedikitnya satu Bab yang dibahas.']);
             }
             if ($noMaterialChange && empty($validated['no_change_reason'])) {
                 throw ValidationException::withMessages(['no_change_reason' => 'Pilih alasan ketika sesi tidak mengubah progress Bab.']);
             }
-            if ($noMaterialChange) $validated['chapter_updates'] = [];
-            else $validated['no_change_reason'] = null;
+            if ($noMaterialChange) {
+                $validated['chapter_updates'] = [];
+            } else {
+                $validated['no_change_reason'] = null;
+            }
         } elseif ($packageWithoutChapters) {
             if (! empty($validated['chapter_updates'])) {
                 throw ValidationException::withMessages([
@@ -831,7 +845,9 @@ class LearningSessionController extends Controller
 
                 foreach ($chapterUpdates as $update) {
                     $chapter = $chaptersByName->get(trim((string) $update['chapter']));
-                    if (!$chapter) throw ValidationException::withMessages(['chapter_updates' => 'Bab tidak termasuk dalam target paket ini.']);
+                    if (! $chapter) {
+                        throw ValidationException::withMessages(['chapter_updates' => 'Bab tidak termasuk dalam target paket ini.']);
+                    }
 
                     PackageSessionChapterLog::updateOrCreate(
                         ['package_session_id' => $packageSession->id, 'package_chapter_id' => $chapter->id],
@@ -849,10 +865,13 @@ class LearningSessionController extends Controller
                 // confirms the session. Preview the percentage without committing it here.
                 $preview = $packageChapters->map(function (PackageChapter $chapter) use ($chapterUpdates) {
                     $update = $chapterUpdates->first(fn ($item) => trim((string) $item['chapter']) === trim((string) $chapter->title));
-                    if (!$update) return $chapter;
+                    if (! $update) {
+                        return $chapter;
+                    }
                     $copy = clone $chapter;
                     $copy->status = $update['status_after'];
                     $copy->needs_review = (bool) ($update['needs_review'] ?? false);
+
                     return $copy;
                 });
                 $progressPercent = (int) PackageChapterProgress::summary($preview)['progress_percent'];
@@ -912,7 +931,9 @@ class LearningSessionController extends Controller
 
     private function sessionReminderAction(User $user, Booking $booking): ?array
     {
-        if ($booking->class_type !== 'private') return null;
+        if ($booking->class_type !== 'private') {
+            return null;
+        }
         $subject = $booking->bookingRequest?->subject_name ?: 'Bimbingan';
         $base = [
             'action_key' => "{$user->role}:{$booking->id}:{$booking->status}",
@@ -925,11 +946,13 @@ class LearningSessionController extends Controller
 
         if ($user->role === 'student') {
             $participant = $booking->participants->first(fn ($item) => (int) $item->student_id === (int) $user->id && $item->order?->status === 'paid');
-            if (!$participant) return null;
+            if (! $participant) {
+                return null;
+            }
 
             if ($booking->status === 'awaiting_student_approval'
                 && $participant->status === 'awaiting_student_approval'
-                && !$participant->approved_at
+                && ! $participant->approved_at
                 && $booking->objection_deadline?->isFuture()) {
                 return [
                     ...$base,
@@ -942,7 +965,7 @@ class LearningSessionController extends Controller
                 ];
             }
 
-            if ($booking->status === 'confirmed' && $booking->tutor_ready_at && !$booking->student_confirmed_at && $this->withinCheckInWindow($booking)) {
+            if ($booking->status === 'confirmed' && $booking->tutor_ready_at && ! $booking->student_confirmed_at && $this->withinCheckInWindow($booking)) {
                 return [
                     ...$base,
                     'action_key' => "student:{$booking->id}:presence",
@@ -964,38 +987,44 @@ class LearningSessionController extends Controller
                     'informational' => true,
                 ];
             }
+
             return null;
         }
 
-        if ($user->role !== 'teacher' || (int) $booking->teacher_id !== (int) $user->id) return null;
+        if ($user->role !== 'teacher' || (int) $booking->teacher_id !== (int) $user->id) {
+            return null;
+        }
         $teacherAttendance = $booking->sessionAttendances->firstWhere('user_id', $booking->teacher_id);
         $paidParticipants = $booking->participants->filter(fn ($participant) => $participant->order?->status === 'paid');
-        if ($paidParticipants->isEmpty()) return null;
+        if ($paidParticipants->isEmpty()) {
+            return null;
+        }
         $attendanceComplete = $paidParticipants->every(fn ($participant) => $booking->participantAttendances->contains('booking_participant_id', $participant->id));
         $progressComplete = $paidParticipants->every(fn ($participant) => $booking->learningProgressReports->contains('student_id', $participant->student_id));
 
-        if (!$booking->tutor_ready_at && !$booking->student_confirmed_at && $booking->status === 'confirmed' && $this->withinCheckInWindow($booking)) {
+        if (! $booking->tutor_ready_at && ! $booking->student_confirmed_at && $booking->status === 'confirmed' && $this->withinCheckInWindow($booking)) {
             return [...$base, 'action_key' => "teacher:{$booking->id}:ready", 'kind' => 'teacher_mark_ready', 'priority' => 82,
                 'sort_at' => $booking->start_at?->getTimestamp() ?? PHP_INT_MAX, 'target_url' => "/guru/kelas?session={$booking->id}&session_action=ready"];
         }
-        if ($booking->tutor_ready_at && !$booking->student_confirmed_at && $booking->status === 'confirmed') {
+        if ($booking->tutor_ready_at && ! $booking->student_confirmed_at && $booking->status === 'confirmed') {
             return [...$base, 'action_key' => "teacher:{$booking->id}:waiting-presence", 'kind' => 'teacher_waiting_student_presence', 'priority' => 58,
                 'sort_at' => $booking->start_at?->getTimestamp() ?? PHP_INT_MAX, 'target_url' => "/guru/kelas?session={$booking->id}&session_action=ready"];
         }
-        if ($teacherAttendance && !$teacherAttendance->check_out_at && $attendanceComplete && $booking->student_confirmed_at
+        if ($teacherAttendance && ! $teacherAttendance->check_out_at && $attendanceComplete && $booking->student_confirmed_at
             && now()->lt($booking->end_at->copy()->subMinutes(15))) {
             return [...$base, 'action_key' => "teacher:{$booking->id}:session-ready-v2", 'kind' => 'teacher_session_ready', 'priority' => 40,
                 'sort_at' => $booking->start_at?->getTimestamp() ?? PHP_INT_MAX, 'target_url' => "/guru/kelas?session={$booking->id}&session_action=session"];
         }
-        if ($teacherAttendance && !$teacherAttendance->check_out_at && $attendanceComplete
+        if ($teacherAttendance && ! $teacherAttendance->check_out_at && $attendanceComplete
             && now()->gte($booking->end_at->copy()->subMinutes(15))) {
             return [...$base, 'action_key' => "teacher:{$booking->id}:check-out", 'kind' => 'teacher_check_out', 'priority' => 90,
                 'sort_at' => $booking->end_at?->getTimestamp() ?? PHP_INT_MAX, 'target_url' => "/guru/kelas?session={$booking->id}&session_action=checkout"];
         }
-        if ($teacherAttendance?->check_out_at && !$progressComplete && $this->canReportProgress($booking, 'teacher', $teacherAttendance)) {
+        if ($teacherAttendance?->check_out_at && ! $progressComplete && $this->canReportProgress($booking, 'teacher', $teacherAttendance)) {
             return [...$base, 'action_key' => "teacher:{$booking->id}:progress", 'kind' => 'teacher_report_progress', 'priority' => 96,
                 'sort_at' => $booking->end_at?->getTimestamp() ?? PHP_INT_MAX, 'target_url' => "/guru/kelas?session={$booking->id}&session_action=progress"];
         }
+
         return null;
     }
 
@@ -1115,7 +1144,7 @@ class LearningSessionController extends Controller
                 $class = $session?->cheapClass;
                 $completed = $class?->status === 'completed' || $notification->title === 'Kelas Kelompok selesai';
                 $started = $event === 'started';
-                if ($started && (!$session || $session->status !== 'in_progress' || !$session->ends_at?->isFuture())) {
+                if ($started && (! $session || $session->status !== 'in_progress' || ! $session->ends_at?->isFuture())) {
                     return null;
                 }
 
@@ -1171,6 +1200,7 @@ class LearningSessionController extends Controller
                 403,
                 'Chat dan pelaksanaan dibuka setelah pembayaran dikonfirmasi.'
             );
+
             return;
         }
 
@@ -1256,12 +1286,14 @@ class LearningSessionController extends Controller
 
         $bookings = $query->latest('start_at')->limit(200)->get();
         abort_unless($bookings->contains(fn (Booking $item) => (int) $item->id === (int) $booking->id), 403, 'Percakapan ini tidak dapat diakses.');
+
         return $bookings;
     }
 
     private function conversationKey(Booking $booking, User $viewer): string
     {
         $studentId = $this->conversationStudentId($booking, $viewer) ?: 0;
+
         return 'private:'.(int) $booking->teacher_id.':'.(int) $studentId;
     }
 
@@ -1282,7 +1314,7 @@ class LearningSessionController extends Controller
 
     private function withinCheckInWindow(Booking $booking): bool
     {
-        if (!in_array($booking->status, ['confirmed', 'in_progress'], true)) {
+        if (! in_array($booking->status, ['confirmed', 'in_progress'], true)) {
             return false;
         }
         $before = max(
@@ -1371,7 +1403,7 @@ class LearningSessionController extends Controller
             'sender_id' => $message->sender_id,
             'sender_name' => $isSystem ? 'BimbelKu' : ($message->sender?->name ?? 'Pengguna BimbelKu'),
             'sender_role' => $isSystem ? 'system' : $message->sender?->role,
-            'is_mine' => !$isSystem && (int) $message->sender_id === $viewerId,
+            'is_mine' => ! $isSystem && (int) $message->sender_id === $viewerId,
             'is_read' => $message->relationLoaded('reads') && $message->reads->isNotEmpty(),
             'attachment' => $message->attachment_path ? [
                 'name' => $message->attachment_name,
@@ -1418,11 +1450,14 @@ class LearningSessionController extends Controller
 
     private function canReportProgress(Booking $booking, string $role, ?SessionAttendance $teacherAttendance): bool
     {
-        if ($role !== 'teacher' || !$teacherAttendance?->check_out_at || !$booking->student_confirmed_at) return false;
+        if ($role !== 'teacher' || ! $teacherAttendance?->check_out_at || ! $booking->student_confirmed_at) {
+            return false;
+        }
         $reportedStudentIds = $booking->learningProgressReports->pluck('student_id')->map(fn ($id) => (int) $id);
+
         return $booking->participants
             ->filter(fn ($participant) => $participant->order?->status === 'paid')
-            ->contains(fn ($participant) => !$reportedStudentIds->contains((int) $participant->student_id));
+            ->contains(fn ($participant) => ! $reportedStudentIds->contains((int) $participant->student_id));
     }
 
     private function chatRecipientIds(Booking $booking, int $senderId): array

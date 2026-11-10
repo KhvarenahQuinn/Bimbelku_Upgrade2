@@ -30,6 +30,17 @@ class GoogleAuthenticationTest extends TestCase
         parse_str((string) parse_url($rejected->headers->get('Location'), PHP_URL_QUERY), $rejectedQuery);
         $rejectedPayload = Cache::get('google_oauth_state:'.hash('sha256', (string) ($rejectedQuery['state'] ?? '')));
         $this->assertNull($rejectedPayload['frontend_origin'] ?? null);
+
+        // Tujuan guru diizinkan, tujuan admin tetap ditolak.
+        $teacher = $this->get('/api/auth/google/redirect?frontend_origin='.urlencode('http://localhost:8080').'&redirect='.urlencode('/guru/kelas?tab=1'));
+        parse_str((string) parse_url($teacher->headers->get('Location'), PHP_URL_QUERY), $teacherQuery);
+        $teacherPayload = Cache::get('google_oauth_state:'.hash('sha256', (string) ($teacherQuery['state'] ?? '')));
+        $this->assertSame('/guru/kelas?tab=1', $teacherPayload['redirect'] ?? null);
+
+        $admin = $this->get('/api/auth/google/redirect?frontend_origin='.urlencode('http://localhost:8080').'&redirect='.urlencode('/admin/users'));
+        parse_str((string) parse_url($admin->headers->get('Location'), PHP_URL_QUERY), $adminQuery);
+        $adminPayload = Cache::get('google_oauth_state:'.hash('sha256', (string) ($adminQuery['state'] ?? '')));
+        $this->assertNull($adminPayload['redirect'] ?? null);
     }
 
     public function test_google_callback_creates_incomplete_student_and_code_can_only_be_exchanged_once(): void
@@ -56,6 +67,8 @@ class GoogleAuthenticationTest extends TestCase
             ->assertJsonPath('user.status', 'pending')
             ->assertJsonPath('requires_profile_completion', true)
             ->assertJsonPath('redirect', '/student/dashboard');
+        $this->assertNotEmpty($exchange->json('access_token'));
+        $this->assertSame('Bearer', $exchange->json('token_type'));
 
         $this->postJson('/api/auth/google/exchange', ['code' => $query['code'] ?? ''])->assertUnprocessable();
         $this->assertDatabaseHas('users', [

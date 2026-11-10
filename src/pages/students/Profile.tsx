@@ -3,12 +3,11 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import StudentLayout from "../../components/StudentLayout";
 import { 
-  AlertCircle, User, Mail, Lock, Save, Loader2, Camera, ShieldCheck, ImagePlus, CalendarDays, UserRoundCheck, RefreshCw, WifiOff,
+  AlertCircle, User, Mail, Save, Loader2, Camera, ShieldCheck, ImagePlus, CalendarDays, UserRoundCheck, RefreshCw, WifiOff,
   MapPin, FileText, HelpCircle, MessageCircle, Shield, ExternalLink, LocateFixed, ArrowLeft,
 } from "lucide-react";
-import ChangePasswordDialog from "@/components/ChangePasswordDialog";
 import { ResponsiveSelect } from "@/components/ResponsiveSelect";
-import { formatAccountDate, formatDateOnly } from "@/lib/date";
+import { formatDateOnly } from "@/lib/date";
 import http, { getCached } from "@/lib/http";
 import {
   isValidPersonName,
@@ -45,6 +44,7 @@ export default function Profile() {
     phone: "",
     avatar_url: "" as string | null,
     profile_cover_url: "" as string | null,
+    has_password: true,
     password_updated_at: "" as string | null,
     student_birth_date: "" as string | null,
     student_education_level: "SD",
@@ -95,6 +95,7 @@ export default function Profile() {
             phone: sanitizePhoneInput(userData.phone || ""),
             avatar_url: userData.avatar_url || userData.photo_url || null,
             profile_cover_url: userData.profile_cover_url || defaultCover.data?.url || null,
+            has_password: userData.has_password !== false,
             password_updated_at: userData.password_updated_at || null,
             student_birth_date: userData.student_birth_date || null,
             student_education_level: userData.student_education_level || "SD",
@@ -157,6 +158,7 @@ export default function Profile() {
             phone: sanitizePhoneInput(userData.phone || ""),
             avatar_url: userData.avatar_url || userData.photo_url || null,
             profile_cover_url: userData.profile_cover_url || defaultCover.data?.url || null,
+            has_password: userData.has_password !== false,
             password_updated_at: userData.password_updated_at || null,
             student_birth_date: userData.student_birth_date || null,
             student_education_level: userData.student_education_level || "SD",
@@ -523,10 +525,10 @@ export default function Profile() {
                 </div>
             </div>
 
-            {/* === 2. GRID FORM === */}
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-8">
+            {/* === 2. FORM BIODATA === */}
+            <div className="grid grid-cols-1 gap-5">
                 
-                {/* Kolom Kiri: Info Dasar */}
+                {/* Info Dasar */}
                 <div className="rounded-[2rem] border border-slate-100 bg-white p-5 shadow-lg shadow-slate-200/40 sm:p-8 md:rounded-[2.5rem]">
                     <div className="mb-5 flex items-center gap-3 sm:mb-8 sm:gap-4">
                         <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
@@ -636,37 +638,6 @@ export default function Profile() {
                     </div>
                 </div>
 
-                {/* Kolom Kanan: Keamanan */}
-                <div className="rounded-[2rem] border border-slate-100 bg-white p-5 shadow-lg shadow-slate-200/40 sm:p-8 md:rounded-[2.5rem]">
-                    <div className="mb-5 flex items-center gap-3 sm:mb-8 sm:gap-4">
-                        <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center">
-                            <Lock size={24}/>
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-black text-slate-800">Keamanan</h3>
-                            <p className="text-xs text-slate-400 font-medium">Kelola akses akun secara terpisah</p>
-                        </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
-                        <p className="font-black text-slate-800">Kata sandi</p>
-                        <p className="mt-2 text-sm leading-6 text-slate-500">
-                          Kata sandi tidak ditampilkan pada formulir biodata.
-                        </p>
-                        <p className="mt-3 text-xs font-medium text-slate-400">
-                          Terakhir diperbarui: {formatAccountDate(user.password_updated_at)}
-                        </p>
-                        <div className="mt-5">
-                          <ChangePasswordDialog
-                            passwordUpdatedAt={user.password_updated_at}
-                            onUpdated={(timestamp) => setUser((current) => ({
-                              ...current,
-                              password_updated_at: timestamp,
-                            }))}
-                          />
-                        </div>
-                    </div>
-                </div>
             </div>
 
             {/* === 3. LOKASI === */}

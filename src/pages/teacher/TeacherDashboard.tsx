@@ -10,7 +10,7 @@ import { getApiError, getCached } from "@/lib/http";
 type DashboardData = {
   teacher: { name: string; is_accepting_requests: boolean; suspended_until?: string | null };
   priorities: { pending_offers: number; unread_messages: number; unread_notifications: number; schedule_responses: number };
-  classes: { active: number; in_progress: number; awaiting_student: number; student_count: number; next?: { id: number; subject: string; chapter?: string | null; start_at: string; end_at: string; learning_mode: string; status: string } | null };
+  classes: { active: number; in_progress: number; awaiting_student: number; student_count: number; session_progress?: { total: number; completed: number; remaining: number }; next?: { id: number; subject: string; chapter?: string | null; start_at: string; end_at: string; learning_mode: string; status: string } | null };
   earnings: { held: number; available: number; requested: number };
   rating: { average: number; count: number };
 };
@@ -32,6 +32,11 @@ const normalizeDashboard = (raw: Partial<DashboardData> | null | undefined): Das
     in_progress: Number(raw?.classes?.in_progress) || 0,
     awaiting_student: Number(raw?.classes?.awaiting_student) || 0,
     student_count: Number(raw?.classes?.student_count) || 0,
+    session_progress: {
+      total: Number(raw?.classes?.session_progress?.total) || 0,
+      completed: Number(raw?.classes?.session_progress?.completed) || 0,
+      remaining: Number(raw?.classes?.session_progress?.remaining) || 0,
+    },
     next: raw?.classes?.next || null,
   },
   earnings: {
@@ -94,7 +99,7 @@ export default function TeacherDashboard() {
     {loading ? <div className="grid min-h-72 place-items-center rounded-[2rem] bg-white"><Loader2 className="animate-spin text-indigo-600" size={30} /></div> : failed || !data ? <div className="rounded-[2rem] border border-rose-100 bg-white p-12 text-center"><AlertCircle className="mx-auto text-rose-400" /><p className="mt-3 font-black">Dashboard belum dapat dimuat</p><Button onClick={() => void load(true)} className="mt-4 rounded-xl bg-indigo-600">Coba lagi</Button></div> : <>
       <section><div className="mb-3 flex items-center justify-between"><div><h2 className="text-lg font-black text-slate-900">Perlu dikerjakan</h2><p className="mt-1 text-xs text-slate-500">Diurutkan berdasarkan pekerjaan yang menunggu tindakanmu.</p></div></div>{priorityItems.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{priorityItems.map(({ label, count, to, icon: Icon, color }) => <Link key={label} to={to} className="group flex items-center gap-3 rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm transition hover-rise-half hover-shadow-lg"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${color}`}><Icon size={18} /></span><span className="min-w-0 flex-1"><span className="block text-2xl font-black text-slate-900">{count}</span><span className="block text-xs font-bold text-slate-500">{label}</span></span><ArrowRight className="shrink-0 text-slate-300 group-hover:text-indigo-500" size={17} /></Link>)}</div> : <div className="rounded-[1.4rem] border border-emerald-100 bg-emerald-50 p-5 text-sm font-bold text-emerald-800"><ShieldCheck className="mr-2 inline" size={17} />Tidak ada pekerjaan mendesak saat ini.</div>}</section>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric icon={BookOpen} label="Kelas aktif" value={String(data.classes.active)} /><Metric icon={Users} label="Murid aktif" value={String(data.classes.student_count)} /><Metric icon={Star} label="Penilaian" value={data.rating.count ? `${data.rating.average.toFixed(1)} / 5` : "-"} /><Metric icon={Banknote} label="Siap dicairkan" value={rupiah(data.earnings.available)} /></section>
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-5"><Metric icon={BookOpen} label="Kelas aktif" value={String(data.classes.active)} /><Metric icon={Users} label="Murid aktif" value={String(data.classes.student_count)} /><Metric icon={ClipboardCheck} label="Sesi selesai" value={`${data.classes.session_progress?.completed ?? 0}/${data.classes.session_progress?.total ?? 0}`} /><Metric icon={Star} label="Penilaian" value={data.rating.count ? `${data.rating.average.toFixed(1)} / 5` : "-"} /><Metric icon={Banknote} label="Siap dicairkan" value={rupiah(data.earnings.available)} /></section>
 
       <section className="grid gap-4 lg:grid-cols-[1.35fr_.65fr]">
         <article className="rounded-[1.7rem] border border-slate-100 bg-white p-5 shadow-sm sm:rounded-[2rem] sm:p-6"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-indigo-500">Sesi berikutnya</p><h2 className="mt-2 text-xl font-black text-slate-900">{data.classes.next?.subject || "Belum ada jadwal"}</h2></div>{data.classes.next && <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${data.classes.next.learning_mode === "online" ? "bg-indigo-50 text-indigo-600" : "bg-emerald-50 text-emerald-600"}`}>{data.classes.next.learning_mode === "online" ? <Monitor size={19} /> : <MapPin size={19} />}</span>}</div>{data.classes.next ? <><p className="mt-2 text-sm text-slate-500">{data.classes.next.chapter || "Materi sesuai permintaan murid"}</p><div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-700"><CalendarClock className="mr-2 inline text-indigo-600" size={17} />{dateTime(data.classes.next.start_at)} WIB</div><Button asChild className="mt-4 h-11 w-full rounded-xl bg-indigo-600"><Link to="/guru/kelas">Buka kelas <ArrowRight className="ml-2" size={16} /></Link></Button></> : <p className="mt-3 text-sm leading-6 text-slate-500">Permintaan yang diterima dan kelas berbayar akan muncul di sini.</p>}</article>

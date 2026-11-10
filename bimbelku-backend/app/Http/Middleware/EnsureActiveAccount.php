@@ -12,7 +12,7 @@ class EnsureActiveAccount
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json([
                 'message' => 'Sesi tidak ditemukan. Silakan masuk kembali.',
             ], 401);

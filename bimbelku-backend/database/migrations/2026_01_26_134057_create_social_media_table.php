@@ -10,15 +10,15 @@ return new class extends Migration
      * Run the migrations.
      */
     public function up()
-{
-    Schema::create('social_medias', function (Blueprint $table) {
-        $table->id();
-        $table->string('name');
-        $table->string('link');
-        $table->string('icon'); // Path gambar
-        $table->timestamps();
-    });
-}
+    {
+        Schema::create('social_medias', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('link');
+            $table->string('icon'); // Path gambar
+            $table->timestamps();
+        });
+    }
 
     /**
      * Reverse the migrations.

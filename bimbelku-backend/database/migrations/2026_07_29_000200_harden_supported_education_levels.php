@@ -52,9 +52,9 @@ return new class extends Migration
     private function cleanStudentProfiles(): void
     {
         if (
-            !Schema::hasTable('users')
-            || !Schema::hasColumn('users', 'grade')
-            || !Schema::hasColumn('users', 'role')
+            ! Schema::hasTable('users')
+            || ! Schema::hasColumn('users', 'grade')
+            || ! Schema::hasColumn('users', 'role')
         ) {
             return;
         }
@@ -76,8 +76,8 @@ return new class extends Migration
     private function cleanCurriculumSubjects(): void
     {
         if (
-            !Schema::hasTable('curriculum_subjects')
-            || !Schema::hasColumn('curriculum_subjects', 'education_levels')
+            ! Schema::hasTable('curriculum_subjects')
+            || ! Schema::hasColumn('curriculum_subjects', 'education_levels')
         ) {
             return;
         }
@@ -117,8 +117,8 @@ return new class extends Migration
     private function cleanTeacherSubjects(): void
     {
         if (
-            !Schema::hasTable('teacher_subjects')
-            || !Schema::hasColumn('teacher_subjects', 'levels')
+            ! Schema::hasTable('teacher_subjects')
+            || ! Schema::hasColumn('teacher_subjects', 'levels')
         ) {
             return;
         }
@@ -148,9 +148,9 @@ return new class extends Migration
         bool $allowNullLevel = false
     ): void {
         if (
-            !Schema::hasTable($table)
-            || !Schema::hasColumn($table, 'education_level')
-            || !Schema::hasColumn($table, 'is_active')
+            ! Schema::hasTable($table)
+            || ! Schema::hasColumn($table, 'education_level')
+            || ! Schema::hasColumn($table, 'is_active')
         ) {
             return;
         }
@@ -168,7 +168,7 @@ return new class extends Migration
             ->whereNotIn('education_level', array_keys(self::GRADES_BY_LEVEL))
             ->update($values);
 
-        if (!Schema::hasColumn($table, 'grade')) {
+        if (! Schema::hasColumn($table, 'grade')) {
             return;
         }
 
@@ -184,7 +184,7 @@ return new class extends Migration
                 $grade = is_string($row->grade) ? $row->grade : '';
                 if (
                     array_key_exists($level, self::GRADES_BY_LEVEL)
-                    && !in_array($grade, self::GRADES_BY_LEVEL[$level], true)
+                    && ! in_array($grade, self::GRADES_BY_LEVEL[$level], true)
                 ) {
                     DB::table($table)
                         ->where('id', $row->id)
@@ -219,7 +219,7 @@ return new class extends Migration
         if (is_array($value)) {
             return array_values(array_filter($value, 'is_string'));
         }
-        if (!is_string($value) || trim($value) === '') {
+        if (! is_string($value) || trim($value) === '') {
             return [];
         }
 

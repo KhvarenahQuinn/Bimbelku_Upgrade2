@@ -123,6 +123,9 @@ class AppServiceProvider extends ServiceProvider
         // Shared authenticated actions.
         $registerIsolatedLimiter('account-password-change', 5, 'Perubahan kata sandi dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('student-payment-pin-set', 5, 'Pengaturan PIN dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.');
+        $registerIsolatedLimiter('student-payment-pin-forgot', 5, 'Permintaan lupa PIN terlalu sering. Tunggu :seconds detik lalu coba lagi.');
+        $registerIsolatedLimiter('student-payment-pin-forgot-email', 5, 'Permintaan link reset PIN terlalu sering. Tunggu :seconds detik lalu coba lagi.');
+        $registerIsolatedLimiter('payment-pin-reset-token', 10, 'Reset PIN lewat email dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('student-payment-pin-reset-request', 3, 'Permintaan reset PIN terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('student-payment-pin-reset', 10, 'Percobaan reset PIN terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('session-action-poll', 60, 'Pemeriksaan status sesi terlalu sering. Tunggu :seconds detik lalu coba lagi.');

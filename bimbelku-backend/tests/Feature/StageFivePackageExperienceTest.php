@@ -6,6 +6,7 @@ use App\Models\CurriculumChapter;
 use App\Models\CurriculumSubject;
 use App\Models\LearningPackage;
 use App\Models\PackagePlan;
+use App\Models\PaymentSetting;
 use App\Models\Promotion;
 use App\Models\User;
 use Carbon\Carbon;
@@ -16,7 +17,6 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
-use App\Models\PaymentSetting;
 
 class StageFivePackageExperienceTest extends TestCase
 {
@@ -311,7 +311,6 @@ class StageFivePackageExperienceTest extends TestCase
             ->assertJsonPath('message', 'Jumlah hari belajar unik pada seluruh paket melebihi batas paket.');
     }
 
-
     public function test_package_quote_accepts_one_or_two_hour_sessions(): void
     {
         $this->seed(CurriculumCatalogSeeder::class);
@@ -368,14 +367,14 @@ class StageFivePackageExperienceTest extends TestCase
         $this->seed(CurriculumCatalogSeeder::class);
         $this->seed(StageFiveExperienceSeeder::class);
         PaymentSetting::updateOrCreate(
-        ['singleton_key' => 1],
-        [
-            'merchant_name' => 'BimbelKu Official',
-            'bank_name' => 'Bank Pengujian',
-            'account_number' => '1234567890',
-            'account_name' => 'BimbelKu',
-        ]
-    );
+            ['singleton_key' => 1],
+            [
+                'merchant_name' => 'BimbelKu Official',
+                'bank_name' => 'Bank Pengujian',
+                'account_number' => '1234567890',
+                'account_name' => 'BimbelKu',
+            ]
+        );
         $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
         Sanctum::actingAs($student);
 

@@ -33,7 +33,7 @@ class Promotion extends Model
         $now = now(config('app.timezone'));
 
         return $this->is_active
-            && (!$this->starts_at || $this->starts_at->lte($now))
-            && (!$this->ends_at || $this->ends_at->gte($now));
+            && (! $this->starts_at || $this->starts_at->lte($now))
+            && (! $this->ends_at || $this->ends_at->gte($now));
     }
 }

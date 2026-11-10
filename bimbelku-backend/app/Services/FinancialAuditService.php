@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\FinancialAuditLog;
 use App\Models\Setting;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -71,16 +72,18 @@ class FinancialAuditService
     private function sanitize(array $payload): array
     {
         foreach ($payload as $key => $value) {
-            if ($value instanceof \Illuminate\Http\UploadedFile) {
+            if ($value instanceof UploadedFile) {
                 $payload[$key] = [
                     'file_name' => $value->getClientOriginalName(),
                     'size' => $value->getSize(),
                     'mime' => $value->getMimeType(),
                 ];
+
                 continue;
             }
             if (is_array($value)) {
                 $payload[$key] = $this->sanitize($value);
+
                 continue;
             }
             if (in_array($key, ['account_number', 'sender_account_number'], true)) {

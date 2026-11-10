@@ -8,13 +8,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasColumn('cheap_class_sessions', 'teacher_started_at')) {
+        if (! Schema::hasColumn('cheap_class_sessions', 'teacher_started_at')) {
             Schema::table('cheap_class_sessions', function (Blueprint $table) {
                 $table->dateTime('teacher_started_at')->nullable()->after('status');
             });
         }
 
-        if (!Schema::hasColumn('cheap_class_sessions', 'teacher_started_by')) {
+        if (! Schema::hasColumn('cheap_class_sessions', 'teacher_started_by')) {
             Schema::table('cheap_class_sessions', function (Blueprint $table) {
                 $table->foreignId('teacher_started_by')
                     ->nullable()

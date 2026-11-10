@@ -59,6 +59,7 @@ class DemoCheapClassCommandTest extends TestCase
         $this->postJson('/api/login', [
             'email' => 'demo.admin@bimbelku.local',
             'password' => 'password',
+            'login_portal' => 'admin',
         ])->assertOk()->assertJsonPath('user.role', 'admin');
 
         Sanctum::actingAs($teacher);
@@ -191,6 +192,7 @@ class DemoCheapClassCommandTest extends TestCase
             ->assertJsonPath('status', 'completed')
             ->assertJsonPath('subjects.0.progress_status', 'completed');
     }
+
     public function test_pre_payment_demo_can_start_before_payment_without_waiting_for_admin_opening_hour(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-08-19 14:42:00', 'Asia/Jakarta'));
@@ -266,5 +268,4 @@ class DemoCheapClassCommandTest extends TestCase
             ->assertSuccessful();
         $this->assertSame('report_required', $session->fresh()->status);
     }
-
 }

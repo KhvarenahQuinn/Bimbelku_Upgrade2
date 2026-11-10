@@ -954,6 +954,7 @@ export default function MyClasses() {
                 setHubInitialTab("session");
                 setHubReturnClass(null);
                 clearSessionActionQuery();
+                void loadClasses({ silent: true });
               }
             }}
             backLabel={hubReturnClass ? "Kembali ke detail kelas" : undefined}

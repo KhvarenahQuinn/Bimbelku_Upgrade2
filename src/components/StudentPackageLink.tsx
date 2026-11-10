@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ComponentProps, type MouseEvent, useState } from "react";
 import { Link } from "react-router-dom";
+import { clearBrowserSession } from "@/lib/session";
 
 const StudentPackageBlockedDialog = lazy(() => import("@/components/StudentPackageBlockedDialog"));
 
@@ -16,8 +17,7 @@ const readStoredUser = (): StoredUser | null => {
     const parsed = JSON.parse(storedUser);
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
+    clearBrowserSession();
     return null;
   }
 };

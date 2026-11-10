@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Refund;
 use App\Services\RefundSettlementService;
+use App\Support\RefundStatusPresenter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -16,26 +17,40 @@ class StudentRefundController extends Controller
         abort_unless((int) $refund->user_id === (int) $request->user()->id, 403);
         $refund->refresh()->loadMissing('order');
 
-        if ($refund->status === 'pending' && $settlement->isAutomatic($refund)) {
-            if ($refund->destination_method !== 'xendit_original' || blank($refund->gateway_refund_id)) {
+        if ($settlement->isAutomatic($refund) && in_array($refund->status, ['pending', 'failed'], true)) {
+            if ($refund->destination_method === 'xendit_original' && filled($refund->gateway_refund_id)) {
+                // Do not hammer the provider on every page load.
+                if (! $refund->last_reconciled_at || $refund->last_reconciled_at->lt(now()->subMinute())) {
+                    $settlement->reconcile($refund);
+                }
+            } elseif ($refund->status === 'pending') {
                 $settlement->startAutomatic($refund);
-            } else {
-                $settlement->reconcile($refund);
             }
         }
 
-        $fresh = $refund->fresh();
+        $fresh = $refund->fresh()->loadMissing('order');
+        $presented = RefundStatusPresenter::present($fresh);
+
         return response()->json([
-            'message' => $fresh->status === 'paid'
-                ? 'Refund sudah selesai.'
-                : 'Status refund sudah diperiksa.',
-            'refund' => $fresh,
+            'message' => $presented['status_message'],
+            'refund' => array_merge($fresh->toArray(), $presented),
         ]);
     }
 
     public function selectDestination(Request $request, Refund $refund, RefundSettlementService $settlement)
     {
         abort_unless((int) $refund->user_id === (int) $request->user()->id, 403);
+
+        $rawMethod = $request->input('destination_method') ?? $request->input('destination');
+        if ($rawMethod !== null) {
+            $normalized = match (mb_strtolower(trim((string) $rawMethod))) {
+                'wallet', 'saldo', 'bimbelku_balance', 'saldo_bimbelku', 'saldo bimbelku' => 'bimbelku_balance',
+                'bank', 'bank_transfer' => 'bank_transfer',
+                'original_payment', 'original', 'xendit_original', 'metode_asal' => 'xendit_original',
+                default => $rawMethod,
+            };
+            $request->merge(['destination_method' => $normalized]);
+        }
 
         $validated = $request->validate([
             'destination_method' => ['required', Rule::in(['bank_transfer', 'bimbelku_balance', 'xendit_original'])],
@@ -54,10 +69,23 @@ class StudentRefundController extends Controller
         $selected = DB::transaction(function () use ($refund, $request, $validated) {
             $locked = Refund::query()->lockForUpdate()->findOrFail($refund->id);
             abort_unless((int) $locked->user_id === (int) $request->user()->id, 403);
-            abort_unless($locked->status === 'pending', 422, 'Refund ini sudah diproses dan tujuan tidak dapat diubah.');
-            abort_if(filled($locked->gateway_refund_id) || filled($locked->gateway_submitted_at), 409, 'Refund sudah dikirim ke metode pembayaran asal dan tujuannya tidak dapat diubah.');
+            abort_unless(in_array($locked->status, ['pending', 'failed'], true), 422, 'Refund ini sudah diproses dan tujuan tidak dapat diubah.');
 
             $locked->loadMissing('order');
+            $gatewayFailed = $locked->status === 'failed' || $locked->gatewayFailed();
+            $alreadySent = filled($locked->gateway_refund_id) || filled($locked->gateway_submitted_at);
+            $switchingToBalance = $validated['destination_method'] === 'bimbelku_balance';
+
+            if ($gatewayFailed) {
+                abort_unless(
+                    $switchingToBalance,
+                    422,
+                    'Pengembalian ke metode pembayaran asal gagal. Pilih Saldo BimbelKu agar dana tetap dapat digunakan.'
+                );
+            } else {
+                abort_if($alreadySent, 409, 'Refund sudah dikirim ke metode pembayaran asal dan tujuannya tidak dapat diubah.');
+            }
+
             $breakdown = $locked->tenderBreakdown();
             if ($validated['destination_method'] === 'xendit_original') {
                 abort_unless($locked->order?->payment_provider === 'xendit' && $breakdown['external_funded_amount'] > 0.009, 422, 'Pengembalian ke metode pembayaran asal tidak tersedia untuk transaksi ini.');
@@ -69,6 +97,7 @@ class StudentRefundController extends Controller
                     'destination_selected_at' => now(),
                     'destination_selection_version' => ((int) $locked->destination_selection_version) + 1,
                 ]);
+
                 return $locked->fresh();
             }
             if ($validated['destination_method'] === 'bank_transfer' && $breakdown['external_funded_amount'] <= 0.009) {
@@ -95,28 +124,14 @@ class StudentRefundController extends Controller
             $settlement->startAutomatic($selected);
         }
         $selected = $selected->fresh()->loadMissing('order');
-        $breakdown = $selected->tenderBreakdown();
+        $presented = RefundStatusPresenter::present($selected);
 
         return response()->json([
-            'message' => $selected->status === 'paid'
-                ? 'Tujuan refund dikonfirmasi dan pengembalian sudah selesai.'
-                : ($selected->destination_method === 'xendit_original'
-                ? 'Tujuan refund dikonfirmasi. Pengembalian ke metode pembayaran asal sedang diproses.'
-                : ($selected->destination_method === 'bimbelku_balance'
-                ? 'Tujuan refund dikonfirmasi. Saldo BimbelKu akan diperbarui setelah keputusan refund selesai.'
-                : 'Tujuan refund rekening/e-wallet berhasil dikonfirmasi.')),
-            'refund' => [
-                'id' => $selected->id,
-                'status' => $selected->status,
-                'destination_method' => $selected->destination_method,
-                'destination_bank_name' => $selected->destination_bank_name,
-                'destination_account_name' => $selected->destination_account_name,
-                'destination_account_number' => $selected->destination_account_number,
-                'destination_selected_at' => $selected->destination_selected_at,
-                'destination_selection_version' => (int) $selected->destination_selection_version,
-                'wallet_funded_amount' => $breakdown['wallet_funded_amount'],
-                'external_funded_amount' => $breakdown['external_funded_amount'],
-            ],
+            'message' => $presented['status_message'],
+            'refund' => array_merge($selected->toArray(), $presented, [
+                'wallet_funded_amount' => $selected->tenderBreakdown()['wallet_funded_amount'],
+                'external_funded_amount' => $selected->tenderBreakdown()['external_funded_amount'],
+            ]),
         ]);
     }
 }

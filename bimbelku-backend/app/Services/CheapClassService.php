@@ -13,6 +13,7 @@ use App\Models\Refund;
 use App\Models\TeacherAvailability;
 use App\Models\TeacherAvailabilityException;
 use App\Models\User;
+use App\Support\PaymentWindow;
 use App\Support\PublicMedia;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
@@ -26,11 +27,10 @@ class CheapClassService
     public function __construct(
         private readonly CustomerWalletService $wallets,
         private readonly PaymentReconciliationService $paymentReconciliation,
-    )
-    {
-    }
+    ) {}
 
     private const ACTIVE_SEAT_STATUSES = ['seat_held', 'payment_submitted', 'payment_rejected', 'partially_paid', 'confirmed'];
+
     private const ACTIVE_CLASS_STATUSES = ['waiting_teacher', 'open', 'registration_closed', 'awaiting_verification', 'confirmed'];
 
     /** @return array{template:CheapClassTemplate,class:CheapClass,teacher:?User} */
@@ -71,7 +71,7 @@ class CheapClassService
 
             $template = CheapClassTemplate::create([
                 ...$data,
-                'payment_window_minutes' => \App\Support\PaymentWindow::MINUTES,
+                'payment_window_minutes' => PaymentWindow::MINUTES,
                 'teacher_id' => null,
                 'recurrence_enabled' => $recurrenceEnabled,
                 'recurrence_anchor_at' => $recurrenceEnabled ? $registrationOpensAt : null,
@@ -142,7 +142,7 @@ class CheapClassService
             'custom_price_per_student' => $template->custom_price_per_student,
             'minimum_participants' => $template->minimum_participants,
             'maximum_participants' => $template->maximum_participants,
-            'payment_window_minutes' => \App\Support\PaymentWindow::MINUTES,
+            'payment_window_minutes' => PaymentWindow::MINUTES,
             'status' => 'waiting_teacher',
         ]);
 
@@ -184,7 +184,7 @@ class CheapClassService
             ];
         }
 
-        if (!in_array($cheapClass->status, ['waiting_teacher', 'open', 'registration_closed', 'cancelled'], true)) {
+        if (! in_array($cheapClass->status, ['waiting_teacher', 'open', 'registration_closed', 'cancelled'], true)) {
             return [
                 'can_delete' => false,
                 'reason' => 'Status paket ini tidak mengizinkan penghapusan.',
@@ -218,7 +218,7 @@ class CheapClassService
             ];
         }
 
-        if (!in_array($cheapClass->status, self::ACTIVE_CLASS_STATUSES, true)) {
+        if (! in_array($cheapClass->status, self::ACTIVE_CLASS_STATUSES, true)) {
             return [
                 'can_cancel' => false,
                 'reason' => 'Status paket ini tidak mengizinkan pembatalan.',
@@ -227,7 +227,7 @@ class CheapClassService
 
         $firstSessionAt = $cheapClass->sessions()->min('starts_at');
         $startsAt = $firstSessionAt ? Carbon::parse($firstSessionAt) : $cheapClass->starts_at;
-        if (!$startsAt || $startsAt->lte(now())) {
+        if (! $startsAt || $startsAt->lte(now())) {
             return [
                 'can_cancel' => false,
                 'reason' => 'Paket sudah dimulai sehingga tidak dapat dibatalkan dari halaman jadwal.',
@@ -251,7 +251,7 @@ class CheapClassService
             $templateRemoved = false;
             if ($templateId) {
                 $template = CheapClassTemplate::query()->lockForUpdate()->find($templateId);
-                if ($template && !$template->recurrence_enabled && !$template->classes()->exists()) {
+                if ($template && ! $template->recurrence_enabled && ! $template->classes()->exists()) {
                     $template->delete();
                     $templateRemoved = true;
                 }
@@ -390,10 +390,10 @@ class CheapClassService
         return DB::transaction(function () use ($templateId) {
             $template = CheapClassTemplate::query()->lockForUpdate()->find($templateId);
             if (
-                !$template
-                || !$template->recurrence_enabled
-                || !$template->is_active
-                || !$template->next_publish_at
+                ! $template
+                || ! $template->recurrence_enabled
+                || ! $template->is_active
+                || ! $template->next_publish_at
                 || $template->next_publish_at->isFuture()
             ) {
                 return ['created' => 0, 'skipped' => 0, 'existing' => 0];
@@ -415,6 +415,7 @@ class CheapClassService
                 $template->next_publish_at = $scheduledPublishAt;
                 $template->last_generation_error = null;
                 $template->save();
+
                 return ['created' => 0, 'skipped' => $skipped, 'existing' => 0];
             }
 
@@ -468,11 +469,12 @@ class CheapClassService
             $locked = CheapClassTemplate::query()->lockForUpdate()->findOrFail($template->id);
             abort_unless($locked->recurrence_enabled, 422, 'Template paket sekali dibuat tidak memiliki pengulangan mingguan.');
 
-            if (!$active) {
+            if (! $active) {
                 $locked->update([
                     'is_active' => false,
                     'next_publish_at' => null,
                 ]);
+
                 return $locked->fresh();
             }
 
@@ -500,6 +502,7 @@ class CheapClassService
 
         $seconds = max(0, $reference->getTimestamp() - $anchor->getTimestamp());
         $weeks = intdiv($seconds, 7 * 24 * 60 * 60) + 1;
+
         return $anchor->copy()->addWeeks($weeks);
     }
 
@@ -522,7 +525,7 @@ class CheapClassService
 
         foreach ($ids as $id) {
             $class = CheapClass::query()->find($id);
-            if (!$class || $class->status !== 'waiting_teacher') {
+            if (! $class || $class->status !== 'waiting_teacher') {
                 continue;
             }
             $checked++;
@@ -553,7 +556,7 @@ class CheapClassService
 
         foreach ($ids as $id) {
             $class = CheapClass::query()->find($id);
-            if (!$class) {
+            if (! $class) {
                 continue;
             }
             $beforeTeacherId = $class->teacher_id;
@@ -607,7 +610,7 @@ class CheapClassService
                 'Pendaftaran Kelas Kelompok sudah ditutup atau belum dibuka.'
             );
             abort_if(
-                !$this->teacherCanTeach($class->teacher_id, $class),
+                ! $this->teacherCanTeach($class->teacher_id, $class),
                 422,
                 'Tutor kelas sedang tidak tersedia. Admin sedang mencari pengganti.'
             );
@@ -641,7 +644,7 @@ class CheapClassService
                 'Kuota Kelas Kelompok sudah penuh.'
             );
 
-            $seatExpiresAt = now()->addMinutes(\App\Support\PaymentWindow::MINUTES)
+            $seatExpiresAt = now()->addMinutes(PaymentWindow::MINUTES)
                 ->min($class->registration_deadline);
             abort_if($seatExpiresAt->lte(now()), 422, 'Waktu pembayaran tidak lagi tersedia untuk kelas ini.');
 
@@ -659,7 +662,7 @@ class CheapClassService
             ]);
             $enrollment->save();
 
-            $order = $enrollment->order ?: new Order();
+            $order = $enrollment->order ?: new Order;
             $discardedProof = $order->payment_proof;
             $normalPackagePrice = (float) $class->price_per_session * (int) $class->session_count;
             $subtotal = max($normalPackagePrice, (float) $class->price_per_student);
@@ -689,7 +692,7 @@ class CheapClassService
             Notification::create([
                 'user_id' => $student->id,
                 'title' => 'Kursi Kelas Kelompok ditahan',
-                'message' => 'Selesaikan pembayaran sebelum '. $seatExpiresAt->translatedFormat('d M Y, H:i').' WIB agar kursi tetap aman.',
+                'message' => 'Selesaikan pembayaran sebelum '.$seatExpiresAt->translatedFormat('d M Y, H:i').' WIB agar kursi tetap aman.',
                 'type' => 'info',
                 'target_url' => '/payment',
             ]);
@@ -709,7 +712,7 @@ class CheapClassService
     {
         $enrollmentId = (int) $order->cheap_class_enrollment_id;
         $classId = (int) CheapClassEnrollment::query()->whereKey($enrollmentId)->value('cheap_class_id');
-        abort_if(!$enrollmentId || !$classId, 422, 'Tagihan Kelas Kelompok tidak memiliki data peserta yang valid.');
+        abort_if(! $enrollmentId || ! $classId, 422, 'Tagihan Kelas Kelompok tidak memiliki data peserta yang valid.');
 
         DB::transaction(function () use ($order, $details, $path, $useWallet, $walletExpectedAmount, $enrollmentId, $classId) {
             // Urutan lock seluruh mutasi Kelas Kelompok: class -> enrollment -> order.
@@ -726,9 +729,9 @@ class CheapClassService
                 ->firstOrFail();
             abort_unless(in_array($lockedOrder->status, ['pending', 'rejected', 'partially_paid'], true), 422, 'Tagihan ini sudah tidak dapat dibayar.');
             abort_unless(in_array($enrollment->status, ['seat_held', 'payment_rejected', 'partially_paid'], true), 422, 'Kursi tidak lagi menerima pembayaran.');
-            abort_if(!$enrollment->seat_expires_at?->isFuture(), 422, 'Batas pembayaran sudah berakhir.');
+            abort_if(! $enrollment->seat_expires_at?->isFuture(), 422, 'Batas pembayaran sudah berakhir.');
             abort_if(
-                !in_array($class->status, ['waiting_teacher', 'open', 'registration_closed', 'awaiting_verification'], true),
+                ! in_array($class->status, ['waiting_teacher', 'open', 'registration_closed', 'awaiting_verification'], true),
                 422,
                 'Kelas tidak lagi menerima pembayaran.'
             );
@@ -750,7 +753,7 @@ class CheapClassService
                 )
                 : 0.0);
             $externalDue = round(max(0, (float) $lockedOrder->amount - $walletReserved - (float) $lockedOrder->external_received_amount), 2);
-            abort_if($externalDue > 0 && !$path, 422, 'Bukti pembayaran eksternal wajib diunggah untuk sisa tagihan.');
+            abort_if($externalDue > 0 && ! $path, 422, 'Bukti pembayaran eksternal wajib diunggah untuk sisa tagihan.');
             abort_if($externalDue <= 0 && $path, 422, 'Tagihan ini sudah tertutup penuh oleh Saldo BimbelKu.');
 
             $snapshot = $lockedOrder->class_details_snapshot ?? [];
@@ -786,7 +789,7 @@ class CheapClassService
     {
         $enrollmentId = (int) $order->cheap_class_enrollment_id;
         $classId = (int) CheapClassEnrollment::query()->whereKey($enrollmentId)->value('cheap_class_id');
-        abort_if(!$enrollmentId || !$classId, 422, 'Tagihan Kelas Kelompok tidak memiliki data peserta yang valid.');
+        abort_if(! $enrollmentId || ! $classId, 422, 'Tagihan Kelas Kelompok tidak memiliki data peserta yang valid.');
 
         $result = DB::transaction(function () use ($order, $status, $reason, $admin, $enrollmentId, $classId) {
             // Samakan urutan lock dengan join/cancel agar verifikasi paralel aman.
@@ -835,7 +838,7 @@ class CheapClassService
                     'verified_by' => $admin?->id,
                 ]);
                 $enrollment->update(['status' => $canResubmit ? 'payment_rejected' : 'payment_expired']);
-                if (!$canResubmit) {
+                if (! $canResubmit) {
                     $this->reopenRegistrationIfSeatAvailable($class);
                 }
                 Notification::create([
@@ -847,6 +850,7 @@ class CheapClassService
                     'type' => 'warning',
                     'target_url' => '/student/history',
                 ]);
+
                 return ['message' => $canResubmit ? 'Pembayaran ditolak. Murid masih dapat mengirim ulang.' : 'Pembayaran ditolak dan kursi berakhir.'];
             }
 
@@ -862,7 +866,7 @@ class CheapClassService
 
             $firstSessionAt = $class->sessions()->min('starts_at');
             $startsAt = $firstSessionAt ? Carbon::parse($firstSessionAt) : $class->starts_at;
-            $startedBeforeConfirmation = !$mustRefundIfAccepted
+            $startedBeforeConfirmation = ! $mustRefundIfAccepted
                 && $class->status !== 'confirmed'
                 && $startsAt
                 && $startsAt->lte(now());
@@ -949,7 +953,7 @@ class CheapClassService
             // terakhir sudah diverifikasi, kelas tidak perlu menunggu sampai
             // tenggat awal untuk mengambil keputusan.
             $finalizeNow = ($class->status === 'registration_closed' || $class->registration_deadline->isPast())
-                && !$class->enrollments()
+                && ! $class->enrollments()
                     ->whereIn('status', ['seat_held', 'payment_rejected', 'partially_paid', 'payment_submitted'])
                     ->exists();
 
@@ -960,10 +964,10 @@ class CheapClassService
             ];
         }, 3);
 
-        if (!empty($result['class_id'])) {
+        if (! empty($result['class_id'])) {
             $candidate = CheapClass::query()->find($result['class_id']);
             if ($candidate) {
-                if (!empty($result['cancel_after_verification'])) {
+                if (! empty($result['cancel_after_verification'])) {
                     $this->cancelClass(
                         $candidate,
                         'Kelas belum dikonfirmasi ketika sesi pertama dimulai.'
@@ -1003,14 +1007,14 @@ class CheapClassService
                 ->first();
 
             // Retry/double click pembatalan tidak boleh menghasilkan keadaan baru.
-            if ($lockedEnrollment->status === 'cancelled' && (!$order || $order->status === 'cancelled')) {
+            if ($lockedEnrollment->status === 'cancelled' && (! $order || $order->status === 'cancelled')) {
                 return;
             }
 
-            abort_if(!$class->registration_deadline->isFuture(), 422, 'Pendaftaran sudah ditutup sehingga pembatalan tidak tersedia.');
+            abort_if(! $class->registration_deadline->isFuture(), 422, 'Pendaftaran sudah ditutup sehingga pembatalan tidak tersedia.');
             abort_unless(
                 in_array($lockedEnrollment->status, ['seat_held', 'payment_rejected'], true)
-                    && (!$order || in_array($order->status, ['pending', 'rejected'], true)),
+                    && (! $order || in_array($order->status, ['pending', 'rejected'], true)),
                 422,
                 'Keikutsertaan tidak dapat dibatalkan setelah bukti pembayaran dikirim atau pembayaran diterima.'
             );
@@ -1025,7 +1029,7 @@ class CheapClassService
     {
         DB::transaction(function () use ($cheapClass) {
             $class = CheapClass::query()->lockForUpdate()->find($cheapClass->id);
-            if (!$class || in_array($class->status, ['confirmed', 'cancelled'], true)) {
+            if (! $class || in_array($class->status, ['confirmed', 'cancelled'], true)) {
                 return;
             }
             if (
@@ -1053,11 +1057,12 @@ class CheapClassService
             // Pada akhir pendaftaran, tutor wajib sudah tersedia. Bukti yang
             // sedang diperiksa tetap disimpan sebagai cancellation_pending agar
             // transfer valid dapat direfund tanpa menahan lifecycle paket.
-            if (!$class->registration_deadline->isFuture()) {
+            if (! $class->registration_deadline->isFuture()) {
                 $this->replaceTeacherIfNeeded($class);
                 $class->refresh();
-                if (!$this->teacherCanTeach($class->teacher_id, $class)) {
+                if (! $this->teacherCanTeach($class->teacher_id, $class)) {
                     $this->cancelClass($class, 'Tutor tidak tersedia sampai pendaftaran berakhir.');
+
                     return;
                 }
             }
@@ -1067,6 +1072,7 @@ class CheapClassService
                 ->exists();
             if ($submitted) {
                 $class->update(['status' => 'awaiting_verification']);
+
                 return;
             }
 
@@ -1074,12 +1080,14 @@ class CheapClassService
             if ($paid->count() >= $class->minimum_participants) {
                 if ($class->starts_at->lte(now())) {
                     $this->cancelClass($class, 'Kelas belum sempat dikonfirmasi sebelum sesi pertama dimulai.');
+
                     return;
                 }
                 $this->replaceTeacherIfNeeded($class);
                 $class->refresh();
-                if (!$this->teacherCanTeach($class->teacher_id, $class)) {
+                if (! $this->teacherCanTeach($class->teacher_id, $class)) {
                     $this->cancelClass($class, 'Tutor pengganti tidak tersedia pada jadwal kelas.');
+
                     return;
                 }
                 $class->update(['status' => 'confirmed', 'confirmed_at' => now()]);
@@ -1099,6 +1107,7 @@ class CheapClassService
                     'type' => 'success',
                     'target_url' => '/guru/kelas-murah',
                 ]);
+
                 return;
             }
 
@@ -1110,7 +1119,7 @@ class CheapClassService
     {
         DB::transaction(function () use ($class, $reason) {
             $lockedClass = CheapClass::query()->lockForUpdate()->find($class->id);
-            if (!$lockedClass || $lockedClass->status === 'cancelled') {
+            if (! $lockedClass || $lockedClass->status === 'cancelled') {
                 return;
             }
 
@@ -1121,7 +1130,7 @@ class CheapClassService
                     ->where('cheap_class_id', $lockedClass->id)
                     ->lockForUpdate()
                     ->first();
-                if (!$enrollment) {
+                if (! $enrollment) {
                     continue;
                 }
                 $order = Order::query()
@@ -1166,7 +1175,7 @@ class CheapClassService
     {
         return DB::transaction(function () use ($cheapClass) {
             $class = CheapClass::query()->lockForUpdate()->find($cheapClass->id);
-            if (!$class || in_array($class->status, ['cancelled', 'completed'], true)) {
+            if (! $class || in_array($class->status, ['cancelled', 'completed'], true)) {
                 return null;
             }
             if ($this->teacherCanTeach($class->teacher_id, $class)) {
@@ -1194,6 +1203,7 @@ class CheapClassService
                         'is_read' => false,
                     ]
                 );
+
                 return $candidate;
             }
 
@@ -1213,7 +1223,7 @@ class CheapClassService
     {
         $slots = $this->classSlots($class);
         if ($slots === []) {
-            return new Collection();
+            return new Collection;
         }
 
         return User::query()
@@ -1233,7 +1243,7 @@ class CheapClassService
                     $teacherQuery->whereHas('teacherProfile.subjects', fn ($subjects) => $subjects
                         ->where(function ($subjectMatch) use ($requiredSubject) {
                             $subjectMatch->whereRaw('LOWER(name) = ?', [mb_strtolower($requiredSubject['subject_name'])]);
-                            if (!empty($requiredSubject['curriculum_subject_id'])) {
+                            if (! empty($requiredSubject['curriculum_subject_id'])) {
                                 $subjectMatch->orWhere('curriculum_subject_id', (int) $requiredSubject['curriculum_subject_id']);
                             }
                         })
@@ -1265,7 +1275,7 @@ class CheapClassService
                     $available = $teacher->availabilities->contains(
                         fn (TeacherAvailability $item) => $item->day === $day && $item->covers($start, $end)
                     );
-                    if (!$available) {
+                    if (! $available) {
                         return false;
                     }
                     if (TeacherAvailabilityException::query()
@@ -1279,6 +1289,7 @@ class CheapClassService
                         return false;
                     }
                 }
+
                 return true;
             })
             ->sort(function (User $a, User $b) {
@@ -1312,12 +1323,13 @@ class CheapClassService
     private function pickBestEligibleTeacher(CheapClass $class, ?int $excludeTeacherId = null): ?User
     {
         $candidates = $this->eligibleTeachers($class, $excludeTeacherId);
+
         return $candidates->first();
     }
 
     public function teacherCanTeach(?int $teacherId, CheapClass $class): bool
     {
-        if (!$teacherId) {
+        if (! $teacherId) {
             return false;
         }
 
@@ -1346,9 +1358,9 @@ class CheapClassService
         $hasAccess = in_array($class->status, ['confirmed', 'completed'], true)
             && $enrollment?->status === 'confirmed'
             && $enrollment?->order?->status === 'paid';
-        $canReuseEnrollment = !$enrollment || (
+        $canReuseEnrollment = ! $enrollment || (
             in_array($enrollment->status, ['cancelled', 'payment_expired'], true)
-            && !in_array($enrollment->order?->status, ['submitted', 'paid', 'refund_pending', 'refunded'], true)
+            && ! in_array($enrollment->order?->status, ['submitted', 'paid', 'refund_pending', 'refunded'], true)
         );
         $canCancel = $enrollment
             && $class->registration_deadline->isFuture()
@@ -1438,7 +1450,7 @@ class CheapClassService
     {
         $count = 0;
         CheapClassEnrollment::query()
-                    ->whereIn('status', ['seat_held', 'payment_rejected', 'partially_paid'])
+            ->whereIn('status', ['seat_held', 'payment_rejected', 'partially_paid'])
             ->whereNotNull('seat_expires_at')
             ->where('seat_expires_at', '<=', now())
             ->select(['id', 'cheap_class_id'])
@@ -1456,9 +1468,9 @@ class CheapClassService
                             ->lockForUpdate()
                             ->first();
                         if (
-                            !$class
-                            || !$locked
-                            || !in_array($locked->status, ['seat_held', 'payment_rejected'], true)
+                            ! $class
+                            || ! $locked
+                            || ! in_array($locked->status, ['seat_held', 'payment_rejected'], true)
                             || $locked->seat_expires_at?->isFuture()
                         ) {
                             return;
@@ -1467,7 +1479,7 @@ class CheapClassService
                             ->where('cheap_class_enrollment_id', $locked->id)
                             ->lockForUpdate()
                             ->first();
-                        if ($order && !in_array($order->status, ['pending', 'rejected', 'partially_paid'], true)) {
+                        if ($order && ! in_array($order->status, ['pending', 'rejected', 'partially_paid'], true)) {
                             return;
                         }
                         if ($order?->status === 'partially_paid') {
@@ -1495,6 +1507,7 @@ class CheapClassService
                     }, 3);
                 }
             });
+
         return $count;
     }
 
@@ -1546,8 +1559,8 @@ class CheapClassService
     {
         $class->refresh();
         if (
-            !$class->registration_deadline->isFuture()
-            || !in_array($class->status, ['registration_closed', 'awaiting_verification'], true)
+            ! $class->registration_deadline->isFuture()
+            || ! in_array($class->status, ['registration_closed', 'awaiting_verification'], true)
         ) {
             return;
         }
@@ -1615,8 +1628,7 @@ class CheapClassService
         int $sessionCount,
         int $durationMinutes,
         array $recurrenceDays = []
-    ): void
-    {
+    ): void {
         $sessionCount = max(1, $sessionCount);
         $selectedDays = $this->normalizeRecurrenceDays(
             $recurrenceDays,
@@ -1627,7 +1639,7 @@ class CheapClassService
             if ($number > 1) {
                 do {
                     $cursor->addDay();
-                } while (!in_array($cursor->dayOfWeekIso, $selectedDays, true));
+                } while (! in_array($cursor->dayOfWeekIso, $selectedDays, true));
             }
             $startsAt = $cursor->copy();
             CheapClassSession::firstOrCreate(
@@ -1690,7 +1702,7 @@ class CheapClassService
 
                     $reportRequired++;
                     $class = $session->cheapClass;
-                    if (!$class?->teacher_id) {
+                    if (! $class?->teacher_id) {
                         continue;
                     }
 
@@ -1787,7 +1799,7 @@ class CheapClassService
         ];
 
         $normalized = collect($subjects)
-            ->filter(fn ($item) => is_array($item) && !empty($item['subject_name']))
+            ->filter(fn ($item) => is_array($item) && ! empty($item['subject_name']))
             ->take(4)
             ->map(fn ($item) => $normalize($item))
             ->values()

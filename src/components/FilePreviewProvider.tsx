@@ -13,6 +13,7 @@ import {
   consumePendingFilePreview,
   FILE_PREVIEW_EVENT,
   FilePreviewDetail,
+  setFilePreviewOpen,
 } from "@/lib/filePreview";
 
 const MIN_SCALE = 0.5;
@@ -31,6 +32,7 @@ export default function FilePreviewProvider() {
       current?.release?.();
       return null;
     });
+    setFilePreviewOpen(false);
   };
 
   useEffect(() => {
@@ -43,6 +45,7 @@ export default function FilePreviewProvider() {
         current?.release?.();
         return detail;
       });
+      setFilePreviewOpen(true);
       setScale(1);
       setRotation(0);
     };
@@ -51,11 +54,16 @@ export default function FilePreviewProvider() {
     const pending = consumePendingFilePreview();
     if (pending?.url) {
       setPreview(pending);
+      setFilePreviewOpen(true);
       setScale(1);
       setRotation(0);
     }
     return () => window.removeEventListener(FILE_PREVIEW_EVENT, open);
   }, []);
+
+  // Jika provider dilepas saat pratinjau masih terbuka, modal induk tidak boleh
+  // tetap terkunci oleh flag pratinjau.
+  useEffect(() => () => setFilePreviewOpen(false), []);
 
   useEffect(() => {
     if (!preview) return;
@@ -68,7 +76,16 @@ export default function FilePreviewProvider() {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape") {
+        // Radix Dialog mendengarkan Escape pada document (capture). Listener
+        // ini berada di window capture sehingga berjalan lebih dulu dan
+        // menghentikan event agar modal induk tidak ikut tertutup.
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        close();
+        return;
+      }
       if (event.key === "+" || event.key === "=") {
         setScale((value) => Math.min(MAX_SCALE, value + 0.25));
       }
@@ -76,11 +93,11 @@ export default function FilePreviewProvider() {
         setScale((value) => Math.max(MIN_SCALE, value - 0.25));
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
 
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
       restoreFocusRef.current?.focus();
     };
   }, [preview]);
@@ -94,10 +111,12 @@ export default function FilePreviewProvider() {
     <div
       ref={dialogRef}
       tabIndex={-1}
-      className="fixed inset-0 z-[var(--layer-preview)] flex flex-col bg-slate-950/95 text-white backdrop-blur-sm outline-none"
+      className="pointer-events-auto fixed inset-0 z-[var(--layer-preview)] flex flex-col bg-slate-950/95 text-white backdrop-blur-sm outline-none"
       role="dialog"
       aria-modal="true"
       aria-label={`Pratinjau ${preview.filename}`}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
     >
       <div className="flex min-h-16 items-center justify-between gap-3 border-b border-white/10 bg-slate-950/80 px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
@@ -148,6 +167,7 @@ export default function FilePreviewProvider() {
         role="presentation"
         className="relative flex-1 overflow-auto p-3 sm:p-6"
         onClick={(event) => {
+          event.stopPropagation();
           if (event.target === event.currentTarget) close();
         }}
       >

@@ -23,6 +23,7 @@ use App\Models\User;
 use App\Services\CustomerWalletService;
 use App\Services\PartialPackageRefundService;
 use App\Services\TeacherMatchingService;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -181,7 +182,7 @@ class DemoTeacherReplacement extends Command
         User $student,
         User $teacher,
         int $sequence,
-        \Carbon\Carbon $start,
+        Carbon $start,
         bool $completed,
     ): void {
         $status = $completed ? 'completed' : 'confirmed';

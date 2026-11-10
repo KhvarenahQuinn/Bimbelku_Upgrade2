@@ -4,8 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
-use App\Models\PackageChapter;
-use App\Models\PackageSessionChapterLog;
 use App\Models\PackageSubject;
 use App\Support\PackageChapterProgress;
 use Illuminate\Http\Request;
@@ -30,6 +28,8 @@ class ClassroomController extends Controller
                 'learningProgressReports.chapterLogs.chapter',
                 'packageSession.subject.package.plan',
                 'packageSession.subject.package.student:id,name',
+                'packageSession.subject.package.subjects.sessions.booking:id,status',
+                'packageSession.subject.sessions.booking:id,status',
                 'packageSession.subject.chapters',
                 'participantAttendances',
                 'latestClassroomMessage.sender:id,name',
@@ -66,6 +66,17 @@ class ClassroomController extends Controller
             $packageSubject = $packageSession?->subject;
             $packageChapters = $packageSubject?->chapters ?? collect();
             $chapterProgress = PackageChapterProgress::summary($packageChapters);
+            $package = $packageSubject?->package;
+            $subjectSessions = $packageSubject?->sessions ?? collect();
+            $subjectTotalSessions = (int) ($packageSubject?->allocated_sessions ?: $subjectSessions->count());
+            $subjectCompletedSessions = $subjectSessions
+                ->filter(fn ($session) => $session->booking?->status === 'completed')
+                ->count();
+            $packageTotalSessions = (int) ($package?->total_sessions ?? 0);
+            $packageCompletedSessions = ($package?->subjects ?? collect())
+                ->flatMap->sessions
+                ->filter(fn ($session) => $session->booking?->status === 'completed')
+                ->count();
             $teacherAttendance = $booking->sessionAttendances->firstWhere('user_id', $booking->teacher_id);
             $paidParticipants = $booking->participants->filter(fn ($participant) => $participant->order?->status === 'paid');
             $attendanceComplete = $paidParticipants->every(fn ($participant) => $booking->participantAttendances
@@ -73,6 +84,7 @@ class ClassroomController extends Controller
             $presentParticipants = $paidParticipants->filter(function ($participant) use ($booking) {
                 $status = $booking->participantAttendances
                     ->firstWhere('booking_participant_id', $participant->id)?->status;
+
                 return in_array($status, ['present', 'late', 'partial'], true);
             });
             $progressComplete = $attendanceComplete && $presentParticipants->every(fn ($participant) => $booking->learningProgressReports
@@ -143,6 +155,14 @@ class ClassroomController extends Controller
                 'latest_report' => $booking->reports->first(),
                 'latest_dispute' => $booking->disputes->first(),
                 'package_progress' => $packageSubject && $packageChapters->isNotEmpty() ? $chapterProgress : null,
+                'package_session_progress' => $packageSubject ? [
+                    'total_sessions' => $packageTotalSessions,
+                    'used_sessions' => $packageCompletedSessions,
+                    'remaining_sessions' => max(0, $packageTotalSessions - $packageCompletedSessions),
+                    'subject_total_sessions' => $subjectTotalSessions,
+                    'subject_completed_sessions' => $subjectCompletedSessions,
+                    'subject_remaining_sessions' => max(0, $subjectTotalSessions - $subjectCompletedSessions),
+                ] : null,
                 'completion_steps' => [
                     'check_in' => (bool) $booking->student_confirmed_at,
                     'attendance' => $attendanceComplete,
@@ -164,9 +184,9 @@ class ClassroomController extends Controller
                 'can_complete' => false,
                 'can_report_absence' => $startAt !== null
                     && in_array($booking->status, ['confirmed', 'in_progress'], true)
-                    && !$booking->student_confirmed_at
+                    && ! $booking->student_confirmed_at
                     && now()->gte($startAt->copy()->addMinutes(15)),
-                'can_report_emergency' => !in_array($booking->status, [
+                'can_report_emergency' => ! in_array($booking->status, [
                     'completed', 'cancelled', 'refunded', 'emergency_refund_pending',
                 ], true),
             ];
@@ -256,12 +276,12 @@ class ClassroomController extends Controller
         if ($booking->learning_mode !== 'online') {
             return response()->json(['message' => 'Tautan pertemuan hanya tersedia untuk kelas online.'], 422);
         }
-        if (!in_array($booking->status, ['confirmed', 'in_progress'], true)) {
+        if (! in_array($booking->status, ['confirmed', 'in_progress'], true)) {
             return response()->json([
                 'message' => 'Tautan pertemuan hanya dapat diubah setelah pembayaran dikonfirmasi dan sebelum sesi ditutup.',
             ], 422);
         }
-        if (!$booking->participants()->whereHas('order', fn ($query) => $query->where('status', 'paid'))->exists()) {
+        if (! $booking->participants()->whereHas('order', fn ($query) => $query->where('status', 'paid'))->exists()) {
             return response()->json(['message' => 'Belum ada pembayaran yang dikonfirmasi untuk sesi ini.'], 422);
         }
         if (now()->greaterThanOrEqualTo($booking->end_at)) {

@@ -33,10 +33,10 @@ class LearningCatalogController extends Controller
             $subjects = $catalogSubjects
                 ->pluck('name')
                 ->merge(TeacherSubject::query()
-                ->where('is_active', true)
-                ->whereNotNull('name')
-                ->distinct()
-                ->pluck('name'))
+                    ->where('is_active', true)
+                    ->whereNotNull('name')
+                    ->distinct()
+                    ->pluck('name'))
                 ->merge(HourlyRate::query()->where('is_active', true)->distinct()->pluck('subject_name'))
                 ->merge($defaults)
                 ->filter()
@@ -63,7 +63,7 @@ class LearningCatalogController extends Controller
         ];
         $chapters = collect();
 
-        if (!$request->boolean('compact')) {
+        if (! $request->boolean('compact')) {
             $subjectId = $request->integer('curriculum_subject_id');
             $subjectName = trim((string) $request->query('subject_name', ''));
             $educationLevel = trim((string) $request->query('education_level', ''));

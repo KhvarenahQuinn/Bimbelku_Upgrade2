@@ -1,5 +1,5 @@
 import { notify } from "@/lib/notify";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   BarChart3,
@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Send,
   UserCheck,
+  Video,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -193,6 +194,9 @@ export default function LearningSessionHub({ bookingId, open, onOpenChange, init
     no_material_change: false,
     no_change_reason: "",
   });
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const chatPinnedToBottom = useRef(true);
+  const lastChatMessageId = useRef(0);
 
   const load = useCallback(async (quiet = false) => {
     if (!bookingId) return;
@@ -229,10 +233,41 @@ export default function LearningSessionHub({ bookingId, open, onOpenChange, init
   useEffect(() => {
     if (!open || !bookingId) return;
     setTab(initialTab);
+    lastChatMessageId.current = 0;
+    chatPinnedToBottom.current = true;
     void load();
-    const timer = window.setInterval(() => void load(true), 15000);
-    return () => window.clearInterval(timer);
   }, [open, bookingId, initialTab, load]);
+
+  useEffect(() => {
+    if (!open || !bookingId) return;
+    // Chat lebih sering diperbarui agar pesan masuk terasa langsung, tanpa
+    // mengganggu isian form di tab lain dengan refresh yang terlalu agresif.
+    const intervalMs = tab === "chat" ? 5_000 : 15_000;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load(true);
+    }, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [open, bookingId, tab, load]);
+
+  useEffect(() => {
+    if (tab !== "chat") return;
+    const node = chatScrollRef.current;
+    const latestId = hub?.messages[hub.messages.length - 1]?.id ?? 0;
+    if (!node || !latestId || latestId === lastChatMessageId.current) return;
+    const firstBatch = lastChatMessageId.current === 0;
+    lastChatMessageId.current = latestId;
+    if (!firstBatch && !chatPinnedToBottom.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      node.scrollTop = node.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [tab, hub?.messages]);
+
+  const handleChatScroll = () => {
+    const node = chatScrollRef.current;
+    if (!node) return;
+    chatPinnedToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 96;
+  };
 
   const getLocation = () => new Promise<GeolocationPosition>((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error("Perangkat tidak mendukung lokasi."));
@@ -299,6 +334,7 @@ export default function LearningSessionHub({ bookingId, open, onOpenChange, init
     try {
       await http.post(`/bookings/${bookingId}/messages`, { body: message.trim() });
       setMessage("");
+      chatPinnedToBottom.current = true;
       await load(true);
     } catch (error) {
       notify.error(getApiError(error));
@@ -476,7 +512,15 @@ export default function LearningSessionHub({ bookingId, open, onOpenChange, init
                     <CheckCircle2 className="mx-auto text-emerald-600" size={32} />
                     <h4 className="mt-3 text-lg font-black text-emerald-950">{hub.booking.teacher_name} sudah siap</h4>
                     <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-emerald-800">Kalau kamu sudah bersama tutor atau siap di kelas online, cukup konfirmasi sekali.</p>
-                    <Button type="button" onClick={() => void confirmPresence()} disabled={processing} className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700">Saya Sudah Hadir</Button>
+                    <Button type="button" onClick={() => void confirmPresence()} disabled={processing} className="mt-4 min-h-12 w-full rounded-xl bg-emerald-600 font-black hover:bg-emerald-700">Saya Sudah Hadir</Button>
+                    {hub.booking.learning_mode === "online" && hub.booking.meeting_link && (
+                      <>
+                        <Button asChild variant="outline" className="mt-2 min-h-11 w-full rounded-xl border-emerald-300 bg-white font-black text-emerald-800 hover:bg-emerald-100">
+                          <a href={hub.booking.meeting_link} target="_blank" rel="noreferrer"><Video size={17} className="mr-2" />Masuk Ruang Kelas</a>
+                        </Button>
+                        <p className="mt-2 text-xs font-semibold leading-5 text-emerald-700">Sudah di ruang kelas? Tetap tekan “Saya Sudah Hadir” agar kehadiranmu tercatat.</p>
+                      </>
+                    )}
                   </section>
                 )}
 
@@ -488,7 +532,14 @@ export default function LearningSessionHub({ bookingId, open, onOpenChange, init
                   <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
                     <div className="flex items-center gap-2 font-black text-emerald-950"><CheckCircle2 size={19} />Kehadiran sudah terkonfirmasi</div>
                     <p className="mt-2 text-sm leading-6 text-emerald-800">Sesi resmi dimulai {dateTime(hub.booking.session_started_at || hub.booking.student_confirmed_at)}. Selama belajar, BimbelKu tidak meminta langkah administrasi tambahan.</p>
-                    {hub.role === "student" && hub.booking.learning_mode === "online" && hub.booking.meeting_link && (<Button asChild className="mt-4 w-full rounded-xl bg-emerald-600 font-black hover:bg-emerald-700"><a href={hub.booking.meeting_link} target="_blank" rel="noreferrer">Masuk ke Zoom</a></Button>)} 
+                    {hub.role === "student" && hub.booking.learning_mode === "online" && hub.booking.meeting_link && (
+                      <>
+                        <Button asChild className="mt-4 min-h-12 w-full rounded-xl bg-emerald-600 font-black hover:bg-emerald-700">
+                          <a href={hub.booking.meeting_link} target="_blank" rel="noreferrer"><Video size={18} className="mr-2" />Masuk Ruang Kelas</a>
+                        </Button>
+                        <p className="mt-2 text-xs font-semibold text-emerald-700">Ruang kelas dibuka di tab baru. Kehadiranmu sudah tercatat.</p>
+                      </>
+                    )}
                   </section>
                 )}
 
@@ -526,7 +577,11 @@ export default function LearningSessionHub({ bookingId, open, onOpenChange, init
 
             {tab === "chat" && (
               <div className="space-y-4">
-                <div className="max-h-[48dvh] space-y-3 overflow-y-auto rounded-2xl bg-slate-50 p-3 sm:p-4">
+                <div className="flex items-center gap-2 px-1 text-[11px] font-bold text-slate-500">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+                  Pesan baru muncul otomatis, tanpa perlu muat ulang.
+                </div>
+                <div ref={chatScrollRef} onScroll={handleChatScroll} className="max-h-[48dvh] space-y-3 overflow-y-auto rounded-2xl bg-slate-50 p-3 sm:p-4">
                   {hub.messages.length === 0 ? <p className="py-12 text-center text-sm text-slate-500">Belum ada pesan.</p> : hub.messages.map((item) => <div key={item.id} className={`flex ${item.message_type === "system" ? "justify-center" : item.is_mine ? "justify-end" : "justify-start"}`}>{item.message_type === "system" ? <div className="max-w-[90%] rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-center text-xs leading-5 text-indigo-800">{item.body}</div> : <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${item.is_mine ? "bg-indigo-600 text-white" : "bg-white text-slate-800 shadow-sm"}`}><p className={`mb-1 text-[10px] font-black ${item.is_mine ? "text-indigo-100" : "text-slate-400"}`}>{item.sender_name}</p><p className="whitespace-pre-wrap leading-6">{item.body}</p><p className={`mt-1 text-[10px] ${item.is_mine ? "text-indigo-200" : "text-slate-400"}`}>{dateTime(item.created_at)}</p></div>}</div>)}
                 </div>
                 <form onSubmit={sendMessage} className="flex gap-2"><Input value={message} onChange={(event) => setMessage(event.target.value)} maxLength={3000} disabled={!hub.permissions.can_chat} placeholder="Tulis pesan..." className="h-11 rounded-xl" /><Button disabled={processing || !message.trim() || !hub.permissions.can_chat} className="h-11 rounded-xl bg-indigo-600"><Send size={16} /></Button></form>

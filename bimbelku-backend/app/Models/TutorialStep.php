@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class TutorialStep extends Model
 {
     protected $guarded = ['id'];
+
     protected $appends = ['image_url'];
 
     protected $casts = [
@@ -22,7 +23,10 @@ class TutorialStep extends Model
 
     public function getImageUrlAttribute(): ?string
     {
-        if (!$this->image_path) return null;
+        if (! $this->image_path) {
+            return null;
+        }
+
         return PublicMedia::url($this->image_path);
     }
 }

@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Services\CheapClassService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
 use Tests\TestCase;
 
 class CheapClassTutorIsolationTest extends TestCase
@@ -115,7 +116,7 @@ class CheapClassTutorIsolationTest extends TestCase
         $this->assertFalse($secondOrder->refund()->exists());
     }
 
-    /** @return array{0:CheapClassService,1:CheapClassTemplate,2:CheapClass,3:\Illuminate\Support\Collection<int,User>} */
+    /** @return array{0:CheapClassService,1:CheapClassTemplate,2:CheapClass,3:Collection<int,User>} */
     private function recurringScenario(int $teacherCount): array
     {
         Carbon::setTestNow(Carbon::parse('2026-08-13 08:00:00', 'Asia/Jakarta'));

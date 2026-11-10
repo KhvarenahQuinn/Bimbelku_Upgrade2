@@ -13,7 +13,7 @@ class Setting extends Model
 
     // WAJIB ADA: Agar kolom key & value bisa diisi
     protected $fillable = [
-        'key', 
-        'value'
+        'key',
+        'value',
     ];
 }

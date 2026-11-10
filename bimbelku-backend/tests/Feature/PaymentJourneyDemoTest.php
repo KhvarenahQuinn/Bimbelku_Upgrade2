@@ -2,21 +2,21 @@
 
 namespace Tests\Feature;
 
-use App\Models\CurriculumChapter;
-use App\Models\CurriculumSubject;
+use App\Models\Booking;
 use App\Models\CheapClass;
 use App\Models\CheapClassSession;
-use App\Models\Booking;
+use App\Models\CurriculumChapter;
+use App\Models\CurriculumSubject;
 use App\Models\LearningPackage;
 use App\Models\Order;
 use App\Models\PackagePlan;
 use App\Models\PaymentGatewayEvent;
 use App\Models\Refund;
-use App\Models\TeacherOffer;
 use App\Models\TeacherAvailability;
+use App\Models\TeacherOffer;
 use App\Models\TeacherProfile;
-use App\Models\TeacherSubject;
 use App\Models\TeacherReplacementRequest;
+use App\Models\TeacherSubject;
 use App\Models\User;
 use Carbon\Carbon;
 use Database\Seeders\CurriculumCatalogSeeder;
@@ -463,6 +463,7 @@ class PaymentJourneyDemoTest extends TestCase
                 'is_active' => true,
             ]);
         }
+
         return $teacher;
     }
 
@@ -515,6 +516,7 @@ class PaymentJourneyDemoTest extends TestCase
     {
         Http::fake(['https://api.xendit.test/sessions' => function (GatewayRequest $request) {
             $sessionId = 'ps-demo-order-'.$request['metadata']['order_id'];
+
             return Http::response([
                 'payment_session_id' => $sessionId,
                 'payment_link_url' => "https://checkout-staging.xendit.test/{$sessionId}",

@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('teacher_availability_exceptions')) {
+        if (! Schema::hasTable('teacher_availability_exceptions')) {
             Schema::create('teacher_availability_exceptions', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
@@ -21,35 +21,35 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasColumn('schedule_change_requests', 'scope')) {
+        if (! Schema::hasColumn('schedule_change_requests', 'scope')) {
             Schema::table('schedule_change_requests', function (Blueprint $table) {
                 $table->string('scope', 20)->default('single')->after('requester_role');
             });
         }
-        if (!Schema::hasColumn('schedule_change_requests', 'affected_schedules')) {
+        if (! Schema::hasColumn('schedule_change_requests', 'affected_schedules')) {
             Schema::table('schedule_change_requests', function (Blueprint $table) {
                 $table->json('affected_schedules')->nullable()->after('proposed_end_at');
             });
         }
 
-        if (!Schema::hasColumn('package_subjects', 'curriculum_chapter_id')) {
+        if (! Schema::hasColumn('package_subjects', 'curriculum_chapter_id')) {
             Schema::table('package_subjects', function (Blueprint $table) {
                 $table->foreignId('curriculum_chapter_id')->nullable()->after('curriculum_subject_id')
                     ->constrained('curriculum_chapters')->nullOnDelete();
             });
         }
-        if (!Schema::hasColumn('package_subjects', 'curriculum_chapter_ids')) {
+        if (! Schema::hasColumn('package_subjects', 'curriculum_chapter_ids')) {
             Schema::table('package_subjects', function (Blueprint $table) {
                 $table->json('curriculum_chapter_ids')->nullable()->after('curriculum_chapter_id');
             });
         }
-        if (!Schema::hasColumn('package_subjects', 'learning_topic_ids')) {
+        if (! Schema::hasColumn('package_subjects', 'learning_topic_ids')) {
             Schema::table('package_subjects', function (Blueprint $table) {
                 $table->json('learning_topic_ids')->nullable()->after('subtopic');
             });
         }
 
-        if (!Schema::hasTable('package_learning_topics')) {
+        if (! Schema::hasTable('package_learning_topics')) {
             Schema::create('package_learning_topics', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('package_subject_id')->constrained('package_subjects')->cascadeOnDelete();
@@ -70,7 +70,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('package_session_topic_logs')) {
+        if (! Schema::hasTable('package_session_topic_logs')) {
             Schema::create('package_session_topic_logs', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('package_session_id')->constrained('package_sessions')->cascadeOnDelete();
@@ -87,7 +87,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasColumn('learning_plans', 'package_subject_id')) {
+        if (! Schema::hasColumn('learning_plans', 'package_subject_id')) {
             Schema::table('learning_plans', function (Blueprint $table) {
                 $table->foreignId('package_subject_id')->nullable()->after('booking_id')
                     ->constrained('package_subjects')->nullOnDelete();

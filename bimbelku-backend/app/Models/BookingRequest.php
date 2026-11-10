@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\TeacherMatchingService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -49,15 +50,21 @@ class BookingRequest extends Model
                     $unresolved->whereIn('status', ['no_teacher', 'expired'])
                         ->whereDate('scheduled_date', '>=', today());
                 })
-                ->orWhere(function (Builder $pending) {
-                    $pending->where('status', 'teacher_pending')
-                        ->whereNotNull('teacher_response_deadline')
-                        ->where('teacher_response_deadline', '<=', now());
-                })
                 ->orWhere(function (Builder $expiring) {
+                    // A live 60-minute window can still dispatch another offer
+                    // wave, so only a truly expired window needs admin action.
+                    // Individual offer deadlines may lapse mid-window without
+                    // meaning the search is stuck.
                     $expiring->whereIn('status', ['matching', 'teacher_pending'])
-                        ->whereNotNull('search_expires_at')
-                        ->whereBetween('search_expires_at', [now(), now()->addHours(6)]);
+                        ->where(function (Builder $window) {
+                            $window
+                                ->where('search_expires_at', '<=', now())
+                                // Legacy rows may still store a 24-hour expiry.
+                                // The effective one-hour window is the source of truth.
+                                ->orWhereRaw('COALESCE(search_started_at, created_at) <= ?', [
+                                    now()->subMinutes(TeacherMatchingService::SEARCH_WINDOW_MINUTES),
+                                ]);
+                        });
                 });
         });
     }

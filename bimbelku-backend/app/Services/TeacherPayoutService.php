@@ -75,7 +75,7 @@ class TeacherPayoutService
             $bookings = Booking::query()
                 ->where('teacher_id', $teacher->id)
                 ->where('status', 'completed')
-            ->whereDoesntHave('disputes', fn ($query) => $query->whereNull('resolved_at'))
+                ->whereDoesntHave('disputes', fn ($query) => $query->whereNull('resolved_at'))
                 ->whereRaw('(teacher_net_amount - teacher_paid_amount - teacher_reserved_amount) > 0')
                 ->oldest('completed_at')
                 ->lockForUpdate()
@@ -92,10 +92,14 @@ class TeacherPayoutService
             $allocations = [];
             $grossEquivalent = 0.0;
             foreach ($bookings as $booking) {
-                if ($remaining <= 0.009) break;
+                if ($remaining <= 0.009) {
+                    break;
+                }
                 $bookingAvailable = max(0, (float) $booking->teacher_net_amount - (float) $booking->teacher_paid_amount - (float) $booking->teacher_reserved_amount);
                 $allocated = round(min($remaining, $bookingAvailable), 2);
-                if ($allocated <= 0) continue;
+                if ($allocated <= 0) {
+                    continue;
+                }
                 $allocations[] = ['booking_id' => $booking->id, 'amount' => $allocated];
                 $ratio = (float) $booking->teacher_net_amount > 0 ? $allocated / (float) $booking->teacher_net_amount : 0;
                 $grossEquivalent += (float) $booking->gross_amount * $ratio;
@@ -112,7 +116,9 @@ class TeacherPayoutService
             $taxPercent = min(100, max(0, (float) (Setting::query()->where('key', 'teacher_withholding_tax_percent')->value('value') ?? 0)));
             $taxAmount = round($requestedAmount * $taxPercent / 100, 2);
             $transferAmount = round($requestedAmount - $taxAmount, 2);
-            if ($transferAmount <= 0) throw new RuntimeException('Nominal setelah potongan tidak valid.');
+            if ($transferAmount <= 0) {
+                throw new RuntimeException('Nominal setelah potongan tidak valid.');
+            }
             $bookingIds = collect($allocations)->pluck('booking_id')->all();
             $commission = max(0, round($grossEquivalent - $requestedAmount, 2));
 
@@ -186,11 +192,15 @@ class TeacherPayoutService
     {
         DB::transaction(function () use ($payout) {
             $locked = Payout::query()->lockForUpdate()->findOrFail($payout->id);
-            if (in_array($locked->status, ['completed', 'failed'], true)) return;
+            if (in_array($locked->status, ['completed', 'failed'], true)) {
+                return;
+            }
             $allocations = $locked->allocation_breakdown ?: collect($locked->booking_ids ?? [])->map(fn ($id) => ['booking_id' => $id, 'amount' => null])->all();
             foreach ($allocations as $allocation) {
                 $booking = Booking::query()->lockForUpdate()->find($allocation['booking_id'] ?? 0);
-                if (! $booking) continue;
+                if (! $booking) {
+                    continue;
+                }
                 $amount = $allocation['amount'] === null
                     ? max((float) $booking->teacher_reserved_amount, (float) $booking->teacher_net_amount - (float) $booking->teacher_paid_amount)
                     : min((float) $allocation['amount'], (float) $booking->teacher_reserved_amount);
@@ -214,11 +224,15 @@ class TeacherPayoutService
     {
         DB::transaction(function () use ($payout, $reason) {
             $locked = Payout::query()->lockForUpdate()->findOrFail($payout->id);
-            if (in_array($locked->status, ['completed', 'failed'], true)) return;
+            if (in_array($locked->status, ['completed', 'failed'], true)) {
+                return;
+            }
             $allocations = $locked->allocation_breakdown ?: collect($locked->booking_ids ?? [])->map(fn ($id) => ['booking_id' => $id, 'amount' => null])->all();
             foreach ($allocations as $allocation) {
                 $booking = Booking::query()->lockForUpdate()->find($allocation['booking_id'] ?? 0);
-                if (! $booking) continue;
+                if (! $booking) {
+                    continue;
+                }
                 $releaseAmount = $allocation['amount'] === null ? (float) $booking->teacher_reserved_amount : (float) $allocation['amount'];
                 $reserved = round(max(0, (float) $booking->teacher_reserved_amount - $releaseAmount), 2);
                 $available = max(0, (float) $booking->teacher_net_amount - (float) $booking->teacher_paid_amount - $reserved);

@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('teacher_subjects') || Schema::hasColumn('teacher_subjects', 'is_group_active')) {
+        if (! Schema::hasTable('teacher_subjects') || Schema::hasColumn('teacher_subjects', 'is_group_active')) {
             return;
         }
 

@@ -71,6 +71,7 @@ class PersistentBrowserSessionTest extends TestCase
             ->postJson('/api/login', [
                 'email' => $admin->email,
                 'password' => 'rahasia-admin',
+                'login_portal' => 'admin',
                 'remember_device' => true,
             ]);
 
@@ -172,5 +173,4 @@ class PersistentBrowserSessionTest extends TestCase
 
         $this->assertDatabaseCount('personal_access_tokens', 0);
     }
-
 }

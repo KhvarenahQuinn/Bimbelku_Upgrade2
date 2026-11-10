@@ -10,7 +10,7 @@ return new class extends Migration
     {
         if (
             Schema::hasTable('cheap_class_enrollments')
-            && !Schema::hasIndex('cheap_class_enrollments', 'cheap_class_enrollments_status_expiry_index')
+            && ! Schema::hasIndex('cheap_class_enrollments', 'cheap_class_enrollments_status_expiry_index')
         ) {
             Schema::table('cheap_class_enrollments', function (Blueprint $table) {
                 // Digunakan oleh pekerjaan per menit untuk melepas kursi yang

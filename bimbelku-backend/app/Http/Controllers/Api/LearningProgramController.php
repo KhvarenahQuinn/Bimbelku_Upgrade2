@@ -32,8 +32,10 @@ class LearningProgramController extends Controller
         $program = DB::transaction(function () use ($data) {
             $program = LearningProgram::query()->create(collect($data)->except('subject_ids')->all());
             $program->subjects()->sync($this->subjectOrder($data['subject_ids']));
+
             return $program;
         });
+
         return response()->json(['data' => $program->load(['subjects', 'plan', 'category'])], 201);
     }
 
@@ -44,12 +46,14 @@ class LearningProgramController extends Controller
             $learningProgram->update(collect($data)->except('subject_ids')->all());
             $learningProgram->subjects()->sync($this->subjectOrder($data['subject_ids']));
         });
+
         return response()->json(['data' => $learningProgram->load(['subjects', 'plan', 'category'])]);
     }
 
     public function deactivate(LearningProgram $learningProgram)
     {
         $learningProgram->update(['is_active' => false]);
+
         return response()->json(['message' => 'Program disembunyikan; pesanan lama tidak berubah.']);
     }
 
@@ -73,13 +77,13 @@ class LearningProgramController extends Controller
             'slug.unique' => 'Nama program ini sudah digunakan. Pilih nama program lain.',
         ]);
         $levels = $data['education_levels'] ?? (isset($data['education_level']) ? [$data['education_level']] : $current?->availableEducationLevels());
-        if (!$levels) {
+        if (! $levels) {
             throw ValidationException::withMessages(['education_levels' => 'Pilih minimal satu jenjang program.']);
         }
         $data['education_levels'] = array_values($levels);
         $data['education_level'] = $levels[0];
         $data['package_plan_id'] = null;
-        if ($data['grade'] && (count($levels) !== 1 || !EducationCatalog::supports($levels[0], $data['grade']))) {
+        if ($data['grade'] && (count($levels) !== 1 || ! EducationCatalog::supports($levels[0], $data['grade']))) {
             throw ValidationException::withMessages(['grade' => 'Kelas tidak sesuai dengan jenjang program.']);
         }
         $subjects = CurriculumSubject::query()->whereIn('id', $data['subject_ids'])->get();
@@ -87,14 +91,15 @@ class LearningProgramController extends Controller
             throw ValidationException::withMessages(['subject_ids' => 'Ada mapel program yang tidak tersedia.']);
         }
         foreach ($subjects as $subject) {
-            if (!$subject->is_active || array_diff($levels, $subject->education_levels ?? [])
-                || ($data['grade'] && $subject->grades && !in_array($data['grade'], $subject->grades, true))
-                || (!$data['grade'] && $subject->grades && collect($levels)->contains(fn ($level) => !array_intersect(
+            if (! $subject->is_active || array_diff($levels, $subject->education_levels ?? [])
+                || ($data['grade'] && $subject->grades && ! in_array($data['grade'], $subject->grades, true))
+                || (! $data['grade'] && $subject->grades && collect($levels)->contains(fn ($level) => ! array_intersect(
                     EducationCatalog::GRADES_BY_LEVEL[$level] ?? [], $subject->grades ?? []
                 )))) {
                 throw ValidationException::withMessages(['subject_ids' => "{$subject->name} tidak tersedia pada jenjang atau kelas program."]);
             }
         }
+
         return $data;
     }
 

@@ -42,12 +42,27 @@ interface RefundItem {
   wallet_funded_amount?: number;
   external_funded_amount?: number;
   gateway_status?: string | null;
+  gateway_refund_id?: string | null;
   gateway_failure_code?: string | null;
+  gateway_failure_message?: string | null;
   gateway_submitted_at?: string | null;
   gateway_processed_at?: string | null;
   last_reconciled_at?: string | null;
+  stage?: string | null;
+  stage_label?: string | null;
+  status_message?: string | null;
+  can_switch_to_balance?: boolean;
+  timeline?: RefundTimelineStep[];
   created_at?: string;
   updated_at?: string;
+}
+
+interface RefundTimelineStep {
+  key: string;
+  label: string;
+  state: "done" | "current" | "pending" | "failed";
+  at?: string | null;
+  description: string;
 }
 
 interface OrderItem {
@@ -114,14 +129,48 @@ const statusInfo: Record<string, { label: string; className: string; icon: typeo
 
 const rupiah = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value || 0);
 const refundStage = (refund: RefundItem) => {
+  if (refund.stage_label) return refund.stage_label;
   if (refund.status === "paid") return "Berhasil";
-  if (refund.gateway_status === "FAILED" || refund.gateway_status === "REJECTED") return "Gagal";
+  if (refund.status === "failed" || refund.gateway_status === "FAILED" || refund.gateway_status === "REJECTED") return "Gagal";
   if (!refund.destination_selected_at) return "Memenuhi syarat";
   if (refund.gateway_status === "SUBMITTING") return "Sedang disiapkan";
-  if (refund.gateway_submitted_at && ["REQUESTED", "PENDING", "ACCEPTED"].includes(refund.gateway_status || "")) return "Sedang diproses";
+  if (refund.gateway_submitted_at && ["REQUESTED", "PENDING", "PROCESSING", "ACCEPTED"].includes(refund.gateway_status || "")) return "Sedang diproses";
   if (refund.gateway_submitted_at) return "Dikirim";
   return "Dipilih murid";
 };
+
+const timelineTone: Record<RefundTimelineStep["state"], { dot: string; line: string; title: string }> = {
+  done: { dot: "bg-emerald-500 text-white", line: "bg-emerald-200", title: "text-slate-900" },
+  current: { dot: "bg-violet-600 text-white", line: "bg-violet-200", title: "text-violet-900" },
+  pending: { dot: "bg-slate-200 text-slate-500", line: "bg-slate-200", title: "text-slate-400" },
+  failed: { dot: "bg-rose-600 text-white", line: "bg-rose-200", title: "text-rose-800" },
+};
+
+function RefundTimeline({ steps }: { steps: RefundTimelineStep[] }) {
+  return (
+    <ol className="mt-4 space-y-0">
+      {steps.map((step, index) => {
+        const tone = timelineTone[step.state] || timelineTone.pending;
+        const isLast = index === steps.length - 1;
+        return (
+          <li key={step.key} className="flex gap-3">
+            <div className="flex flex-col items-center">
+              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-black ${tone.dot}`}>
+                {step.state === "done" ? <CheckCircle2 size={13} /> : step.state === "failed" ? <XCircle size={13} /> : index + 1}
+              </span>
+              {!isLast && <span className={`w-0.5 flex-1 ${tone.line}`} aria-hidden="true" />}
+            </div>
+            <div className={`min-w-0 ${isLast ? "pb-0" : "pb-4"}`}>
+              <p className={`text-xs font-black ${tone.title}`}>{step.label}</p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500">{step.description}</p>
+              {step.at && <p className="mt-0.5 text-[10px] font-bold text-slate-400">{dateTime(step.at)}</p>}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 const dateTime = (value?: string | null) => value
   ? new Date(value).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })
@@ -150,10 +199,25 @@ export default function TransactionHistory() {
   const [refundSubmitting, setRefundSubmitting] = useState<number | null>(null);
   const [refundChoice, setRefundChoice] = useState<{ refund: RefundItem; method: "bimbelku_balance" | "xendit_original" } | null>(null);
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    // Keep an open history page current so a refund that finishes on the
+    // provider side appears without the student reloading the page.
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    const timer = window.setInterval(refresh, 15_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [ordersResponse, walletResponse] = await Promise.all([
@@ -173,14 +237,16 @@ export default function TransactionHistory() {
         setError("generic");
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   const handleRetry = () => { setError(null); void load(); };
 
   const confirmRefundChoice = async () => {
-    if (!refundChoice || refundChoice.refund.status !== "pending" || refundSubmitting !== null) return;
+    if (!refundChoice || refundSubmitting !== null) return;
+    const switchAfterFailure = refundChoice.refund.status === "failed" && refundChoice.method === "bimbelku_balance";
+    if (refundChoice.refund.status !== "pending" && !switchAfterFailure) return;
     setRefundSubmitting(refundChoice.refund.id);
     try {
       const response = await http.post(`/student/refunds/${refundChoice.refund.id}/destination`, {
@@ -277,8 +343,12 @@ export default function TransactionHistory() {
             {filtered.map((order) => {
               const status = statusInfo[order.status] || statusInfo.pending;
               const Icon = status.icon;
-              const walletRefundAmount = order.refund?.wallet_funded_amount ?? 0;
-              const externalRefundAmount = order.refund?.external_funded_amount ?? order.refund?.amount ?? 0;
+              const refund = order.refund;
+              // Only real refund records belong in the history. Cancelled or
+              // rejected attempts must not resurface refund destination cards.
+              const showRefund = Boolean(refund) && !["cancelled", "rejected"].includes(refund!.status);
+              const walletRefundAmount = refund?.wallet_funded_amount ?? 0;
+              const externalRefundAmount = refund?.external_funded_amount ?? refund?.amount ?? 0;
               const canBankRefund = externalRefundAmount > 0.009;
               return <article key={order.id} className="rounded-[1.5rem] border border-slate-100 bg-white p-4 shadow-sm sm:rounded-[2rem] sm:p-5">
                 <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
@@ -287,28 +357,51 @@ export default function TransactionHistory() {
                 </div>
                 {Boolean((order.wallet_reserved_amount || 0) + (order.wallet_applied_amount || 0)) && <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-indigo-100 bg-indigo-50 p-3 text-xs"><div><p className="font-bold text-indigo-500">Saldo BimbelKu</p><p className="mt-1 font-black text-indigo-800">{rupiah((order.wallet_reserved_amount || 0) + (order.wallet_applied_amount || 0))}</p></div><div><p className="font-bold text-slate-500">Transfer eksternal</p><p className="mt-1 font-black text-slate-800">{rupiah(order.external_payment_amount ?? Math.max(0, order.amount - ((order.wallet_reserved_amount || 0) + (order.wallet_applied_amount || 0))) )}</p></div></div>}
                 {order.payment_rejection_reason && <div className="mt-4 rounded-xl border border-rose-100 bg-rose-50 p-3 text-xs leading-5 text-rose-700">Alasan admin: {order.payment_rejection_reason}</div>}
-                {order.refund && (
+                {showRefund && order.refund && (
                   <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50 p-4 text-sm text-violet-950">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="font-black">Refund {refundStage(order.refund)} · {rupiah(order.refund.amount)}</p>
+                        <p className="font-black">Refund · {rupiah(order.refund.amount)}</p>
                         <p className="mt-1 text-xs leading-5 text-violet-700">{order.refund.reason}</p>
                       </div>
-                      {order.refund.status === "pending" && (
-                        <span className="w-fit rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-wide text-violet-700 shadow-sm">
-                          {refundStage(order.refund)}
-                        </span>
-                      )}
+                      <span className="w-fit rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-wide text-violet-700 shadow-sm">
+                        {refundStage(order.refund)}
+                      </span>
                     </div>
 
-                    <dl className="mt-3 grid gap-2 rounded-xl border border-violet-200 bg-white/80 p-3 text-xs sm:grid-cols-3">
-                      <div><dt className="font-bold text-slate-400">Diajukan</dt><dd className="mt-1 font-black text-slate-700">{dateTime(order.refund.created_at)}</dd></div>
-                      <div><dt className="font-bold text-slate-400">Dikirim</dt><dd className="mt-1 font-black text-slate-700">{dateTime(order.refund.gateway_submitted_at)}</dd></div>
-                      <div><dt className="font-bold text-slate-400">Diperbarui</dt><dd className="mt-1 font-black text-slate-700">{dateTime(order.refund.last_reconciled_at || order.refund.gateway_processed_at || order.refund.updated_at)}</dd></div>
-                    </dl>
+                    {order.refund.status_message && (
+                      <p className="mt-3 rounded-xl border border-violet-200 bg-white/80 p-3 text-xs font-semibold leading-5 text-violet-900">{order.refund.status_message}</p>
+                    )}
 
-                    {(order.refund.gateway_failure_code || ["FAILED", "REJECTED"].includes(order.refund.gateway_status || "")) && <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold leading-5 text-rose-700">Pengembalian belum berhasil{order.refund.gateway_failure_code ? ` (${order.refund.gateway_failure_code})` : ""}. Tim BimbelKu akan memeriksa dan mencoba ulang dengan referensi transaksi yang sama. Danamu tetap tercatat.</div>}
-                    {order.refund.status === "pending" && order.refund.gateway_submitted_at && !["FAILED", "REJECTED"].includes(order.refund.gateway_status || "") && <p className="mt-3 text-xs leading-5 text-violet-700">Permintaan sudah dikirim. Status diperiksa otomatis setiap beberapa menit; muat ulang halaman untuk melihat pembaruan terbaru.</p>}
+                    {order.refund.timeline?.length ? (
+                      <RefundTimeline steps={order.refund.timeline} />
+                    ) : (
+                      <dl className="mt-3 grid gap-2 rounded-xl border border-violet-200 bg-white/80 p-3 text-xs sm:grid-cols-3">
+                        <div><dt className="font-bold text-slate-400">Diajukan</dt><dd className="mt-1 font-black text-slate-700">{dateTime(order.refund.created_at)}</dd></div>
+                        <div><dt className="font-bold text-slate-400">Dikirim</dt><dd className="mt-1 font-black text-slate-700">{dateTime(order.refund.gateway_submitted_at)}</dd></div>
+                        <div><dt className="font-bold text-slate-400">Diperbarui</dt><dd className="mt-1 font-black text-slate-700">{dateTime(order.refund.last_reconciled_at || order.refund.gateway_processed_at || order.refund.updated_at)}</dd></div>
+                      </dl>
+                    )}
+                    <p className="mt-2 text-[10px] font-bold text-slate-400">Terakhir diperiksa {dateTime(order.refund.last_reconciled_at || order.refund.updated_at)}</p>
+
+                    {order.refund.can_switch_to_balance && (
+                      <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3">
+                        <p className="text-xs font-bold leading-5 text-rose-700">{order.refund.gateway_failure_message || "Pengembalian ke metode pembayaran asal gagal."}</p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => setRefundChoice({ refund: order.refund!, method: "bimbelku_balance" })}
+                          disabled={refundSubmitting === order.refund.id}
+                          className="mt-2 min-h-11 w-full rounded-xl bg-rose-600 text-left hover:bg-rose-700 sm:w-auto"
+                        >
+                          {refundSubmitting === order.refund.id ? <Loader2 size={16} className="mr-2 shrink-0 animate-spin" /> : <WalletCards size={16} className="mr-2 shrink-0" />}
+                          Pindahkan ke Saldo BimbelKu
+                        </Button>
+                        <p className="mt-2 rounded-lg bg-white/80 px-2 py-1.5 text-[11px] font-medium leading-4 text-slate-600">
+                          Saldo BimbelKu dapat langsung digunakan untuk pembelian paket les berikutnya, namun tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet.
+                        </p>
+                      </div>
+                    )}
 
                     {walletRefundAmount > 0 && (
                       <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/80 p-3 text-xs leading-5 text-indigo-950">
@@ -326,15 +419,20 @@ export default function TransactionHistory() {
                         <p className="font-black text-slate-900">Mau menerima refund ke mana?</p>
                         <p className="mt-1 text-xs leading-5 text-slate-500">Pilih dulu lalu konfirmasi. Saldo BimbelKu tidak dapat ditarik tunai. Bagian pembayaran yang berasal dari saldo selalu kembali ke saldo.</p>
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                          <Button
-                            type="button"
-                            onClick={() => setRefundChoice({ refund: order.refund!, method: "bimbelku_balance" })}
-                            disabled={refundSubmitting === order.refund.id}
-                            className="min-h-12 justify-start rounded-xl bg-indigo-600 px-3 text-left hover:bg-indigo-700"
-                          >
-                            {refundSubmitting === order.refund.id ? <Loader2 size={16} className="mr-2 shrink-0 animate-spin" /> : <WalletCards size={16} className="mr-2 shrink-0" />}
-                            <span><span className="block font-black">Saldo BimbelKu</span><span className="block text-[10px] font-medium text-indigo-100">Lebih cepat · untuk bayar belajar · tidak bisa ditarik</span></span>
-                          </Button>
+                          <div className="min-w-0">
+                            <Button
+                              type="button"
+                              onClick={() => setRefundChoice({ refund: order.refund!, method: "bimbelku_balance" })}
+                              disabled={refundSubmitting === order.refund.id}
+                              className="min-h-12 w-full justify-start rounded-xl bg-indigo-600 px-3 text-left hover:bg-indigo-700"
+                            >
+                              {refundSubmitting === order.refund.id ? <Loader2 size={16} className="mr-2 shrink-0 animate-spin" /> : <WalletCards size={16} className="mr-2 shrink-0" />}
+                              <span><span className="block font-black">Saldo BimbelKu</span><span className="block text-[10px] font-medium text-indigo-100">Lebih cepat · untuk bayar belajar · tidak bisa ditarik</span></span>
+                            </Button>
+                            <p className="mt-1.5 rounded-lg bg-indigo-50 px-2 py-1.5 text-[11px] font-medium leading-4 text-indigo-900">
+                              Saldo BimbelKu dapat langsung digunakan untuk pembelian paket les berikutnya, namun tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet.
+                            </p>
+                          </div>
                           <Button
                             type="button"
                             variant="outline"
@@ -356,7 +454,7 @@ export default function TransactionHistory() {
                           <div className="min-w-0">
                             <p className="text-xs font-black text-slate-900">Tujuan refund tersimpan</p>
                             {order.refund.destination_method === "bimbelku_balance" ? (
-                              <p className="mt-1 text-xs leading-5 text-slate-600">Saldo BimbelKu · dapat dipakai untuk Paket Belajar/Kelas Bersama dan tidak dapat ditarik tunai.</p>
+                              <p className="mt-1 text-xs leading-5 text-slate-600">Saldo BimbelKu · dapat dipakai untuk Paket Belajar/Kelas Bersama dan tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet.</p>
                             ) : order.refund.destination_method === "xendit_original" ? (
                               <p className="mt-1 text-xs leading-5 text-slate-600">Dana eksternal akan dikembalikan otomatis ke metode pembayaran asal. Bagian Saldo BimbelKu otomatis kembali ke saldo.</p>
                             ) : (
@@ -423,7 +521,7 @@ export default function TransactionHistory() {
           </div>
         )}
       </div>
-      {refundChoice && <div role="presentation" className="fixed inset-0 z-[var(--layer-modal)] grid place-items-center bg-slate-950/70 p-3 backdrop-blur-sm" onClick={() => setRefundChoice(null)}><div role="dialog" aria-modal="true" aria-labelledby="refund-choice-title" className="w-full max-w-md rounded-[1.5rem] bg-white p-5 shadow-2xl sm:p-6" onClick={(event) => event.stopPropagation()}><h2 id="refund-choice-title" className="text-xl font-black text-slate-950">Konfirmasi tujuan refund</h2><p className="mt-3 text-sm leading-6 text-slate-600">{refundChoice.method === "bimbelku_balance" ? `Refund ${rupiah(refundChoice.refund.amount)} akan masuk ke Saldo BimbelKu untuk membayar layanan belajar. Saldo tidak dapat ditarik tunai.` : `Bagian pembayaran eksternal akan dikembalikan ke metode pembayaran asal. Bagian yang dibayar dari Saldo BimbelKu tetap kembali ke saldo.`}</p><p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-900">Pastikan pilihanmu benar. Setelah pengembalian mulai diproses, tujuan tidak dapat diubah.</p><div className="mt-5 flex flex-col gap-2 sm:flex-row"><Button type="button" variant="outline" className="min-h-12 flex-1 rounded-xl" onClick={() => setRefundChoice(null)} disabled={refundSubmitting !== null}>Kembali</Button><Button type="button" className="min-h-12 flex-1 rounded-xl bg-indigo-600" onClick={() => void confirmRefundChoice()} disabled={refundSubmitting !== null}>{refundSubmitting !== null && <Loader2 size={16} className="mr-2 animate-spin" />}Konfirmasi tujuan</Button></div></div></div>}
+      {refundChoice && <div role="presentation" className="fixed inset-0 z-[var(--layer-modal)] grid place-items-center bg-slate-950/70 p-3 backdrop-blur-sm" onClick={() => setRefundChoice(null)}><div role="dialog" aria-modal="true" aria-labelledby="refund-choice-title" className="w-full max-w-md rounded-[1.5rem] bg-white p-5 shadow-2xl sm:p-6" onClick={(event) => event.stopPropagation()}><h2 id="refund-choice-title" className="text-xl font-black text-slate-950">Konfirmasi tujuan refund</h2><p className="mt-3 text-sm leading-6 text-slate-600">{refundChoice.method === "bimbelku_balance" ? `Refund ${rupiah(refundChoice.refund.amount)} akan masuk ke Saldo BimbelKu dan dapat langsung dipakai untuk paket les berikutnya. Saldo tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet.` : `Bagian pembayaran eksternal akan dikembalikan ke metode pembayaran asal. Bagian yang dibayar dari Saldo BimbelKu tetap kembali ke saldo.`}</p><p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-900">Pastikan pilihanmu benar. Setelah pengembalian mulai diproses, tujuan tidak dapat diubah.</p><div className="mt-5 flex flex-col gap-2 sm:flex-row"><Button type="button" variant="outline" className="min-h-12 flex-1 rounded-xl" onClick={() => setRefundChoice(null)} disabled={refundSubmitting !== null}>Kembali</Button><Button type="button" className="min-h-12 flex-1 rounded-xl bg-indigo-600" onClick={() => void confirmRefundChoice()} disabled={refundSubmitting !== null}>{refundSubmitting !== null && <Loader2 size={16} className="mr-2 animate-spin" />}Konfirmasi tujuan</Button></div></div></div>}
       {refundBank && (
         <div role="presentation" className="fixed inset-0 z-[var(--layer-modal)] grid place-items-center bg-slate-950/70 p-3 backdrop-blur-sm" onClick={() => setRefundBank(null)}>
           <div role="dialog" aria-modal="true" aria-labelledby="refund-bank-title" className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-[1.5rem] bg-white p-4 shadow-2xl sm:rounded-[2rem] sm:p-6" onClick={(event) => event.stopPropagation()}>
@@ -452,7 +550,7 @@ export default function TransactionHistory() {
                 <span className="text-xs font-black text-slate-700">Nomor rekening / e-wallet</span>
                 <Input inputMode="numeric" value={refundAccountNumber} onChange={(event) => setRefundAccountNumber(event.target.value.replace(/\D/g, ""))} placeholder="Hanya angka" className="mt-2 h-11 rounded-xl" maxLength={20} />
               </label>
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">Tujuan masih dapat kamu ubah selama refund berstatus <strong>diproses</strong>. Setelah admin menyelesaikan refund, tujuan akan terkunci.</div>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">Tujuan dapat diubah sebelum refund dikirim ke penyedia pembayaran. Setelah dikirim, tujuan terkunci. Jika pengembalian ke metode asal gagal, kamu tetap dapat memilih Saldo BimbelKu.</div>
               <Button type="button" className="min-h-12 w-full rounded-xl bg-slate-950" disabled={refundSubmitting === refundBank.id} onClick={() => void submitBankRefund()}>
                 {refundSubmitting === refundBank.id && <Loader2 size={16} className="mr-2 animate-spin" />}Simpan tujuan refund
               </Button>

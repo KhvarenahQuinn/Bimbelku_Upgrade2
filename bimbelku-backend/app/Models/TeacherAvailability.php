@@ -50,7 +50,7 @@ class TeacherAvailability extends Model
                 $start = is_string($start) ? substr($start, 0, 5) : null;
                 $end = is_string($end) ? substr($end, 0, 5) : null;
 
-                if (!self::isFullHour($start) || !self::isFullHour($end) || $end <= $start) {
+                if (! self::isFullHour($start) || ! self::isFullHour($end) || $end <= $start) {
                     return null;
                 }
 
@@ -81,7 +81,7 @@ class TeacherAvailability extends Model
         $startTime = substr($startTime, 0, 5);
         $endTime = substr($endTime, 0, 5);
 
-        if (!self::isFullHour($startTime) || !self::isFullHour($endTime) || $endTime <= $startTime) {
+        if (! self::isFullHour($startTime) || ! self::isFullHour($endTime) || $endTime <= $startTime) {
             return false;
         }
 

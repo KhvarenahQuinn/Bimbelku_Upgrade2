@@ -92,7 +92,7 @@ class CheapClassController extends Controller
                 ->where('status', 'confirmed')
                 ->whereHas('order', fn ($orders) => $orders->where('status', 'paid'))
                 ->exists();
-        $isPublicOffer = !$progressScope
+        $isPublicOffer = ! $progressScope
             && $class->status === 'open'
             && $class->teacher_id
             && $class->registration_opens_at->lte(now())
@@ -118,6 +118,7 @@ class CheapClassController extends Controller
             'enrollments as pending_payment_count' => fn ($items) => $items
                 ->whereIn('status', ['seat_held', 'payment_submitted', 'payment_rejected']),
         ]);
+
         return response()->json($cheapClasses->studentPayload($class, $request->user()->id));
     }
 
@@ -144,6 +145,7 @@ class CheapClassController extends Controller
     {
         CheapClassSchema::ensureReady();
         $cheapClasses->cancelEnrollment($cheapClassEnrollment, $request->user());
+
         return response()->json(['message' => 'Keikutsertaan Kelas Kelompok dibatalkan.']);
     }
 }

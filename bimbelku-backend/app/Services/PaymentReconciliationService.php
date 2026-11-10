@@ -14,8 +14,7 @@ class PaymentReconciliationService
     public function __construct(
         private readonly FinancialLedgerService $ledger,
         private readonly CustomerWalletService $wallets,
-    ) {
-    }
+    ) {}
 
     public function recordSubmission(Order $order, ?string $proofPath, array $details): PaymentSubmission
     {
@@ -49,7 +48,7 @@ class PaymentReconciliationService
                 ->latest('sequence')
                 ->lockForUpdate()
                 ->first();
-            if (!$submission) {
+            if (! $submission) {
                 $submission = PaymentSubmission::create([
                     'order_id' => $lockedOrder->id,
                     'sequence' => ((int) $lockedOrder->paymentSubmissions()->max('sequence')) + 1,

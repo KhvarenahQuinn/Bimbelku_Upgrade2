@@ -62,10 +62,6 @@ class RefundObserver
 
     private function isAutomatic(Refund $refund): bool
     {
-        return in_array($refund->source_type, ['teacher_replacement', 'late_gateway_payment'], true)
-            || in_array(mb_strtolower(trim((string) $refund->reason)), [
-                'tutor tidak ditemukan',
-                'paket dibatalkan murid saat pencarian tutor',
-            ], true);
+        return $refund->isAutomatic();
     }
 }

@@ -5,10 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\PublicMedia;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class AdminSettingController extends Controller
@@ -50,7 +51,7 @@ class AdminSettingController extends Controller
 
         return response()->json([
             'message' => 'Sampul tutor berhasil diperbarui.',
-            'url' => \App\Support\PublicMedia::url($path) . '?t=' . time(),
+            'url' => PublicMedia::url($path).'?t='.time(),
         ]);
     }
 
@@ -68,7 +69,7 @@ class AdminSettingController extends Controller
                 ->sortByDesc(fn (string $candidate) => Storage::disk('public')->lastModified($candidate))
                 ->first();
         });
-        $payload = ['url' => \App\Support\PublicMedia::url($path)];
+        $payload = ['url' => PublicMedia::url($path)];
         $response = response()->json($payload);
         $response->setEtag(sha1((string) json_encode($payload)));
         $response->headers->set('Cache-Control', 'no-store');
@@ -93,7 +94,7 @@ class AdminSettingController extends Controller
     public function applyDefaultTeacherCover()
     {
         $configured = Setting::query()->where('key', 'teacher_cover_path')->value('value');
-        if (!$configured || !Storage::disk('public')->exists($configured)) {
+        if (! $configured || ! Storage::disk('public')->exists($configured)) {
             return response()->json(['message' => 'Unggah sampul default terlebih dahulu.'], 422);
         }
 

@@ -1,6 +1,9 @@
 *.log
 .DS_Store
 .env
+
+# Local PHP CLI wrapper (machine-specific paths)
+/bin/
 .env.backup
 .env.production
 .phpactor.json

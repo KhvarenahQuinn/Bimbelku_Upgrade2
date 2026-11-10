@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('teacher_offers') && !Schema::hasColumn('teacher_offers', 'reminder_sent_at')) {
+        if (Schema::hasTable('teacher_offers') && ! Schema::hasColumn('teacher_offers', 'reminder_sent_at')) {
             Schema::table('teacher_offers', function (Blueprint $table) {
                 $table->timestamp('reminder_sent_at')->nullable()->after('offered_at')->index();
             });

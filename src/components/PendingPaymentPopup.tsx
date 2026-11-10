@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { X, Clock, CreditCard, Loader2, AlertTriangle, ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import http, { getCached } from "@/lib/http";
+import { clearBrowserSession } from "@/lib/session";
 
 export default function PendingPaymentPopup() {
   const navigate = useNavigate();
@@ -35,8 +36,7 @@ export default function PendingPaymentPopup() {
         try {
           storedUser = JSON.parse(localStorage.getItem("user") || "null");
         } catch {
-          localStorage.removeItem("token");
-          localStorage.removeItem("user");
+          clearBrowserSession();
           setIsVisible(false);
           return;
         }

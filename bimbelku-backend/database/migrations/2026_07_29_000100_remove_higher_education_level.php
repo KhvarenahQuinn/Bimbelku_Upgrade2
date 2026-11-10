@@ -24,9 +24,9 @@ return new class extends Migration
     private function deactivateRows(string $table, string $levelColumn): void
     {
         if (
-            !Schema::hasTable($table)
-            || !Schema::hasColumn($table, $levelColumn)
-            || !Schema::hasColumn($table, 'is_active')
+            ! Schema::hasTable($table)
+            || ! Schema::hasColumn($table, $levelColumn)
+            || ! Schema::hasColumn($table, 'is_active')
         ) {
             return;
         }
@@ -47,8 +47,8 @@ return new class extends Migration
         ?string $gradesColumn = null
     ): void {
         if (
-            !Schema::hasTable($table)
-            || !Schema::hasColumn($table, $levelsColumn)
+            ! Schema::hasTable($table)
+            || ! Schema::hasColumn($table, $levelsColumn)
         ) {
             return;
         }
@@ -67,7 +67,7 @@ return new class extends Migration
             ->get()
             ->each(function (object $row) use ($table, $levelsColumn, $gradesColumn) {
                 $originalLevels = $this->decodeList($row->{$levelsColumn});
-                if (!in_array('Perguruan Tinggi', $originalLevels, true)) {
+                if (! in_array('Perguruan Tinggi', $originalLevels, true)) {
                     return;
                 }
 
@@ -106,7 +106,7 @@ return new class extends Migration
         if (is_array($value)) {
             return array_values(array_filter($value, 'is_string'));
         }
-        if (!is_string($value) || trim($value) === '') {
+        if (! is_string($value) || trim($value) === '') {
             return [];
         }
 

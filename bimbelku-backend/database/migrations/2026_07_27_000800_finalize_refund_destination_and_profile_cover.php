@@ -10,7 +10,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('orders') && !Schema::hasColumn('orders', 'sender_account_number')) {
+        if (Schema::hasTable('orders') && ! Schema::hasColumn('orders', 'sender_account_number')) {
             Schema::table('orders', function (Blueprint $table) {
                 $table->string('sender_account_number', 80)->nullable()->after('sender_name');
             });
@@ -51,12 +51,12 @@ return new class extends Migration
         ];
 
         foreach ($sensitiveColumns as $table => $columns) {
-            if (!Schema::hasTable($table)) {
+            if (! Schema::hasTable($table)) {
                 continue;
             }
 
             foreach ($columns as $column) {
-                if (!Schema::hasColumn($table, $column)) {
+                if (! Schema::hasColumn($table, $column)) {
                     continue;
                 }
 
@@ -75,11 +75,11 @@ return new class extends Migration
         $public = Storage::disk('public');
         $private = Storage::disk('local');
 
-        if (!$public->exists($path)) {
+        if (! $public->exists($path)) {
             return;
         }
 
-        if (!$private->exists($path)) {
+        if (! $private->exists($path)) {
             $stream = $public->readStream($path);
             if ($stream === false) {
                 return;

@@ -9,9 +9,9 @@ return new class extends Migration
     public function up(): void
     {
         if (
-            !Schema::hasTable('bookings')
-            || !Schema::hasTable('booking_requests')
-            || !Schema::hasTable('booking_participants')
+            ! Schema::hasTable('bookings')
+            || ! Schema::hasTable('booking_requests')
+            || ! Schema::hasTable('booking_participants')
         ) {
             return;
         }
@@ -63,7 +63,7 @@ return new class extends Migration
                     && $participantRequestTypes->count() === 1
                     && $participantRequestTypes->first() === 'group';
 
-                if (!$safePrivateRepair && !$safeGroupRepair) {
+                if (! $safePrivateRepair && ! $safeGroupRepair) {
                     return;
                 }
 
@@ -77,7 +77,7 @@ return new class extends Migration
                         'updated_at' => now(),
                     ]);
 
-                if (!Schema::hasTable('orders')) {
+                if (! Schema::hasTable('orders')) {
                     return;
                 }
 
@@ -87,7 +87,7 @@ return new class extends Migration
                     ->get(['id', 'class_details_snapshot'])
                     ->each(function (object $order) use ($mismatch) {
                         $snapshot = json_decode($order->class_details_snapshot, true);
-                        if (!is_array($snapshot)) {
+                        if (! is_array($snapshot)) {
                             return;
                         }
 

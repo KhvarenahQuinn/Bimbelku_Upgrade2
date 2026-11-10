@@ -64,7 +64,7 @@ export default function StudentLayout({ children, title, lockContentScroll = fal
     if (path === "/student/my-classes" || path.startsWith("/student/my-classes/") || path === "/student/progress" || path.startsWith("/student/progress/")) return "classes";
     if (path === "/student/messages" || path.startsWith("/student/messages/")) return "messages";
     if (path === "/student/history" || path.startsWith("/student/history/")) return "payments";
-    if (["/student/account", "/student/profile", "/student/vouchers", "/student/offers", "/student/help", "/student/notifications"].some((route) => path === route || path.startsWith(`${route}/`))) return "account";
+    if (["/student/account", "/student/profile", "/student/settings", "/student/vouchers", "/student/offers", "/student/help", "/student/notifications"].some((route) => path === route || path.startsWith(`${route}/`))) return "account";
     return "";
   })();
 

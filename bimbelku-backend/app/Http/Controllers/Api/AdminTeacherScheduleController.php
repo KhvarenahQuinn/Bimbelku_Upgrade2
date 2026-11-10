@@ -21,6 +21,7 @@ class AdminTeacherScheduleController extends Controller
         $weekly = collect(self::DAYS)->map(function (string $day) use ($schedules) {
             $item = $schedules->get($day);
             $ranges = $item?->normalizedRanges() ?? [];
+
             return [
                 'day' => $day,
                 'is_active' => (bool) ($item?->is_active && count($ranges) > 0),

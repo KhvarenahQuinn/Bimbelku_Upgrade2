@@ -1,5 +1,5 @@
 import { notify } from "@/lib/notify";
-import { FormEvent, lazy, Suspense, useEffect, useState } from "react";
+import { FormEvent, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -103,6 +103,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
   const [publicProfileConsent, setPublicProfileConsent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [summaryError, setSummaryError] = useState("");
   const [subjects, setSubjects] = useState<SubjectOption[]>(fallbackSubjects);
@@ -229,7 +230,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (submitting) return;
+    if (submittingRef.current) return;
     const nextErrors: Record<string, string> = {
       ...accountErrors(),
       ...profileErrors(),
@@ -263,28 +264,39 @@ export default function Register({ role = "student" }: { role?: Role }) {
     }
 
     setSubmitting(true);
+    submittingRef.current = true;
     try {
       const response = await http.post("/register", payload);
       notify.success(response.data.message);
       if (role === "teacher") {
-        const applicationId = Number(response.data?.user?.id || 0);
-        const methodLabel = form.teaching_method === "online"
+        const methodLabel = (value?: string | null) => value === "online"
           ? "Online"
-          : form.teaching_method === "offline"
+          : value === "offline"
             ? "Tatap muka"
             : "Online dan tatap muka";
+        // Ringkasan berasal dari server agar hanya data tersimpan yang dikirim.
+        // Email, kata sandi, dan dokumen privat tidak pernah masuk pesan.
+        const summary = response.data?.registration_summary && typeof response.data.registration_summary === "object"
+          ? response.data.registration_summary as Record<string, unknown>
+          : null;
+        const applicationCode = String(summary?.application_code || response.data?.application_code || "");
+        const summaryLevels = Array.isArray(summary?.levels)
+          ? summary.levels.map((level) => String(level)).filter(Boolean)
+          : levels;
+        const summaryLines = [
+          summary ? `Nama: ${String(summary.name || form.name).trim()}` : `Nama: ${form.name.trim()}`,
+          `Nomor WhatsApp: ${String(summary?.whatsapp || form.phone).trim()}`,
+          `Mata pelajaran utama: ${String(summary?.subject || form.expertise)}`,
+          `Gelar/pendidikan terakhir: ${String(summary?.degree || form.public_degree).trim()}`,
+          `Jenjang yang diajar: ${summaryLevels.join(", ")}`,
+          `Metode mengajar: ${methodLabel(String(summary?.teaching_method || form.teaching_method))}`,
+          String(summary?.linkedin || form.linkedin).trim() ? `LinkedIn/portofolio: ${String(summary?.linkedin || form.linkedin).trim()}` : null,
+        ].filter(Boolean);
         const message = [
           `Halo ${settings.brand_name || "BimbelKu"}, saya sudah mengisi dan mengirim formulir pendaftaran tutor.`,
           "",
-          applicationId ? `Kode pendaftaran: TUTOR-${applicationId}` : null,
-          `Nama: ${form.name.trim()}`,
-          `Email: ${form.email.trim().toLowerCase()}`,
-          `Nomor WhatsApp: ${form.phone.trim()}`,
-          `Mata pelajaran utama: ${form.expertise}`,
-          `Gelar/pendidikan terakhir: ${form.public_degree.trim()}`,
-          `Jenjang yang diajar: ${levels.join(", ")}`,
-          `Metode mengajar: ${methodLabel}`,
-          form.linkedin.trim() ? `LinkedIn/portofolio: ${form.linkedin.trim()}` : null,
+          applicationCode ? `Kode pendaftaran: ${applicationCode}` : null,
+          ...summaryLines,
           "Dokumen identitas, foto wajah langsung, dan ijazah/kualifikasi sudah dikirim melalui formulir.",
           "",
           "Mohon lanjutkan proses seleksi dan tes tutor.",
@@ -295,7 +307,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
 
         try {
           sessionStorage.setItem("bimbelku_teacher_registration", JSON.stringify({
-            id: applicationId || null,
+            id: applicationCode || null,
             email: form.email.trim().toLowerCase(),
             submitted_at: new Date().toISOString(),
           }));
@@ -330,6 +342,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
       setSummaryError(message);
       notify.error(message);
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

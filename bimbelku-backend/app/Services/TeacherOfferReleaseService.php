@@ -93,11 +93,10 @@ class TeacherOfferReleaseService
 
         $query
             ->orderBy('id')
-            ->chunkById(100, function ($offers) use ($teacherId, $reason, $requestIds) {
+            ->chunkById(100, function ($offers) use ($reason, $requestIds) {
                 foreach ($offers as $offerSnapshot) {
                     $requestId = DB::transaction(function () use (
                         $offerSnapshot,
-                        $teacherId,
                         $reason
                     ) {
                         $bookingRequest = BookingRequest::query()
@@ -106,7 +105,7 @@ class TeacherOfferReleaseService
                         $offer = TeacherOffer::query()
                             ->lockForUpdate()
                             ->find($offerSnapshot->id);
-                        if (!$offer || $offer->status !== 'pending') {
+                        if (! $offer || $offer->status !== 'pending') {
                             return null;
                         }
 
@@ -118,7 +117,7 @@ class TeacherOfferReleaseService
                         ]);
 
                         if (
-                            !$bookingRequest
+                            ! $bookingRequest
                             || $bookingRequest->status !== 'teacher_pending'
                         ) {
                             return null;
@@ -129,14 +128,14 @@ class TeacherOfferReleaseService
                             ->where('expires_at', '>', now())
                             ->max('expires_at');
                         $bookingRequest->update($otherDeadline ? [
-                                'status' => 'teacher_pending',
-                                'matched_teacher_id' => null,
-                                'teacher_response_deadline' => $otherDeadline,
-                            ] : [
-                                'status' => 'matching',
-                                'matched_teacher_id' => null,
-                                'teacher_response_deadline' => null,
-                            ]);
+                            'status' => 'teacher_pending',
+                            'matched_teacher_id' => null,
+                            'teacher_response_deadline' => $otherDeadline,
+                        ] : [
+                            'status' => 'matching',
+                            'matched_teacher_id' => null,
+                            'teacher_response_deadline' => null,
+                        ]);
 
                         return $otherDeadline ? null : $bookingRequest->id;
                     }, 3);

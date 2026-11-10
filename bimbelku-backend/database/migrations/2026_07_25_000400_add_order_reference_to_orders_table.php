@@ -9,11 +9,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('orders')) {
+        if (! Schema::hasTable('orders')) {
             return;
         }
 
-        if (!Schema::hasColumn('orders', 'order_id')) {
+        if (! Schema::hasColumn('orders', 'order_id')) {
             Schema::table('orders', function (Blueprint $table) {
                 $table->string('order_id', 40)->nullable()->index();
             });

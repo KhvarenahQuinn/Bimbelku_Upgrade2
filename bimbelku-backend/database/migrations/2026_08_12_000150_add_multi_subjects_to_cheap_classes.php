@@ -10,7 +10,7 @@ return new class extends Migration
     public function up(): void
     {
         foreach (['cheap_class_templates', 'cheap_classes'] as $tableName) {
-            if (!Schema::hasTable($tableName) || Schema::hasColumn($tableName, 'subjects')) {
+            if (! Schema::hasTable($tableName) || Schema::hasColumn($tableName, 'subjects')) {
                 continue;
             }
 
@@ -28,7 +28,7 @@ return new class extends Migration
                             'curriculum_chapter_id' => $row->curriculum_chapter_id ?? null,
                             'chapter' => $row->chapter ?? null,
                         ];
-                        if (!$item['subject_name']) {
+                        if (! $item['subject_name']) {
                             continue;
                         }
                         DB::table($tableName)->where('id', $row->id)->update([

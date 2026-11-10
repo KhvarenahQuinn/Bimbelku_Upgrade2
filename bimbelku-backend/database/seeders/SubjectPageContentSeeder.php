@@ -127,6 +127,7 @@ class SubjectPageContentSeeder extends Seeder
         }
 
         $last = $unique->count() - 1;
+
         return collect([0, (int) round($last * .25), (int) round($last * .5), (int) round($last * .75), $last])
             ->map(fn (int $index) => $unique[$index])->unique()->values();
     }
@@ -134,6 +135,7 @@ class SubjectPageContentSeeder extends Seeder
     private function profile(string $name, string $group): array
     {
         $normalized = Str::lower($name.' '.$group);
+
         return match (true) {
             str_contains($normalized, 'matematika'), str_contains($normalized, 'fisika'), str_contains($normalized, 'kimia') => ['focus' => 'konsep, hubungan antarbesaran, dan langkah pemecahan masalah', 'practice' => 'latihan soal dari dasar sampai penerapan'],
             str_contains($normalized, 'biologi'), str_contains($normalized, 'alam') => ['focus' => 'konsep ilmiah, proses, bukti, dan keterkaitan antarsistem', 'practice' => 'analisis gambar, data, kasus, dan soal konsep'],

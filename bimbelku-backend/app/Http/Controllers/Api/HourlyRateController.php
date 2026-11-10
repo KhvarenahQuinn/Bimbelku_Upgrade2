@@ -6,12 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\CurriculumSubject;
 use App\Models\HourlyRate;
 use App\Models\Setting;
+use App\Services\HourlyRateService;
 use App\Support\EducationCatalog;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
-use App\Services\HourlyRateService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class HourlyRateController extends Controller
 {
@@ -43,14 +43,14 @@ class HourlyRateController extends Controller
             ->where('is_active', true)
             ->whereRaw('LOWER(name) = ?', [mb_strtolower($validated['subject_name'])])
             ->first();
-        if (!$subject) {
+        if (! $subject) {
             return response()->json([
                 'message' => 'Pilih mata pelajaran dari katalog atau tambahkan mapel baru dahulu.',
             ], 422);
         }
         if (
-            !empty($validated['education_level'])
-            && !in_array($validated['education_level'], $subject->education_levels ?? [], true)
+            ! empty($validated['education_level'])
+            && ! in_array($validated['education_level'], $subject->education_levels ?? [], true)
         ) {
             return response()->json([
                 'message' => 'Jenjang tarif tidak tersedia pada mata pelajaran tersebut.',

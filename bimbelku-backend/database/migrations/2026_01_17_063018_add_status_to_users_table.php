@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasColumn('users', 'status')) {
+        if (! Schema::hasColumn('users', 'status')) {
             $tableCallback = function (Blueprint $table) {
                 $table->string('status', 30)->default('active');
             };

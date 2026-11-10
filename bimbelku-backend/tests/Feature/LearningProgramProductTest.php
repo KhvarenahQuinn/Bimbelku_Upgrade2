@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\CurriculumSubject;
 use App\Models\Booking;
 use App\Models\BookingRequest;
+use App\Models\CurriculumSubject;
 use App\Models\GuestPackageOrder;
 use App\Models\LearningPackage;
 use App\Models\Order;
@@ -66,6 +66,7 @@ class LearningProgramProductTest extends TestCase
             $subject = $subjects->firstWhere('name', $name);
             $weekday = [1, 3, 5][$index];
             $first = Carbon::parse('2026-09-21 18:00:00', 'Asia/Jakarta')->addDays($index * 2);
+
             return [
                 'curriculum_subject_id' => $subject->id,
                 'weekdays' => [$weekday],

@@ -80,6 +80,37 @@ npm run dev
 
 Frontend berjalan di `http://127.0.0.1:8080`. Ubah `VITE_API_BASE_URL` jika alamat API berbeda.
 
+## Jalankan semuanya dengan satu perintah
+
+Untuk pengembangan lokal, seluruh stack bisa dinyalakan sekaligus:
+
+```bash
+npm start
+# atau
+./start.sh
+```
+
+Perintah tersebut akan:
+
+- membuat `.env` dari `.env.example` bila belum ada, serta `APP_KEY` backend;
+- menginstall dependency frontend/backend bila `node_modules` atau `vendor` belum ada;
+- menyalakan container database lewat `bimbelku-backend/docker-compose.yml`;
+- menunggu database benar-benar siap sebelum melanjutkan;
+- menjalankan `php artisan migrate` dan seeder awal bila database masih kosong/baru sebagian;
+- menjalankan backend `http://127.0.0.1:8000`, Vite `http://127.0.0.1:8080`, dan `schedule:work`;
+- memakai service yang sudah aktif bila portnya sudah terpakai.
+
+Opsi yang tersedia:
+
+```bash
+npm start -- --no-docker      # database sudah dikelola sendiri
+npm start -- --no-scheduler   # tanpa schedule:work
+npm start -- --no-frontend    # hanya backend + scheduler
+```
+
+Log tiap service ditulis ke folder `.run/`. Tekan `Ctrl+C` untuk menghentikan service yang dijalankan perintah ini.
+
+
 ## Instalasi backend
 
 Masuk ke folder backend:

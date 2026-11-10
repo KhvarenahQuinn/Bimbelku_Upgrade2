@@ -20,12 +20,12 @@ class ClassroomSystemMessageService
             'order:id,order_id,status,amount,learning_package_id',
         ]);
 
-        if (!$booking->teacher_id || !$booking->teacher) {
+        if (! $booking->teacher_id || ! $booking->teacher) {
             return null;
         }
 
         $order = $paidOrder;
-        if (!$order || $order->status !== 'paid') {
+        if (! $order || $order->status !== 'paid') {
             $order = $booking->participants
                 ->pluck('order')
                 ->filter(fn (?Order $item) => $item?->status === 'paid')
@@ -33,7 +33,7 @@ class ClassroomSystemMessageService
                 ?? ($booking->order?->status === 'paid' ? $booking->order : null);
         }
 
-        if (!$order) {
+        if (! $order) {
             return null;
         }
 
@@ -90,7 +90,7 @@ class ClassroomSystemMessageService
         );
 
         // Ringkasan dapat berubah saat data transaksi diperbarui, tetapi pesan tetap idempoten.
-        if (!$message->wasRecentlyCreated && $message->metadata !== $metadata) {
+        if (! $message->wasRecentlyCreated && $message->metadata !== $metadata) {
             $message->update(['metadata' => $metadata]);
         }
 

@@ -8,8 +8,8 @@ use App\Models\CheapClassSession;
 use App\Models\CheapClassTemplate;
 use App\Models\CurriculumChapter;
 use App\Models\CurriculumSubject;
-use App\Models\Order;
 use App\Models\Notification;
+use App\Models\Order;
 use App\Models\Refund;
 use App\Models\TeacherAvailability;
 use App\Models\TeacherProfile;
@@ -19,6 +19,7 @@ use App\Services\CheapClassService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class CheapClassWorkflowTest extends TestCase
@@ -143,7 +144,7 @@ class CheapClassWorkflowTest extends TestCase
         try {
             app(CheapClassService::class)->join($class->fresh(), $overflowStudent);
             $this->fail('Murid ketujuh tidak boleh memperoleh kursi pada kelas dengan kapasitas enam.');
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+        } catch (HttpException $exception) {
             $this->assertSame(422, $exception->getStatusCode());
             $this->assertTrue(
                 str_contains($exception->getMessage(), 'Kuota Kelas Kelompok sudah penuh.')
@@ -291,6 +292,7 @@ class CheapClassWorkflowTest extends TestCase
                     'normalized_title' => 'bab-'.($index + 1),
                     'is_active' => true,
                 ]);
+
                 return [$subject, $chapter];
             });
 
@@ -748,7 +750,6 @@ class CheapClassWorkflowTest extends TestCase
         $this->assertSame('refund_pending', $overflowOrder->fresh()->status);
         $this->assertSame(1, Refund::query()->where('order_id', $overflowOrder->id)->count());
     }
-
 
     public function test_rejecting_anomalous_payment_after_capacity_is_full_ends_the_seat(): void
     {
@@ -1542,7 +1543,7 @@ class CheapClassWorkflowTest extends TestCase
             'payment_window_minutes' => 60,
         ], $overrides);
 
-        if (!array_key_exists('weekdays', $overrides)) {
+        if (! array_key_exists('weekdays', $overrides)) {
             $payload['weekdays'] = [Carbon::parse($payload['first_session_date'])->dayOfWeekIso];
         }
 
