@@ -65,7 +65,10 @@ type OperationalAttentionCounts = {
   cases: number;
   monitoring_attention: number;
   refunds: number;
+  refund_failed: number;
+  refund_needs_review: number;
   payouts: number;
+  payout_needs_review: number;
 };
 
 const emptyOperationalCounts: OperationalAttentionCounts = {
@@ -75,7 +78,10 @@ const emptyOperationalCounts: OperationalAttentionCounts = {
   cases: 0,
   monitoring_attention: 0,
   refunds: 0,
+  refund_failed: 0,
+  refund_needs_review: 0,
   payouts: 0,
+  payout_needs_review: 0,
 };
 
 const operationalCountForPath = (path: string, counts: OperationalAttentionCounts): number => ({
@@ -88,6 +94,20 @@ const operationalCountForPath = (path: string, counts: OperationalAttentionCount
 
 const operationalToneForPath = (path: string): "urgent" | "warning" => (
   ["/admin/finance", "/admin/guru"].includes(path) ? "warning" : "urgent"
+);
+
+const financeAttentionLabel = (counts: OperationalAttentionCounts): string => [
+  counts.refund_failed > 0 ? `${counts.refund_failed} refund gagal` : null,
+  counts.refund_needs_review > 0 ? `${counts.refund_needs_review} refund perlu ditinjau` : null,
+  counts.payout_needs_review > 0 ? `${counts.payout_needs_review} pencairan perlu diperiksa` : null,
+].filter(Boolean).join(" · ");
+
+const financeNeedsRefundAction = (counts: OperationalAttentionCounts): boolean => (
+  counts.refund_failed > 0 || counts.refund_needs_review > 0
+);
+
+const financeHref = (counts: OperationalAttentionCounts): string => (
+  financeNeedsRefundAction(counts) ? "/admin/finance?tab=refunds" : "/admin/finance"
 );
 
 const navigation: NavigationSection[] = [
@@ -224,7 +244,10 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
           cases: Number(next.cases || 0),
           monitoring_attention: Number(next.monitoring_attention || 0),
           refunds: Number(next.refunds || 0),
+          refund_failed: Number(next.refund_failed || 0),
+          refund_needs_review: Number(next.refund_needs_review || 0),
           payouts: Number(next.payouts || 0),
+          payout_needs_review: Number(next.payout_needs_review || 0),
         });
       }
     } catch {
@@ -320,6 +343,8 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
                   <NavItem
                     key={item.to}
                     item={item}
+                    to={item.to === "/admin/finance" ? financeHref(operationalCounts) : item.to}
+                    attentionLabel={item.to === "/admin/finance" ? financeAttentionLabel(operationalCounts) : ""}
                     active={isActive(item)}
                     attention={hasSidebarAttention("admin", item.to, attentionNotifications)}
                     attentionCount={operationalCountForPath(item.to, operationalCounts)}
@@ -399,22 +424,27 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
 
 function NavItem({
   item,
+  to,
   active,
   attention = false,
   attentionCount = 0,
+  attentionLabel = "",
   attentionTone = "urgent",
 }: {
   item: NavigationItem;
+  to: string;
   active: boolean;
   attention?: boolean;
   attentionCount?: number;
+  attentionLabel?: string;
   attentionTone?: "urgent" | "warning";
 }) {
   const Icon = item.icon;
 
   return (
     <Link
-      to={item.to}
+      to={to}
+      title={attentionLabel || undefined}
       aria-current={active ? "page" : undefined}
       className={`group flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
         active
@@ -433,7 +463,7 @@ function NavItem({
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
       {attentionCount > 0 ? (
         <span
-          aria-label={`${attentionCount} item perlu tindakan`}
+          aria-label={attentionLabel || `${attentionCount} item perlu tindakan`}
           className={`inline-flex min-w-6 shrink-0 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black ${
             attentionTone === "warning"
               ? "bg-amber-100 text-amber-800"
@@ -481,6 +511,8 @@ function AdminMobileBottomNav({
           const Icon = item.icon;
           const operationalCount = operationalCountForPath(item.to, operationalCounts);
           const attention = operationalCount > 0 || hasSidebarAttention("admin", item.to, attentionNotifications);
+          const financeLabel = item.to === "/admin/finance" ? financeAttentionLabel(operationalCounts) : "";
+          const target = item.to === "/admin/finance" ? financeHref(operationalCounts) : item.to;
           const shortLabel = item.to === "/admin"
             ? "Beranda"
             : item.to === "/admin/guru"
@@ -492,9 +524,10 @@ function AdminMobileBottomNav({
           return (
             <Link
               key={item.to}
-              to={item.to}
+              to={target}
+              title={financeLabel || undefined}
               aria-current={active ? "page" : undefined}
-              aria-label={item.label}
+              aria-label={financeLabel ? `${item.label}: ${financeLabel}` : item.label}
               className={`flex min-h-[3.45rem] min-w-0 flex-col items-center justify-center gap-1 rounded-[1rem] px-1 text-[10px] font-bold transition ${
                 active
                   ? "bg-orange-50 text-orange-600"

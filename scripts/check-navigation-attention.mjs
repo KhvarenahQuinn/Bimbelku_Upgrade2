@@ -66,5 +66,13 @@ expect(
   notificationController.includes("whereNull('invalidated_at')"),
   "notifikasi tidak valid tidak dihitung sebagai unread",
 );
+expect(
+  adminController.includes("'refund_failed'") && adminController.includes("'refund_needs_review'"),
+  "dashboard admin menyediakan hitungan refund gagal dan refund perlu ditinjau",
+);
+expect(
+  admin.includes("financeAttentionLabel") && admin.includes("/admin/finance?tab=refunds"),
+  "badge keuangan admin punya label spesifik dan mengarah ke tab refund",
+);
 
 console.log("Navigation attention Revisi 7 lulus pemeriksaan source-level.");
