@@ -14,7 +14,9 @@ use App\Models\PackageSessionChapterLog;
 use App\Models\PromotionClaim;
 use App\Models\Refund;
 use App\Models\SessionReport;
+use App\Models\Setting;
 use App\Models\TeacherReplacementRequest;
+use App\Models\User;
 use App\Services\CustomerWalletService;
 use App\Services\PartialPackageRefundService;
 use App\Services\RefundSettlementService;
@@ -175,34 +177,31 @@ class SessionWorkflowController extends Controller
                 ]);
 
                 $lockedBooking->update([
-                    'status' => 'emergency_refund_pending',
-                    'payout_status' => 'cancelled',
+                    'status' => 'admin_review_required',
+                    'admin_review_required_at' => now(),
+                    'payout_status' => 'locked',
                 ]);
 
+                // Dana murid tidak dikembalikan otomatis. Admin memutuskan
+                // setelah memeriksa bukti kehadiran dan kronologi.
                 $lockedBooking->participants()
                     ->with(['order', 'bookingRequest'])
                     ->lockForUpdate()
                     ->get()
                     ->each(function (BookingParticipant $participant) use ($lockedBooking) {
-                        if ($participant->order?->status === 'paid') {
-                            $this->queueRefund(
-                                $participant,
-                                $lockedBooking,
-                                'Keadaan darurat tutor'
-                            );
-                        } else {
+                        if (($participant->order?->status ?? null) !== 'paid') {
                             $participant->order?->update(['status' => 'cancelled']);
                             $participant->update(['status' => 'cancelled']);
                             $participant->bookingRequest?->update(['status' => 'cancelled']);
                         }
 
                         Notification::updateOrCreate(
-                            ['unique_key' => "session-emergency-cancelled:{$lockedBooking->id}:{$participant->student_id}"],
+                            ['unique_key' => "session-emergency-review:{$lockedBooking->id}:{$participant->student_id}"],
                             [
                                 'user_id' => $participant->student_id,
-                                'title' => 'Sesi dibatalkan karena keadaan darurat',
-                                'message' => $participant->order?->status === 'refund_pending'
-                                    ? 'Refund penuh sedang diproses admin.'
+                                'title' => 'Sesi menunggu pemeriksaan admin',
+                                'message' => $participant->order?->status === 'paid'
+                                    ? 'Tutor melaporkan keadaan darurat. Dana belum dikembalikan; admin akan memeriksa bukti sesi sebelum memutuskan refund.'
                                     : 'Tagihan dibatalkan dan tidak perlu dibayar.',
                                 'type' => 'warning',
                                 'target_url' => '/student/history',
@@ -219,7 +218,7 @@ class SessionWorkflowController extends Controller
         }
 
         return response()->json([
-            'message' => 'Keadaan darurat tercatat. Refund penuh murid langsung masuk antrean admin.',
+            'message' => 'Laporan keadaan darurat diterima dan menunggu pemeriksaan admin. Dana belum dikembalikan.',
             'data' => $report,
         ], 201);
     }
@@ -516,20 +515,214 @@ class SessionWorkflowController extends Controller
         ]);
     }
 
+    public function attendanceEvidenceForAdmin(Booking $booking)
+    {
+        return response()->json(['data' => $this->attendanceEvidence($booking)]);
+    }
+
+    /**
+     * Evidence for the admin only. It deliberately does not pick the cost
+     * bearer: presence taps are user-controlled, so the admin decides with a
+     * written reason.
+     */
+    private function attendanceEvidence(Booking $booking): array
+    {
+        $booking->loadMissing([
+            'participants.student',
+            'sessionAttendances',
+            'participantAttendances',
+            'learningProgressReports',
+            'reports',
+            'disputes',
+        ]);
+
+        $sessionAttendances = $booking->sessionAttendances
+            ->map(fn ($row) => [
+                'id' => $row->id,
+                'user_id' => $row->user_id ?? null,
+                'role' => $row->role ?? null,
+                'check_in_at' => $row->check_in_at ?? null,
+                'check_out_at' => $row->check_out_at ?? null,
+            ])->values()->all();
+        $participantAttendances = $booking->participantAttendances
+            ->map(fn ($row) => [
+                'student_id' => $row->student_id ?? null,
+                'status' => $row->status ?? null,
+                'marked_at' => $row->marked_at ?? null,
+                'marked_by' => $row->marked_by ?? null,
+            ])->values()->all();
+        $latestProgress = $booking->learningProgressReports
+            ->sortByDesc(fn ($row) => $row->published_at?->timestamp ?? 0)
+            ->first();
+        $activeReports = $booking->reports
+            ->map(fn ($row) => [
+                'id' => $row->id,
+                'type' => $row->type,
+                'status' => $row->status,
+                'has_evidence' => filled($row->evidence),
+                'incident_at' => $row->incident_at ?? null,
+            ])->values()->all();
+
+        $tutorReady = $booking->tutor_ready_at !== null;
+        $studentConfirmed = $booking->student_confirmed_at !== null;
+        $presentMarks = collect($participantAttendances)->where('status', 'present')->isNotEmpty()
+            || collect($sessionAttendances)->contains(fn ($row) => filled($row['check_in_at']));
+        $tutorClaimEmergency = $booking->reports
+            ->where('type', 'teacher_emergency')
+            ->isNotEmpty();
+
+        $evidenceState = match (true) {
+            $tutorClaimEmergency && ! $studentConfirmed => 'tutor_claim_emergency',
+            $tutorReady && $studentConfirmed => 'both_present',
+            $tutorReady && ! $studentConfirmed => 'tutor_present_student_absent',
+            ! $tutorReady && $studentConfirmed => 'student_present_tutor_absent',
+            $presentMarks => 'participant_marked_present',
+            default => 'unclear',
+        };
+
+        return [
+            'booking_id' => $booking->id,
+            'evidence_state' => $evidenceState,
+            'tutor_ready_at' => $booking->tutor_ready_at,
+            'student_confirmed_at' => $booking->student_confirmed_at,
+            'session_engaged_at' => $booking->session_started_at,
+            'session_attendances' => $sessionAttendances,
+            'participant_attendances' => $participantAttendances,
+            'learning_progress_report' => $latestProgress ? [
+                'id' => $latestProgress->id,
+                'published_at' => $latestProgress->published_at,
+            ] : null,
+            'reports' => $activeReports,
+            'disputes' => $booking->disputes->map(fn ($row) => [
+                'id' => $row->id,
+                'kind' => $row->kind ?? 'completion_objection',
+                'status' => $row->status,
+                'reason' => $row->reason,
+                'has_evidence' => filled($row->evidence),
+            ])->values()->all(),
+            'decision_hint' => 'Bukti hanya informasi. Admin tetap wajib memilih penanggung biaya dan menulis alasan.',
+        ];
+    }
+
+    /**
+     * A student can appeal a session that nothing recorded as taking place.
+     */
+    public function studentSessionAppeal(Request $request, Booking $booking)
+    {
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:30', 'max:3000'],
+            'evidence' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+        ]);
+
+        $participant = $booking->participants()
+            ->where('student_id', $request->user()->id)
+            ->whereHas('order', fn ($query) => $query->where('status', 'paid'))
+            ->firstOrFail();
+
+        abort_unless($this->canAppealLapsedSession($booking, (int) $request->user()->id), 422, 'Sesi ini tidak dapat dibandingkan lagi.');
+
+        $path = $request->hasFile('evidence')
+            ? $request->file('evidence')->store('dispute_evidence', 'local')
+            : null;
+
+        try {
+            $dispute = DB::transaction(function () use ($request, $booking, $participant, $validated, $path) {
+                $locked = Booking::query()->lockForUpdate()->findOrFail($booking->id);
+                abort_unless(
+                    $this->canAppealLapsedSession($locked, (int) $request->user()->id),
+                    422,
+                    'Sesi ini tidak dapat dibandingkan lagi.'
+                );
+
+                $dispute = BookingDispute::create([
+                    'booking_id' => $locked->id,
+                    'kind' => 'lapsed_session',
+                    'student_id' => $request->user()->id,
+                    'reason' => $validated['reason'],
+                    'evidence' => $path,
+                    'status' => 'pending',
+                ]);
+
+                $locked->participants()
+                    ->where('student_id', $request->user()->id)
+                    ->update(['status' => 'disputed']);
+                $locked->update([
+                    'status' => 'admin_review_required',
+                    'admin_review_required_at' => $locked->admin_review_required_at ?? now(),
+                    'payout_status' => 'locked',
+                ]);
+
+                User::query()->where('role', 'admin')->where('status', 'active')->pluck('id')->each(
+                    fn (int $adminId) => Notification::updateOrCreate(
+                        ['unique_key' => "session-appeal:{$dispute->id}:{$adminId}"],
+                        [
+                            'user_id' => $adminId,
+                            'title' => 'Banding sesi tidak terlaksana',
+                            'message' => 'Murid mengajukan banding. Periksa bukti kehadiran sebelum memutuskan refund.',
+                            'type' => 'warning',
+                            'target_url' => '/admin/cases',
+                            'is_read' => false,
+                        ]
+                    )
+                );
+
+                return $dispute;
+            });
+        } catch (\Throwable $exception) {
+            if ($path) {
+                Storage::disk('local')->delete($path);
+            }
+            throw $exception;
+        }
+
+        return response()->json([
+            'message' => 'Banding diterima dan akan diperiksa admin.',
+            'data' => $dispute,
+        ], 201);
+    }
+
+    private function canAppealLapsedSession(Booking $booking, int $studentId): bool
+    {
+        if (! $booking->participants()->where('student_id', $studentId)->whereHas('order', fn ($q) => $q->where('status', 'paid'))->exists()) {
+            return false;
+        }
+        if ($booking->disputes()->where('student_id', $studentId)->exists()) {
+            return false;
+        }
+        if ($booking->reports()->exists()) {
+            return false;
+        }
+        if ($booking->end_at === null || $booking->end_at->copy()->addHours(72)->isPast()) {
+            return false;
+        }
+        $graceMinutes = max(30, (int) (Setting::where('key', 'session_checkin_after_minutes')->value('value') ?? 30));
+        $graceEnds = $booking->end_at->copy()->addMinutes($graceMinutes);
+        if ($booking->status === 'admin_review_required') {
+            return true;
+        }
+
+        return $booking->status === 'confirmed' && $graceEnds->isPast();
+    }
+
     public function resolveDispute(
         Request $request,
         BookingDispute $bookingDispute
     ) {
+        $isLapsedAppeal = ($bookingDispute->kind ?? 'completion_objection') === 'lapsed_session';
         $validated = $request->validate([
-            'resolution' => ['required', Rule::in(['student_refund', 'teacher_paid'])],
+            'resolution' => ['required', Rule::in($isLapsedAppeal
+                ? ['full_refund', 'partial_refund', 'teacher_paid', 'student_refund']
+                : ['student_refund', 'teacher_paid'])],
             'notes' => ['required', 'string', 'min:20', 'max:2000'],
+            'refund_amount' => ['nullable', 'numeric', 'min:1'],
+            'cost_bearer' => ['nullable', Rule::in(['tutor_share', 'platform'])],
         ]);
 
         if ($bookingDispute->status !== 'pending') {
             return response()->json(['message' => 'Keberatan ini sudah diputuskan.'], 422);
         }
 
-        DB::transaction(function () use ($request, $bookingDispute, $validated) {
+        DB::transaction(function () use ($request, $bookingDispute, $validated, $isLapsedAppeal) {
             $lockedDispute = BookingDispute::query()
                 ->lockForUpdate()
                 ->findOrFail($bookingDispute->id);
@@ -551,7 +744,9 @@ class SessionWorkflowController extends Controller
                 'resolved_at' => now(),
             ]);
 
-            if ($validated['resolution'] === 'student_refund') {
+            if ($isLapsedAppeal) {
+                $this->applyLapsedAppealDecision($request, $lockedDispute, $booking, $participant, $validated);
+            } elseif ($validated['resolution'] === 'student_refund') {
                 $this->queueRefund($participant, $booking, 'Keberatan murid disetujui');
                 $booking->update([
                     'status' => 'refund_pending',
@@ -571,11 +766,11 @@ class SessionWorkflowController extends Controller
                 [
                     'user_id' => $lockedDispute->student_id,
                     'title' => 'Keberatan telah diputuskan',
-                    'message' => $validated['resolution'] === 'student_refund'
-                        ? 'Keberatan disetujui. Refund penuh masuk antrean transfer.'
+                    'message' => in_array($validated['resolution'], ['student_refund', 'full_refund', 'partial_refund'], true)
+                        ? 'Banding disetujui. Refund masuk antrean pengembalian dana.'
                         : 'Sesi dinyatakan valid dan hak tutor diteruskan.',
                     'type' => 'info',
-                    'target_url' => $validated['resolution'] === 'student_refund'
+                    'target_url' => in_array($validated['resolution'], ['student_refund', 'full_refund', 'partial_refund'], true)
                         ? '/student/history'
                         : '/student/my-classes',
                     'is_read' => false,
@@ -586,13 +781,83 @@ class SessionWorkflowController extends Controller
         return response()->json(['message' => 'Keputusan keberatan berhasil disimpan.']);
     }
 
+    /**
+     * Decision for a banding on a session that did not take place. The admin
+     * must pick the cost bearer, and `teacher_paid` is only allowed when the
+     * attendance evidence actually shows the tutor was present.
+     */
+    private function applyLapsedAppealDecision(
+        Request $request,
+        BookingDispute $dispute,
+        Booking $booking,
+        BookingParticipant $participant,
+        array $validated
+    ): void {
+        $resolution = $validated['resolution'] === 'student_refund' ? 'full_refund' : $validated['resolution'];
+        $participantValue = round((float) $participant->amount, 2);
+        $bearer = $validated['cost_bearer'] ?? null;
+
+        if ($resolution === 'teacher_paid') {
+            $evidence = $this->attendanceEvidence($booking);
+            $supported = in_array($evidence['evidence_state'], [
+                'tutor_present_student_absent',
+                'participant_marked_present',
+                'both_present',
+            ], true) || $evidence['learning_progress_report'] !== null;
+            abort_unless($supported, 422, 'Tutor tidak dapat dibayar tanpa bukti kehadiran atau laporan belajar.');
+            if ($this->isPresenceFlow($booking)) {
+                $this->applyPendingPackageProgress($booking);
+            }
+            $participant->update(['status' => 'approved', 'approved_at' => now()]);
+            $participant->bookingRequest?->update(['status' => 'completed']);
+            $this->finalizeBookingIfSettled($booking);
+            $dispute->update(['resolution' => 'teacher_paid']);
+
+            return;
+        }
+
+        abort_unless($bearer !== null, 422, 'Penanggung biaya refund wajib dipilih admin.');
+        $amount = $resolution === 'full_refund'
+            ? $participantValue
+            : round((float) ($validated['refund_amount'] ?? 0), 2);
+        abort_if(
+            $amount <= 0 || $amount > $participantValue + 0.009,
+            422,
+            'Nominal refund sebagian harus antara nol dan nilai sesi.'
+        );
+
+        $refund = $this->queueRefund(
+            $participant,
+            $booking,
+            'Banding sesi tidak terlaksana',
+            'lapsed_session',
+            $dispute->id,
+            $bearer,
+            $amount,
+            $request->user()->id,
+            $validated['notes'],
+        );
+        abort_if($refund === null, 422, 'Tagihan sesi ini tidak dapat direfund.');
+        $dispute->update(['resolution' => $resolution]);
+        $booking->update([
+            'status' => 'refund_pending',
+            'payout_status' => 'locked',
+        ]);
+    }
+
     public function resolveReport(
         Request $request,
         SessionReport $sessionReport
     ) {
+        $reportType = (string) $sessionReport->type;
         $validated = $request->validate([
             'decision' => ['required', Rule::in(['accepted', 'rejected'])],
             'notes' => ['required', 'string', 'min:20', 'max:2000'],
+            'refund_scope' => $reportType === 'teacher_emergency'
+                ? ['nullable', Rule::in(['none', 'session', 'remaining_package'])]
+                : ['nullable'],
+            'refund_amount' => ['nullable', 'numeric', 'min:1'],
+            'cost_bearer' => ['nullable', Rule::in(['tutor_share', 'platform'])],
         ]);
 
         if ($sessionReport->status !== 'pending') {
@@ -617,19 +882,7 @@ class SessionWorkflowController extends Controller
             ]);
 
             if ($lockedReport->type === 'teacher_emergency') {
-                Notification::updateOrCreate(
-                    ['unique_key' => "session-report-emergency-reviewed:{$lockedReport->id}:{$booking->teacher_id}"],
-                    [
-                        'user_id' => $booking->teacher_id,
-                        'title' => 'Laporan keadaan darurat diperiksa',
-                        'message' => $accepted
-                            ? 'Laporan keadaan darurat diterima. Refund peserta tetap diproses.'
-                            : 'Laporan keadaan darurat ditolak. Refund peserta tetap diproses.',
-                        'type' => $accepted ? 'info' : 'warning',
-                        'target_url' => '/guru/performa',
-                        'is_read' => false,
-                    ]
-                );
+                $this->resolveEmergencyReport($request, $lockedReport, $booking, $validated);
 
                 return;
             }
@@ -775,6 +1028,119 @@ class SessionWorkflowController extends Controller
         });
 
         return response()->json(['message' => 'Hasil pemeriksaan laporan berhasil disimpan.']);
+    }
+
+    private function resolveEmergencyReport(Request $request, SessionReport $report, Booking $booking, array $validated): void
+    {
+        $accepted = $validated['decision'] === 'accepted';
+        $scope = $validated['refund_scope'] ?? null;
+        if (! $accepted) {
+            $scope = 'none';
+        }
+        if ($scope === null) {
+            abort(422, 'Pilih keputusan refund untuk laporan keadaan darurat: none, session, atau remaining_package.');
+        }
+
+        $participants = $booking->participants()
+            ->with(['order', 'bookingRequest'])
+            ->lockForUpdate()
+            ->get();
+
+        if ($scope === 'none') {
+            $restored = $this->restoredStatusAfterReport($booking);
+            $validSession = $restored === 'awaiting_student_approval' || $booking->end_at?->isPast();
+            foreach ($participants as $participant) {
+                if ($accepted && $validSession) {
+                    $participant->update([
+                        'status' => $booking->learningProgressReports()->exists() ? 'awaiting_student_approval' : 'approved',
+                        'approved_at' => now(),
+                    ]);
+                    $participant->bookingRequest?->update(['status' => 'completed']);
+                } else {
+                    $participant->update(['status' => 'paid']);
+                }
+            }
+            if ($accepted && $validSession) {
+                $this->finalizeBookingIfSettled($booking);
+            } else {
+                $booking->update([
+                    'status' => $restored,
+                    'payout_status' => 'locked',
+                    'admin_review_required_at' => $restored === 'admin_review_required' ? now() : null,
+                ]);
+            }
+            $this->notifyEmergencyDecision($booking, $report, false, 'Sesi tetap berjalan dan hak tutor dihitung normal.');
+        } elseif ($scope === 'session') {
+            $amount = $validated['refund_amount'] ?? null;
+            abort_if($amount === null, 422, 'Nominal refund wajib diisi untuk refund satu sesi.');
+            $bearer = $validated['cost_bearer'] ?? 'tutor_share';
+            foreach ($participants as $participant) {
+                if ($participant->order?->status !== 'paid') {
+                    continue;
+                }
+                $this->queueRefund(
+                    $participant,
+                    $booking,
+                    'Keadaan darurat tutor',
+                    'teacher_emergency',
+                    $report->id,
+                    $bearer,
+                    (float) $amount,
+                    $request->user()->id,
+                    $validated['notes'],
+                );
+            }
+            $booking->update(['status' => 'refund_pending', 'payout_status' => 'locked']);
+            $this->notifyEmergencyDecision($booking, $report, true, 'Refund satu sesi diputuskan admin.');
+        } else {
+            abort_unless($booking->order?->learning_package_id, 422, 'Refund sisa paket hanya berlaku untuk sesi dari paket.');
+            $package = $booking->order->learningPackage;
+            abort_unless($package, 422, 'Paket untuk sesi ini tidak ditemukan.');
+            $preview = app(PartialPackageRefundService::class)->previewTutorExit($package);
+            $bookingIds = collect($preview['sessions'])->pluck('booking_id')->all();
+            abort_if($bookingIds === [], 422, 'Tidak ada sesi tersisa yang memenuhi syarat refund paket.');
+            app(PartialPackageRefundService::class)->queueTutorExit(
+                $package,
+                $request->user(),
+                'Keadaan darurat tutor',
+                $validated['notes'],
+                $bookingIds,
+            );
+            $this->notifyEmergencyDecision($booking, $report, true, 'Refund seluruh sisa paket diputuskan admin.');
+        }
+
+        Notification::updateOrCreate(
+            ['unique_key' => "session-report-emergency-reviewed:{$report->id}:{$booking->teacher_id}"],
+            [
+                'user_id' => $booking->teacher_id,
+                'title' => 'Laporan keadaan darurat diperiksa',
+                'message' => $scope === 'none'
+                    ? 'Laporan diperiksa dan sesi dinilai tetap berjalan.'
+                    : 'Laporan diterima. Nilai sesi yang tidak terlaksana dikembalikan ke murid.',
+                'type' => $scope === 'none' ? 'warning' : 'info',
+                'target_url' => '/guru/performa',
+                'is_read' => false,
+            ]
+        );
+    }
+
+    private function notifyEmergencyDecision(Booking $booking, SessionReport $report, bool $refunded, string $reason): void
+    {
+        foreach ($booking->participants()->get() as $participant) {
+            Notification::updateOrCreate(
+                ['unique_key' => "session-emergency-decision:{$report->id}:{$participant->student_id}"],
+                [
+                    'user_id' => $participant->student_id,
+                    'title' => $refunded ? 'Refund sesi keadaan darurat disetujui' : 'Pemeriksaan sesi keadaan darurat selesai',
+                    'message' => $refunded
+                        ? $reason.' Pilih tujuan refund di Riwayat Transaksi.'
+                        : $reason,
+                    'type' => $refunded ? 'success' : 'info',
+                    'target_url' => $refunded ? '/student/history' : '/student/my-classes',
+                    'is_read' => false,
+                ]
+            );
+        }
     }
 
     public function resolveCompletionReview(Request $request, Booking $booking)
@@ -1153,30 +1519,46 @@ class SessionWorkflowController extends Controller
             ]);
     }
 
+    /**
+     * Session-level refund. The legacy version used `firstOrCreate(['order_id'])`
+     * with the full order amount, which both blocked a second refund on the same
+     * order and refunded sessions that would still be delivered.
+     */
     private function queueRefund(
         BookingParticipant $participant,
         Booking $booking,
-        string $reason
+        string $reason,
+        string $sourceType = 'booking_case',
+        ?int $sourceId = null,
+        string $costBearer = 'tutor_share',
+        ?float $grossDelta = null,
+        ?int $actorId = null,
+        ?string $decisionNotes = null
     ): ?Refund {
         $order = $participant->order;
         if (! $order || $order->status !== 'paid') {
             return null;
         }
 
-        $refund = Refund::firstOrCreate(
-            ['order_id' => $order->id],
-            [
-                'user_id' => $participant->student_id,
-                'booking_id' => $booking->id,
-                'amount' => $order->amount,
-                'reason' => $reason,
-                'status' => 'pending',
-            ]
+        $amount = $grossDelta !== null
+            ? round($grossDelta, 2)
+            : round((float) $participant->amount, 2);
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $refund = app(PartialPackageRefundService::class)->queueSessionRefund(
+            $booking,
+            $participant,
+            $amount,
+            $costBearer,
+            $sourceType,
+            $sourceId ?? $booking->id,
+            $reason,
+            'admin',
+            $actorId,
+            $decisionNotes,
         );
-        $order->update(['status' => 'refund_pending']);
-        $participant->update(['status' => 'refund_pending']);
-        $participant->bookingRequest?->update(['status' => 'refund_pending']);
-        $this->refreshBookingAmounts($booking);
 
         return $refund;
     }
@@ -1234,19 +1616,6 @@ class SessionWorkflowController extends Controller
             ]);
         }
 
-    }
-
-    private function refreshBookingAmounts(Booking $booking): void
-    {
-        $gross = (float) $booking->participants()
-            ->whereHas('order', fn ($query) => $query->where('status', 'paid'))
-            ->sum('amount');
-        $net = round($gross * (100 - (float) $booking->commission_percent) / 100);
-
-        $booking->update([
-            'gross_amount' => $gross,
-            'teacher_net_amount' => $net,
-        ]);
     }
 
     private function finalizeBookingIfSettled(Booking $booking): void

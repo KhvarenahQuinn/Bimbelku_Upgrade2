@@ -48,6 +48,7 @@ class TeacherProfile extends Model
         'bank_details_version' => 'integer',
         'no_response_streak' => 'integer',
         'no_response_window_started_at' => 'datetime',
+        'payout_verification_method_updated_at' => 'datetime',
     ];
 
     // Relasi WAJIB PUBLIC

@@ -15,6 +15,8 @@ class OneTimeCodeService
 
     public const PAYMENT_PIN_RESET = 'payment_pin_reset';
 
+    public const PAYOUT_BANK_CHANGE = 'payout_bank_change';
+
     public const EXPIRES_MINUTES = 10;
 
     public const RESEND_SECONDS = 60;
@@ -26,8 +28,11 @@ class OneTimeCodeService
         $this->guardCooldown($user, $purpose);
         $code = (string) random_int(100000, 999999);
         $recordId = $this->store($user, $purpose, $code);
-        $title = $purpose === self::EMAIL_VERIFICATION
-            ? 'Verifikasi Email BimbelKu' : 'Reset PIN Pembayaran BimbelKu';
+        $title = match ($purpose) {
+            self::EMAIL_VERIFICATION => 'Verifikasi Email BimbelKu',
+            self::PAYOUT_BANK_CHANGE => 'Verifikasi Rekening Pencairan BimbelKu',
+            default => 'Reset PIN Pembayaran BimbelKu',
+        };
         try {
             Mail::send('emails.verification_code', [
                 'name' => $user->name, 'code' => $code, 'purpose' => $purpose,

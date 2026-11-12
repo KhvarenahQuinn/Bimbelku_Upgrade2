@@ -25,6 +25,7 @@ class Refund extends Model
         'gateway_submitted_at' => 'datetime',
         'gateway_processed_at' => 'datetime',
         'last_reconciled_at' => 'datetime',
+        'decision_actor_id' => 'integer',
     ];
 
     /**
@@ -34,7 +35,7 @@ class Refund extends Model
      */
     public function isAutomatic(): bool
     {
-        if (in_array($this->source_type, ['teacher_replacement', 'late_gateway_payment', 'no_teacher'], true)) {
+        if (in_array($this->source_type, ['teacher_replacement', 'late_gateway_payment', 'no_teacher', 'tutor_exit'], true)) {
             return true;
         }
 
@@ -51,6 +52,15 @@ class Refund extends Model
     public function gatewayFailed(): bool
     {
         return in_array((string) $this->gateway_status, ['FAILED', 'REJECTED'], true);
+    }
+
+    /**
+     * Only refunds that never left the admin queue (rejected/cancelled) release
+     * their reserved value. Everything else still consumes the cap.
+     */
+    public function reservesFunds(): bool
+    {
+        return ! in_array((string) $this->status, ['cancelled', 'rejected'], true);
     }
 
     protected function automaticPublicCodeColumn(): string

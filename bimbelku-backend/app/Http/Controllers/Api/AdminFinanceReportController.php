@@ -288,6 +288,11 @@ class AdminFinanceReportController extends Controller
 
         $tutorCredits = $allAccount('tutor_payable', 'credit');
         $tutorDebits = $allAccount('tutor_payable', 'debit');
+        // Clawback account: the tutor was already paid when a session refund
+        // was decided, so the platform books a receivable instead of pushing
+        // tutor_payable negative.
+        $tutorReceivableDebits = $allAccount('tutor_receivable', 'debit');
+        $tutorReceivableCredits = $allAccount('tutor_receivable', 'credit');
 
         return [
             'payments_received' => $sum(['payment_received'], 'customer_funds', 'credit'),
@@ -295,6 +300,7 @@ class AdminFinanceReportController extends Controller
             'refunds_completed' => $sum(['refund_paid', 'refund_wallet_credited'], 'refunds_payable', 'debit'),
             'payouts_completed' => $sum(['payout_completed'], 'tutor_payable', 'debit'),
             'tutor_payable_balance' => round($tutorCredits - $tutorDebits, 2),
+            'tutor_receivable_balance' => round($tutorReceivableDebits - $tutorReceivableCredits, 2),
         ];
     }
 }

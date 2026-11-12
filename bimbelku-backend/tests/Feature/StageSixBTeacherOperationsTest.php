@@ -139,7 +139,10 @@ class StageSixBTeacherOperationsTest extends TestCase
         $this->getJson('/api/teacher/salary')
             ->assertOk()->assertJsonPath('balances.available', 80000);
 
-        $this->postJson('/api/teacher/payout-requests', ['amount' => 30000], [
+        $this->postJson('/api/teacher/payout-requests', [
+            'amount' => 30000,
+            'verification' => ['otp' => $this->issuePayoutOtp($teacher)],
+        ], [
             'Idempotency-Key' => 'stage6b-payout-request-0001',
         ])->assertStatus(202)
             ->assertJsonPath('data.requested_amount', 30000)
@@ -161,6 +164,7 @@ class StageSixBTeacherOperationsTest extends TestCase
     public function test_payout_stays_unreserved_until_bank_owner_name_can_be_verified(): void
     {
         config(['xendit.enabled' => true, 'xendit.secret_key' => 'test', 'xendit.webhook_token' => 'test']);
+        config(['features.payout_bank_name_stub' => false]);
         [$student, $teacher, $booking] = $this->makeBooking();
         $teacher->update(['address' => 'Yogyakarta']);
         $booking->update([
@@ -175,7 +179,10 @@ class StageSixBTeacherOperationsTest extends TestCase
 
         $this->getJson('/api/teacher/salary')->assertOk()
             ->assertJsonPath('bank_name_validation_available', false);
-        $this->postJson('/api/teacher/payout-requests', ['amount' => 30000], [
+        $this->postJson('/api/teacher/payout-requests', [
+            'amount' => 30000,
+            'verification' => ['otp' => $this->issuePayoutOtp($teacher)],
+        ], [
             'Idempotency-Key' => 'bank-verification-unavailable-1',
         ])->assertStatus(422)->assertJsonPath('message', 'Pencairan belum dapat dikirim: verifikasi nama pemilik rekening langsung dari bank belum tersedia atau belum cocok. Saldo Anda tetap aman.');
         $this->assertDatabaseCount('teacher_payout_requests', 0);
@@ -205,8 +212,9 @@ class StageSixBTeacherOperationsTest extends TestCase
         $booking->update(['status' => 'completed', 'completed_at' => now(), 'gross_amount' => 100000, 'teacher_net_amount' => 80000, 'payout_status' => 'ready']);
         TeacherProfile::create(['user_id' => $teacher->id, 'bank_name' => 'BCA', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name]);
         $service = app(TeacherPayoutService::class);
-        $first = $service->request($teacher, 30000)['payout'];
-        $service->request($teacher, 20000);
+        $otp = $this->issuePayoutOtp($teacher);
+        $first = $service->request($teacher, 30000, null, ['otp' => $otp])['payout'];
+        $service->request($teacher, 20000, null, ['otp' => $otp]);
         $webhooks = app(XenditWebhookService::class);
         $data = ['payout_id' => 'po-first', 'status' => 'FAILED'];
         $webhooks->handle('v3_payout.failed', 'first-failure', $data, $data);
@@ -214,6 +222,23 @@ class StageSixBTeacherOperationsTest extends TestCase
         $this->assertSame(20000.0, (float) $booking->fresh()->teacher_reserved_amount);
         $this->assertSame(60000.0, $service->availableAmount($teacher->id));
         $this->assertSame('failed', $first->fresh()->status);
+    }
+
+    private function issuePayoutOtp(User $teacher): string
+    {
+        $code = '246810';
+        \DB::table('verification_codes')->insert([
+            'user_id' => $teacher->id,
+            'purpose' => \App\Services\OneTimeCodeService::PAYOUT_BANK_CHANGE,
+            'code_hash' => \Illuminate\Support\Facades\Hash::make($code),
+            'attempts' => 0,
+            'expires_at' => now()->addMinutes(10),
+            'sent_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return $code;
     }
 
     private function makeBooking(?Carbon $start = null, ?Carbon $end = null): array

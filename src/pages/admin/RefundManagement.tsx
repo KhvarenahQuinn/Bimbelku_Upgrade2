@@ -58,6 +58,11 @@ type RefundItem = {
   proof_url?: string | null;
   notes?: string | null;
   processor?: { id: number; name: string } | null;
+  source_type?: string | null;
+  booking_id?: number | null;
+  cost_bearer?: "tutor_share" | "platform" | null;
+  decided_by?: string | null;
+  decision_notes?: string | null;
   processed_at?: string | null;
   created_at: string;
   updated_at?: string | null;
@@ -272,6 +277,13 @@ export default function RefundManagement({ embedded = false }: { embedded?: bool
                     <div className="flex flex-wrap items-center gap-2"><p className="font-black text-slate-950">{item.student?.name || "Murid"}</p><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-500">{item.order_id || `Refund #${item.id}`}</span>{tab === "pending" && item.needs_action && <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-1 text-[11px] font-black text-rose-700"><span className="h-2 w-2 rounded-full bg-rose-600" />{item.action_label || "Perlu tindakan"}</span>}</div>
                     <p className="mt-1 truncate text-sm font-semibold text-slate-600">{item.subject || "Pesanan belajar"}</p>
                     <p className="mt-2 text-xs leading-5 text-slate-500">{item.reason}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-black">
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-800">{item.cost_bearer === "platform" ? "Ditanggung platform" : "Potong hak tutor"}</span>
+                      {item.decided_by === "admin" && <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">Diputuskan admin</span>}
+                      {item.source_type === "tutor_exit" && <span className="rounded-full bg-sky-50 px-2 py-1 text-sky-700">Sisa paket · tutor berhenti</span>}
+                      {item.source_type === "lapsed_session" && <span className="rounded-full bg-indigo-50 px-2 py-1 text-indigo-700">Banding sesi tidak terlaksana</span>}
+                    </div>
+                    {item.decision_notes && <p className="mt-1 text-[11px] leading-5 text-slate-400">Catatan keputusan: {item.decision_notes}</p>}
                   </div>
                   <div>
                     <p className="text-xs font-black uppercase tracking-wide text-slate-400">Nominal penuh</p>

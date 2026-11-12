@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\AdminRatingController;
 use App\Http\Controllers\Api\AdminSettingController;
 use App\Http\Controllers\Api\AdminStageFiveController;
 use App\Http\Controllers\Api\AdminTeacherScheduleController;
+use App\Http\Controllers\Api\AdminTutorExitController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CheapClassController;
 use App\Http\Controllers\Api\ClassroomController;
@@ -31,6 +32,7 @@ use App\Http\Controllers\Api\NoteController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PasswordResetController;
+use App\Http\Controllers\Api\PayoutVerificationController;
 use App\Http\Controllers\Api\PaymentPinController;
 use App\Http\Controllers\Api\PrivateClassJoinController;
 use App\Http\Controllers\Api\PrivateParticipantPricingController;
@@ -160,6 +162,8 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
         Route::post('/student/bookings/{booking}/approve', [SessionWorkflowController::class, 'studentApprove']);
         Route::post('/student/bookings/{booking}/dispute', [SessionWorkflowController::class, 'studentDispute']);
         Route::post('/student/bookings/{booking}/teacher-absence', [SessionWorkflowController::class, 'reportTeacherAbsence']);
+        Route::post('/student/bookings/{booking}/appeal', [SessionWorkflowController::class, 'studentSessionAppeal'])
+            ->middleware(['throttle:student-session-appeal', 'idempotency']);
         Route::post('/student/bookings/{booking}/presence-confirm', [LearningSessionController::class, 'studentConfirmPresence'])
             ->middleware('throttle:student-session-presence-confirm');
 
@@ -250,6 +254,10 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
         Route::get('/payout-requests', [TeacherOperationsController::class, 'payoutRequests']);
         Route::post('/payout-requests', [TeacherOperationsController::class, 'requestPayout'])
             ->middleware(['throttle:teacher-payout-request', 'idempotency', 'finance.audit:teacher_payout_request']);
+        Route::post('/payout-verification/otp', [PayoutVerificationController::class, 'sendOtp'])
+            ->middleware('throttle:teacher-payout-otp');
+        Route::put('/payout-verification/method', [PayoutVerificationController::class, 'updateMethod'])
+            ->middleware(['throttle:teacher-payout-otp', 'idempotency']);
         Route::get('/performance', [TeacherOperationsController::class, 'performance']);
         Route::get('/classes', [ClassroomController::class, 'index']);
         Route::get('/package-subjects/{packageSubject}/progress', [ClassroomController::class, 'packageSubjectProgress']);
@@ -364,9 +372,17 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
             ->middleware(['feature:teacher_replacement', 'throttle:admin-teacher-replacement-review', 'idempotency']);
         Route::post('/teacher-replacements/{teacherReplacement}/reject', [TeacherReplacementController::class, 'reject'])
             ->middleware(['feature:teacher_replacement', 'throttle:admin-teacher-replacement-review', 'idempotency']);
-        Route::post('/disputes/{bookingDispute}/resolve', [SessionWorkflowController::class, 'resolveDispute']);
-        Route::post('/session-reports/{sessionReport}/resolve', [SessionWorkflowController::class, 'resolveReport']);
-        Route::post('/bookings/{booking}/completion-review', [SessionWorkflowController::class, 'resolveCompletionReview']);
+        Route::post('/disputes/{bookingDispute}/resolve', [SessionWorkflowController::class, 'resolveDispute'])
+            ->middleware('throttle:admin-session-decision');
+        Route::post('/session-reports/{sessionReport}/resolve', [SessionWorkflowController::class, 'resolveReport'])
+            ->middleware(['throttle:admin-session-decision', 'finance.audit:session_report_resolve']);
+        Route::post('/bookings/{booking}/completion-review', [SessionWorkflowController::class, 'resolveCompletionReview'])
+            ->middleware('throttle:admin-session-decision');
+        Route::get('/bookings/{booking}/attendance-evidence', [SessionWorkflowController::class, 'attendanceEvidenceForAdmin']);
+        Route::post('/packages/{learningPackage}/tutor-exit-preview', [AdminTutorExitController::class, 'preview'])
+            ->middleware(['throttle:admin-tutor-exit', 'finance.audit:tutor_exit_preview']);
+        Route::post('/packages/{learningPackage}/tutor-exit', [AdminTutorExitController::class, 'store'])
+            ->middleware(['throttle:admin-tutor-exit', 'idempotency', 'finance.audit:tutor_exit']);
         Route::post('/refunds/{refund}/complete', [SessionWorkflowController::class, 'completeRefund'])
             ->middleware(['idempotency', 'finance.audit:refund_complete']);
         Route::post('/refunds/{refund}/reconcile', [AdminFinanceOperationsController::class, 'reconcileRefund'])

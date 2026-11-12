@@ -12,6 +12,7 @@ import {
   Loader2,
   RefreshCw,
   RotateCcw,
+  ScrollText,
   ShieldAlert,
   UserRoundX,
   X,
@@ -24,6 +25,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import http, { getApiError } from "@/lib/http";
 
 interface CaseData {
@@ -46,6 +48,8 @@ export default function CaseCenter() {
   const [selected, setSelected] = useState<{ type: CaseType; item: any } | null>(null);
   const [decision, setDecision] = useState("");
   const [notes, setNotes] = useState("");
+  const [refundAmount, setRefundAmount] = useState("");
+  const [costBearer, setCostBearer] = useState("tutor_share");
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
@@ -77,10 +81,26 @@ export default function CaseCenter() {
   }, [data, tab]);
 
   const openCase = (type: CaseType, item: any) => {
+    const isLapsedAppeal = type === "dispute" && item.kind === "lapsed_session";
+    const isEmergency = type === "report" && item.type === "teacher_emergency";
     setSelected({ type, item });
-    setDecision(type === "report" ? "accepted" : type === "dispute" ? "teacher_paid" : type === "completion" ? "approve" : "approve");
+    setDecision(
+      type === "report"
+        ? (isEmergency ? "accepted" : "accepted")
+        : type === "dispute"
+          ? (isLapsedAppeal ? "full_refund" : "teacher_paid")
+          : type === "completion" ? "approve" : "approve",
+    );
+    setRefundAmount("");
+    setCostBearer("tutor_share");
     setNotes("");
   };
+
+  const isLapsedAppeal = selected?.type === "dispute" && selected.item?.kind === "lapsed_session";
+  const isEmergencyReport = selected?.type === "report" && selected.item?.type === "teacher_emergency";
+  const needsRefundAmount = isLapsedAppeal && decision === "partial_refund";
+  const needsCostBearer = (isLapsedAppeal && (decision === "full_refund" || decision === "partial_refund"))
+    || isEmergencyReport;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -99,9 +119,21 @@ export default function CaseCenter() {
     try {
       let response;
       if (type === "report") {
-        response = await http.post(`/admin/session-reports/${item.id}/resolve`, { decision, notes });
+        const emergencyPayload = item.type === "teacher_emergency"
+          ? {
+              refund_scope: decision === "rejected" ? "none" : "session",
+              cost_bearer: costBearer,
+              refund_amount: Number(refundAmount.replace(/[^0-9]/g, "")) || undefined,
+            }
+          : {};
+        response = await http.post(`/admin/session-reports/${item.id}/resolve`, { decision, notes, ...emergencyPayload });
       } else if (type === "dispute") {
-        response = await http.post(`/admin/disputes/${item.id}/resolve`, { resolution: decision, notes });
+        response = await http.post(`/admin/disputes/${item.id}/resolve`, {
+          resolution: decision,
+          notes,
+          refund_amount: needsRefundAmount ? Number(refundAmount.replace(/[^0-9]/g, "")) || 0 : undefined,
+          cost_bearer: needsCostBearer ? costBearer : undefined,
+        });
       } else if (type === "completion") {
         response = await http.post(`/admin/bookings/${item.id}/completion-review`, { action: decision, notes });
       } else {
@@ -159,7 +191,10 @@ export default function CaseCenter() {
             <CaseDetail type={selected.type} item={selected.item} />
             {scope === "history" && <HistoryDecision item={selected.item} />}
             <fieldset disabled={scope === "history"} className={scope === "history" ? "hidden" : "space-y-5"}>
-            <div><Label>Keputusan</Label><Select value={decision} onValueChange={setDecision}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{selected.type === "report" ? <><SelectItem value="accepted">Laporan valid</SelectItem><SelectItem value="rejected">Laporan ditolak</SelectItem></> : selected.type === "dispute" ? <><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem><SelectItem value="student_refund">Refund penuh murid</SelectItem></> : selected.type === "replacement" ? <><SelectItem value="approve">Setujui dan mulai pencarian</SelectItem><SelectItem value="reject">Tolak pengajuan</SelectItem></> : <><SelectItem value="approve">Sahkan sesi</SelectItem><SelectItem value="refund">Refund penuh</SelectItem></>}</SelectContent></Select></div>
+            <div><Label>Keputusan</Label><Select value={decision} onValueChange={setDecision}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{selected.type === "report" ? (isEmergencyReport ? <><SelectItem value="accepted">Laporan valid · refund sesi</SelectItem><SelectItem value="rejected">Laporan ditolak · sesi tetap berjalan</SelectItem></> : <><SelectItem value="accepted">Laporan valid</SelectItem><SelectItem value="rejected">Laporan ditolak</SelectItem></>) : selected.type === "dispute" ? (isLapsedAppeal ? <><SelectItem value="full_refund">Refund penuh nilai sesi</SelectItem><SelectItem value="partial_refund">Refund sebagian</SelectItem><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem></> : <><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem><SelectItem value="student_refund">Refund penuh murid</SelectItem></>) : selected.type === "replacement" ? <><SelectItem value="approve">Setujui dan mulai pencarian</SelectItem><SelectItem value="reject">Tolak pengajuan</SelectItem></> : <><SelectItem value="approve">Sahkan sesi</SelectItem><SelectItem value="refund">Refund penuh</SelectItem></>}</SelectContent></Select></div>
+            {needsRefundAmount && <div><Label>Nominal refund (Rp)</Label><Input inputMode="numeric" value={refundAmount} onChange={(event) => setRefundAmount(event.target.value.replace(/[^0-9]/g, ""))} className="mt-2 h-11 rounded-xl" placeholder="0" /></div>}
+            {needsCostBearer && <div><Label>Penanggung biaya</Label><Select value={costBearer} onValueChange={setCostBearer}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="tutor_share">Potong hak tutor</SelectItem><SelectItem value="platform">Ditanggung platform</SelectItem></SelectContent></Select></div>}
+            {(isLapsedAppeal || isEmergencyReport) && selected && <AttendanceEvidence bookingId={isLapsedAppeal ? selected.item.booking_id ?? selected.item.booking?.id : selected.item.booking_id ?? selected.item.booking?.id} />}
             <div><Label>Catatan keputusan</Label><Textarea required minLength={20} className="mt-2 min-h-32 rounded-xl" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Dasar pemeriksaan dan keputusan admin" /></div>
             <Button disabled={processing} className="h-12 w-full rounded-xl bg-indigo-600 font-black hover:bg-indigo-700">{processing && <Loader2 size={17} className="mr-2 animate-spin" />}Simpan keputusan</Button>
             </fieldset>
@@ -243,6 +278,41 @@ function CaseDetail({ type, item }: { type: CaseType; item: any }) {
       {durationMinutes !== undefined && durationMinutes !== null && booking?.duration_hours && durationMinutes < Number(booking.duration_hours) * 60 * 0.6 && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">⚠ Durasi aktual jauh di bawah jadwal. Periksa alasan kedua pihak sebelum memutuskan.</p>}
     </div>}
     {evidence && <Button type="button" variant="outline" size="sm" className="rounded-xl bg-white" onClick={() => void openProtectedFile(evidence, `bukti-kasus-${item.id}`).catch(() => notify.error("Bukti tidak dapat dibuka."))}><ExternalLink size={14} className="mr-2" />Buka bukti</Button>}
+  </div>;
+}
+
+function AttendanceEvidence({ bookingId }: { bookingId?: number }) {
+  const [data, setData] = useState<any>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!bookingId) return;
+    let active = true;
+    setLoading(true);
+    setError("");
+    http.get(`/admin/bookings/${bookingId}/attendance-evidence`)
+      .then((response) => { if (active) setData(response.data?.data ?? null); })
+      .catch(() => { if (active) setError("Bukti kehadiran gagal dimuat."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [bookingId]);
+
+  if (!bookingId) return null;
+  const time = (value?: string | null) => (value ? new Date(value).toLocaleString("id-ID") : "-");
+
+  return <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 text-sm text-indigo-950">
+    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.14em] text-indigo-600"><ScrollText size={14} /> Bukti kehadiran</p>
+    {loading ? <p className="mt-2 flex items-center gap-2 text-xs font-bold"><Loader2 className="animate-spin" size={14} /> Memuat bukti...</p> : error ? <p className="mt-2 text-xs font-bold text-rose-700">{error}</p> : data ? <>
+      <p className="mt-2 rounded-xl bg-white px-3 py-2 text-xs font-black">Kesimpulan bukti: {String(data.evidence_state || "unclear").replaceAll("_", " ")}</p>
+      <div className="mt-2 grid gap-1 text-xs">
+        <p>Tutor siap: {time(data.tutor_ready_at)}</p>
+        <p>Murid konfirmasi: {time(data.student_confirmed_at)}</p>
+        <p>Catatan belajar terakhir: {time(data.learning_progress_report?.published_at)}</p>
+        <p>Absensi peserta: {data.participant_attendances?.length || 0} baris · absensi sesi: {data.session_attendances?.length || 0} baris</p>
+      </div>
+      <p className="mt-2 text-[11px] font-semibold leading-5 text-indigo-700">{data.decision_hint}</p>
+    </> : null}
   </div>;
 }
 

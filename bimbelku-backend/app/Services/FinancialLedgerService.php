@@ -226,6 +226,73 @@ class FinancialLedgerService
         );
     }
 
+    /**
+     * Reversal journal for a session that did not take place. The original
+     * `booking:{id}:settled` journal is immutable, so the correction is always
+     * a new journal keyed on the refund.
+     */
+    public function recordSessionRefundAdjustment(Booking $booking, Refund $refund, float $grossDelta, float $netDelta): FinancialJournal
+    {
+        $gross = round($grossDelta, 2);
+        $net = round(min(max(0, $netDelta), $gross), 2);
+        $commission = round($gross - $net, 2);
+        $bearer = in_array($refund->cost_bearer, ['tutor_share', 'platform'], true)
+            ? $refund->cost_bearer
+            : 'tutor_share';
+
+        if ($bearer === 'platform') {
+            $entries = [
+                ['account' => 'platform_revenue', 'side' => 'debit', 'amount' => $gross],
+                ['account' => 'customer_funds', 'side' => 'credit', 'amount' => $gross],
+            ];
+            $bearerLabel = 'platform';
+        } else {
+            $paid = (float) $booking->teacher_paid_amount > 0;
+            $entries = [
+                [
+                    'account' => $paid ? 'tutor_receivable' : 'tutor_payable',
+                    'side' => 'debit',
+                    'amount' => $net,
+                ],
+                ['account' => 'platform_revenue', 'side' => 'debit', 'amount' => $commission],
+                ['account' => 'customer_funds', 'side' => 'credit', 'amount' => $gross],
+            ];
+            $bearerLabel = $paid
+                ? 'tutor_share (tutor sudah menerima pencairan)'
+                : 'tutor_share (dipotong dari hak tutor)';
+        }
+
+        $notes = trim((string) $refund->decision_notes);
+
+        return $this->record(
+            "refund:{$refund->id}:adjust:{$booking->id}",
+            'refund_session_adjusted',
+            Booking::class,
+            $booking->id,
+            "Pembalik nilai sesi {$booking->id} karena refund {$refund->refund_code}; penanggung: {$bearerLabel}"
+                .($notes !== '' ? "; alasan admin: {$notes}" : ''),
+            $entries
+        );
+    }
+
+    /**
+     * Net tutor share earned on a booking after deducting every refund that is
+     * booked against the tutor. Used by settlement so the stored amount always
+     * matches the journals that were already posted.
+     */
+    public function tutorRefundedNet(Booking $booking): float
+    {
+        $refunds = Refund::query()
+            ->where('booking_id', $booking->id)
+            ->where('cost_bearer', 'tutor_share')
+            ->whereIn('status', ['pending', 'paid'])
+            ->get();
+
+        $rate = (100 - (float) $booking->commission_percent) / 100;
+
+        return round((float) $refunds->sum(fn (Refund $refund) => (float) $refund->amount * $rate), 2);
+    }
+
     public function record(
         string $eventKey,
         string $eventType,
