@@ -94,7 +94,7 @@ export default function ChangePasswordDialog({
           {hasPassword ? "Ubah Kata Sandi" : "Buat Kata Sandi"}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md rounded-3xl border-0 p-7">
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md rounded-3xl border-0 p-5 sm:p-7">
         <DialogHeader>
           <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-600">
             <ShieldCheck size={23} />
@@ -143,7 +143,7 @@ export default function ChangePasswordDialog({
               className="h-12 rounded-xl"
             />
           </div>
-          <DialogFooter className="gap-2 pt-2">
+          <DialogFooter className="gap-2 pt-2 flex-col-reverse sm:flex-row [&>button]:w-full sm:[&>button]:w-auto">
             <Button type="button" variant="outline" onClick={() => changeOpen(false)} className="h-11 rounded-xl">
               Batal
             </Button>

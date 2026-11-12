@@ -7,7 +7,7 @@ import http, { getApiError } from "@/lib/http";
 import { useNavigate } from "react-router-dom";
 
 type SalaryData = {
-  balances: { held: number; available: number; requested: number; paid: number };
+  balances: { held: number; available: number; requested: number; paid: number; overpaid?: number };
   totals: { gross: number; commission: number; net: number };
   ready_sessions: number;
   ready_bookings: Array<{ id: number; subject: string; completed_at: string; gross_amount: number; commission_amount: number; net_amount: number; earned_amount?: number }>;
@@ -53,10 +53,11 @@ export default function TeacherSalary() {
         <article className="rounded-[1.7rem] border border-slate-100 bg-white p-5 shadow-sm sm:rounded-[2rem] sm:p-6">
           <div className="flex items-start gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-emerald-50 text-emerald-700"><Landmark size={19} /></span><div className="min-w-0 flex-1"><p className="font-black text-slate-900">Tarik saldo</p><p className="mt-1 text-sm text-slate-600">Tentukan nominal dulu. Rekening tujuan diisi atau diperiksa pada langkah berikutnya.</p></div></div>
           {heldByBankChange && <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs leading-5 text-amber-800">Pencairan ditahan setelah perubahan rekening sampai {dateTime(data.bank.payout_hold_until)} WIB.</div>}
+          {(data.balances.overpaid || 0) > 0 && <div className="mt-4 rounded-xl border border-rose-100 bg-rose-50 p-3 text-xs leading-5 text-rose-800">Ada kelebihan bayar {rupiah(data.balances.overpaid)} akibat sesi yang dikembalikan setelah pencairan. Saldo tidak dapat ditarik sampai kelebihan ini diselesaikan admin.</div>}
           <label className="mt-5 block"><span className="text-xs font-black uppercase tracking-wide text-slate-500">Nominal pencairan</span><div className="mt-2 flex h-12 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-100"><span className="font-black text-slate-500">Rp</span><input inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^0-9]/g, ""))} className="h-full min-w-0 flex-1 bg-transparent px-2 text-lg font-black outline-none" placeholder="10.000" /><button type="button" onClick={() => setAmount(String(Math.floor(data.balances.available)))} className="rounded-lg bg-white px-3 py-1.5 text-xs font-black text-emerald-700 shadow-sm">Maksimal</button></div></label>
           <div className="mt-2 flex items-center justify-between text-xs"><span className={invalidAmount && amount ? "text-rose-600" : "text-slate-400"}>Minimum {rupiah(MINIMUM)}</span><span className="font-bold text-slate-500">Tersedia {rupiah(data.balances.available)}</span></div>
           {numericAmount > 0 && <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm"><div className="flex justify-between"><span>Pajak ({data.withholding_tax_percent || 0}%)</span><span>-{rupiah(taxAmount)}</span></div><div className="mt-2 flex justify-between font-black"><span>Dikirim ke rekening</span><span>{rupiah(numericAmount - taxAmount)}</span></div></div>}
-          <Button onClick={continuePayout} disabled={invalidAmount || !amount} className="mt-5 h-11 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700"><Send className="mr-2" size={16} />Lanjut ke rekening tujuan</Button>
+          <Button onClick={continuePayout} disabled={invalidAmount || !amount} className="mt-5 h-11 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700"><Send className="mr-2" size={16} />{data.bank.is_complete ? "Lanjut ke rekening tujuan" : "Lengkapi rekening saat pencairan"}</Button>
         </article>
         <article className="rounded-[1.7rem] border border-slate-100 bg-white p-5 shadow-sm sm:rounded-[2rem] sm:p-6"><p className="font-black text-slate-900">Perhitungan pendapatan</p><Row label="Nilai seluruh sesi" value={data.totals.gross} /><Row label="Komisi admin" value={data.totals.commission} negative /><Row label="Hak bersih tutor" value={data.totals.net} strong /></article>
       </section>

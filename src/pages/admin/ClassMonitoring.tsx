@@ -205,8 +205,8 @@ export default function ClassMonitoring() {
                 {rows.map((item) => <MobileClassCard key={item.id} item={item} />)}
               </div>
               <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[900px] text-left">
-                  <thead className="border-b border-slate-100 bg-slate-50/80"><tr><th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Kelas</th><th className="px-5 py-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Tutor</th><th className="px-5 py-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Jadwal</th><th className="px-5 py-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Peserta</th><th className="px-5 py-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Status</th><th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-wider text-slate-400">Aksi</th></tr></thead>
+                <table className="w-full min-w-[980px] text-left">
+                  <thead className="border-b border-slate-100 bg-slate-50/80"><tr><th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Kelas</th><th className="px-5 py-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Sesi</th><th className="px-5 py-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Tutor</th><th className="px-5 py-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Jadwal</th><th className="px-5 py-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Peserta</th><th className="px-5 py-4 text-[11px] font-black uppercase tracking-wider text-slate-400">Status</th><th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-wider text-slate-400">Aksi</th></tr></thead>
                   <tbody className="divide-y divide-slate-100">{rows.map((item) => <DesktopClassRow key={item.id} item={item} />)}</tbody>
                 </table>
               </div>
@@ -234,7 +234,7 @@ function MobileClassCard({ item }: { item: Row }) {
   return (
     <article className="p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap gap-1.5"><Badge>{item.type}</Badge><Badge>{item.method === "online" ? "Online" : "Offline"}</Badge>{item.needs_admin_attention && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-800">Perlu tindakan</span>}</div><h3 className="mt-3 break-words text-base font-black text-slate-900">{item.title}</h3><p className="mt-1 text-xs font-semibold text-slate-500">{dateTime(item.start_at)}</p></div><div className="flex shrink-0 gap-2"><Link to={`/admin/classes/${item.id}`} aria-label={`Buka ${item.title}`} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"><ArrowRight size={18} /></Link>{item.action && <Link to={item.action.url} className="inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs font-black text-amber-700 hover:bg-amber-100" title={item.action.label}>{item.action.label}</Link>}</div></div>
-      <div className="mt-4 grid grid-cols-2 gap-2"><MiniInfo label="Tutor" value={item.teacher_name} /><MiniInfo label="Peserta" value={`${item.student_count} murid`} /></div>
+      <div className="mt-4 grid grid-cols-2 gap-2"><MiniInfo label="Sesi" value={`#${item.id}`} /><MiniInfo label="Tutor" value={item.teacher_name} /><MiniInfo label="Peserta" value={`${item.student_count} murid`} /></div>
       <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5"><span className="text-[11px] font-black uppercase tracking-wider text-slate-400">Status</span><span className={`text-right text-xs font-black ${item.needs_admin_attention ? "text-amber-700" : "text-indigo-700"}`}>{item.status_label}</span></div>
       {item.attention_reason && <p className="mt-2 break-words rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold leading-5 text-rose-700">{item.attention_reason}</p>}
     </article>
@@ -245,6 +245,7 @@ function DesktopClassRow({ item }: { item: Row }) {
   return (
     <tr className="transition hover:bg-slate-50/70">
       <td className="px-6 py-5"><div className="max-w-md font-black text-slate-900">{item.title}</div><div className="mt-2 flex flex-wrap gap-1.5"><Badge>{item.type}</Badge><Badge>{item.method === "online" ? "Online" : "Offline"}</Badge>{item.needs_admin_attention && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">Perlu tindakan</span>}</div></td>
+      <td className="px-5 py-5"><span className="font-mono text-xs font-black text-slate-600">Sesi #{item.id}</span></td>
       <td className="px-5 py-5"><div className="flex items-center gap-2"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-black text-indigo-700">{item.teacher_name.charAt(0).toUpperCase()}</span><span className="text-sm font-semibold text-slate-600">{item.teacher_name}</span></div></td>
       <td className="px-5 py-5 text-sm font-semibold text-slate-600">{dateTime(item.start_at)}</td>
       <td className="px-5 py-5"><span className="inline-flex items-center gap-2 text-sm font-bold text-slate-600"><User size={15} className="text-slate-400" />{item.student_count}</span></td>

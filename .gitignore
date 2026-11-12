@@ -34,3 +34,5 @@ dist-ssr
 # Local database dumps
 bimbelku-backend/bimbelku_db
 *.sql
+
+.kilo/

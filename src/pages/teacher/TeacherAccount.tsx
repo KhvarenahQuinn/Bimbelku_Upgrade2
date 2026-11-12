@@ -1,18 +1,20 @@
 import { notify } from "@/lib/notify";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell, ChevronRight, CircleHelp, FileText, Loader2, ShieldCheck, UserRound } from "lucide-react";
+import { Bell, ChevronRight, CircleHelp, FileText, Landmark, Loader2, ShieldCheck, UserRound } from "lucide-react";
 import TeacherLayout from "@/components/TeacherLayout";
 import LogoutButton from "@/components/LogoutButton";
 import { getCached } from "@/lib/http";
 
 type ProfileData = {
   user?: { name?: string; email?: string; status?: string };
-  profile?: { photo_url?: string | null; expertise?: string; is_accepting_requests?: boolean };
+  profile?: { photo_url?: string | null; expertise?: string; is_accepting_requests?: boolean; bank_name?: string | null; account_number?: string | null; payout_hold_until?: string | null };
 };
 
 const links = [
-  { to: "/guru/profil", label: "Profil dan keamanan", detail: "Identitas, kompetensi, dokumen, dan data akun", icon: UserRound, color: "bg-indigo-50 text-indigo-600" },
+  { to: "/guru/profil", label: "Data diri", detail: "Identitas, kompetensi, dan dokumen pendukung", icon: UserRound, color: "bg-indigo-50 text-indigo-600" },
+  { to: "/guru/keamanan", label: "Keamanan akun", detail: "Kata sandi dan akses masuk akun", icon: ShieldCheck, color: "bg-emerald-50 text-emerald-600" },
+  { to: "/guru/pencairan/rekening", label: "Rekening pencairan", detail: "Nomor rekening tujuan transfer pendapatan", icon: Landmark, color: "bg-sky-50 text-sky-600" },
   { to: "/guru/notifikasi", label: "Notifikasi", detail: "Semua pemberitahuan pekerjaan tutor", icon: Bell, color: "bg-rose-50 text-rose-600" },
   { to: "/guru/bantuan", label: "Pusat bantuan", detail: "Panduan dan bantuan penggunaan", icon: CircleHelp, color: "bg-slate-100 text-slate-600" },
   { to: "/privacy", label: "Privasi data", detail: "Cara Bimbelku menjaga informasi Anda", icon: FileText, color: "bg-orange-50 text-orange-600" },
@@ -57,13 +59,40 @@ export default function TeacherAccount() {
           )}
         </section>
 
+        {!loading && (
+          <section className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-sky-50 text-sky-600"><Landmark size={19} /></span>
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-slate-900">Rekening pencairan</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {data?.profile?.bank_name && data?.profile?.account_number
+                      ? `${data.profile.bank_name} · ••••${String(data.profile.account_number).replace(/\D+/g, "").slice(-4)}`
+                      : "Rekening belum lengkap. Rekening disimpan saat pertama kali mencairkan dana."}
+                  </p>
+                  {data?.profile?.payout_hold_until && new Date(data.profile.payout_hold_until).getTime() > Date.now() && (
+                    <p className="mt-1 text-xs font-bold text-amber-700">Pencairan ditahan sampai {new Date(data.profile.payout_hold_until).toLocaleString("id-ID")}.</p>
+                  )}
+                </div>
+              </div>
+              <Link to="/guru/pencairan/rekening" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-black text-white transition hover:bg-slate-800">
+                {data?.profile?.bank_name && data?.profile?.account_number ? "Periksa saat pencairan" : "Lengkapi rekening"}
+                <ChevronRight size={16} />
+              </Link>
+            </div>
+          </section>
+        )}
+
         <section>
           <div className="mb-4"><h2 className="text-xl font-black text-slate-950">Pengaturan akun</h2><p className="mt-1 text-sm text-slate-600">Jadwal, kelas, pendapatan, dan performa tetap tersedia di navigasi utama agar tidak berulang di halaman ini.</p></div>
           <div className="grid gap-3 sm:grid-cols-2">
             {links.map(({ to, label, detail, icon: Icon, color }) => <Link key={to} to={to} className="group flex min-w-0 items-center gap-3 rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm transition hover-rise-half hover:border-orange-100 hover-shadow-lg sm:p-5"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${color}`}><Icon size={19} /></span><span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-900">{label}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{detail}</span></span><ChevronRight size={18} className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-orange-500" /></Link>)}
+            {/* Disamakan dengan tata letak murid: tombol keluar menjadi bagian grid,
+                bukan kotak terpisah yang tampak menggantung di sisi kanan. */}
+            <LogoutButton accent="teacher" className="sm:col-span-2" />
           </div>
         </section>
-        <div className="max-w-sm"><LogoutButton accent="teacher" /></div>
       </div>
     </TeacherLayout>
   );
