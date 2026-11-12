@@ -309,6 +309,27 @@ class StageFourAccountFlowTest extends TestCase
         );
     }
 
+    public function test_rejected_and_pending_tutors_are_excluded_from_the_user_listing(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        $activeTeacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'name' => 'Tutor Aktif']);
+        $rejectedTeacher = User::factory()->create(['role' => 'teacher', 'status' => 'rejected', 'name' => 'Tutor Ditolak']);
+        $pendingTeacher = User::factory()->create(['role' => 'teacher', 'status' => 'pending', 'name' => 'Tutor Menunggu']);
+
+        TeacherProfile::create(['user_id' => $activeTeacher->id, 'is_accepting_requests' => true]);
+        TeacherProfile::create(['user_id' => $rejectedTeacher->id, 'is_accepting_requests' => false]);
+        TeacherProfile::create(['user_id' => $pendingTeacher->id, 'is_accepting_requests' => false]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/admin/users?role=teacher')->assertOk();
+        $ids = collect($response->json('data'))->pluck('id')->all();
+
+        $this->assertContains($activeTeacher->id, $ids);
+        $this->assertNotContains($rejectedTeacher->id, $ids, 'Tutor ditolak tidak boleh muncul di daftar pengguna aktif.');
+        $this->assertNotContains($pendingTeacher->id, $ids, 'Tutor menunggu verifikasi tidak boleh muncul di daftar pengguna aktif.');
+    }
+
     public function test_student_can_save_a_personal_cover_without_changing_password(): void
     {
         Storage::fake('public');

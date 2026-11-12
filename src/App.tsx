@@ -105,6 +105,7 @@ const ManageSchedule = routeLazy(exactPath("/guru/jadwal"), () => import("./page
 const BookingGuru = routeLazy(exactPath("/guru/permintaan"), () => import("./pages/teacher/BookingGuru"));
 const TeacherMessages = routeLazy(exactPath("/guru/pesan"), () => import("./pages/teacher/TeacherMessages"));
 const TeacherAccount = routeLazy(exactPath("/guru/saya"), () => import("./pages/teacher/TeacherAccount"));
+const TeacherSettings = routeLazy(exactPath("/guru/keamanan"), () => import("./pages/teacher/TeacherSettings"));
 const TeacherPerformance = routeLazy(exactPath("/guru/performa"), () => import("./pages/teacher/TeacherPerformance"));
 const TeacherNotifications = routeLazy(exactPath("/guru/notifikasi"), () => import("./pages/teacher/TeacherNotifications"));
 const TeacherLearningProgressDetail = routeLazy(pathPattern(/^\/guru\/progress\/package-subject\/[^/]+$/), () => import("./pages/teacher/TeacherLearningProgressDetail"));
@@ -333,6 +334,7 @@ export const AppContent = () => (
               <Route path="/guru/gaji" element={<Navigate to="/guru/dompet" replace />} />
               <Route path="/guru/pesan" element={<TeacherMessages />} />
               <Route path="/guru/saya" element={<TeacherAccount />} />
+              <Route path="/guru/keamanan" element={<TeacherSettings />} />
               <Route path="/guru/performa" element={<TeacherPerformance />} />
               <Route path="/guru/notifikasi" element={<TeacherNotifications />} />
               <Route path="/guru/kelas-murah" element={<LegacyTeacherCheapClassRedirect />} />

@@ -14,7 +14,9 @@ use App\Models\TeacherOffer;
 use App\Models\TeacherPayoutRequest;
 use App\Models\TeacherProfile;
 use App\Services\TeacherPayoutService;
+use App\Support\XenditPayoutChannelCatalog;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use RuntimeException;
 
 class TeacherOperationsController extends Controller
@@ -192,14 +194,40 @@ class TeacherOperationsController extends Controller
     {
         $validated = $request->validate([
             'amount' => ['nullable', 'numeric', 'min:'.TeacherPayoutService::MINIMUM_AMOUNT],
+            // Rekening baru hanya dipakai bila dikirim; tanpa bank_details
+            // transaksi memakai rekening tersimpan.
+            'bank_details' => ['nullable', 'array'],
+            'bank_details.payout_channel_code' => ['nullable', 'string', Rule::in(XenditPayoutChannelCatalog::codes())],
+            'bank_details.bank_name' => ['nullable', 'string', 'max:100'],
+            'bank_details.account_number' => ['nullable', 'string', 'min:8', 'max:20', 'regex:/^[0-9]+$/'],
+            'bank_details.account_name' => ['nullable', 'string', 'max:150'],
+            'verification' => ['nullable', 'array'],
+            'verification.otp' => ['nullable', 'string', 'size:6'],
+            'verification.password' => ['nullable', 'string', 'max:200'],
+            'current_password' => ['nullable', 'string', 'max:200'],
         ]);
+        if (isset($validated['current_password']) && ! isset($validated['verification']['password'])) {
+            $validated['verification'] = array_merge($validated['verification'] ?? [], [
+                'password' => $validated['current_password'],
+            ]);
+        }
         $teacher = $request->user();
+        $available = $payouts->availableAmount((int) $teacher->id);
+        if ($available <= 0) {
+            return response()->json([
+                'message' => 'Saldo tidak tersedia untuk dicairkan. Ada sesi yang dikembalikan setelah pencairan sebelumnya.',
+            ], 422);
+        }
         $amount = isset($validated['amount'])
             ? round((float) $validated['amount'], 2)
-            : $payouts->availableAmount((int) $teacher->id);
-
+            : $available;
         try {
-            $result = $payouts->request($teacher, $amount);
+            $result = $payouts->request(
+                $teacher,
+                $amount,
+                $validated['bank_details'] ?? null,
+                $validated['verification'] ?? null,
+            );
         } catch (RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
         }

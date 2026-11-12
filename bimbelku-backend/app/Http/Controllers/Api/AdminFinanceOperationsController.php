@@ -203,6 +203,15 @@ class AdminFinanceOperationsController extends Controller
                 'processed_at' => $refund->processed_at,
                 'created_at' => $refund->created_at,
                 'updated_at' => $refund->updated_at,
+                // Why the money is coming back and who carries the cost. The
+                // admin only executes what was decided in the case center.
+                'source_type' => $refund->source_type,
+                'booking_id' => $refund->booking_id,
+                'cost_bearer' => $refund->cost_bearer ?? 'tutor_share',
+                'decided_by' => $refund->decided_by,
+                'decision_notes' => $refund->decision_notes,
+                'wallet_refund_amount' => (float) ($refund->wallet_refund_amount ?? 0),
+                'external_refund_amount' => (float) ($refund->external_refund_amount ?? 0),
             ];
         };
 

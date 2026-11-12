@@ -285,7 +285,13 @@ class AdminController extends Controller
 
         $query = User::query()
             ->where('role', $role)
-            ->where('status', '!=', 'pending')
+            // Tutor yang ditolak bukan akun aktif: riwayatnya ada di menu History Tutor
+            // dan tidak boleh muncul di daftar ini dengan tombol Aktifkan/Blokir.
+            ->when(
+                $role === 'teacher',
+                fn ($builder) => $builder->whereNotIn('status', ['pending', 'rejected']),
+                fn ($builder) => $builder->where('status', '!=', 'pending'),
+            )
             ->with(['teacherProfile', 'subjects'])
             ->when($subjectFilter !== '' && $role === 'teacher', fn ($builder) => $builder->whereHas('subjects', fn ($subjects) => $subjects->where('name', $subjectFilter)->where('is_active', true)
             )

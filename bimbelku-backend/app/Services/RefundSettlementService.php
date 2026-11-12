@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Events\AutoWalletRefundProcessed;
+use App\Models\Booking;
 use App\Models\CustomerWalletTransaction;
 use App\Models\MatchingOperationLog;
 use App\Models\Notification;
@@ -355,6 +356,7 @@ class RefundSettlementService
                             'booking_id' => null,
                             'status' => 'refunded',
                         ]);
+                    $this->markBookingRefunded($locked->booking);
                 }
             } else {
                 $this->partialPackageRefunds->completeTeacherReplacementRefund($locked->fresh());
@@ -362,16 +364,12 @@ class RefundSettlementService
 
             $remaining = $locked->booking?->refunds()->where('status', 'pending')->count() ?? 0;
             if ($locked->booking && $remaining === 0) {
-                $settled = ['approved', 'no_show_confirmed', 'refunded', 'cancelled', 'teacher_rejected'];
-                $unsettled = $locked->booking->participants()->whereNotIn('status', $settled)->exists();
-                $earning = $locked->booking->participants()->whereIn('status', ['approved', 'no_show_confirmed'])->count();
-                $gross = $earning * (float) $locked->booking->total_amount;
-                $net = round($gross * (100 - (float) $locked->booking->commission_percent) / 100);
+                $bookingFigure = $this->recomputeBookingFigures($locked->booking->fresh());
                 $locked->booking->update([
-                    'status' => $unsettled ? 'partially_refunded' : ($earning > 0 ? 'completed' : 'refunded'),
-                    'gross_amount' => $gross,
-                    'teacher_net_amount' => $net,
-                    'payout_status' => $unsettled ? 'locked' : ($earning > 0 ? 'ready' : 'cancelled'),
+                    'status' => $bookingFigure['status'],
+                    'gross_amount' => $bookingFigure['gross'],
+                    'teacher_net_amount' => $bookingFigure['net'],
+                    'payout_status' => $bookingFigure['payout_status'],
                 ]);
             }
 
@@ -420,6 +418,98 @@ class RefundSettlementService
         }, 3);
 
         return ['refund' => $refund->fresh(), 'wallet_transaction' => $walletTransaction, 'breakdown' => $breakdown ?: $refund->tenderBreakdown()];
+    }
+
+    /**
+     * A session-level refund never touches the order: only the refunded session
+     * leaves the package and the remaining sessions keep their schedule. The
+     * figures are recomputed separately because a refund can target a session
+     * that was never delivered (gross already zero).
+     */
+    private function markBookingRefunded(Booking $booking): void
+    {
+        PackageSession::query()
+            ->where('booking_id', $booking->id)
+            ->update(['booking_id' => null, 'status' => 'refunded']);
+    }
+
+    /**
+     * Total nilai sesi yang sudah diputuskan untuk dikembalikan ke murid.
+     * Hanya refund dengan penanggung tutor yang mengurangi hak tutor.
+     */
+    public function tutorShareRefunded(Booking $booking): float
+    {
+        return round((float) Refund::query()
+            ->where('booking_id', $booking->id)
+            ->where('cost_bearer', 'tutor_share')
+            ->whereIn('status', ['pending', 'paid'])
+            ->sum('amount'), 2);
+    }
+
+    /**
+     * Recompute the booking figures after a refund changed its economics.
+     * The tutor share is reduced by the value of every tutor-borne refund so
+     * the stored amount always matches the adjustment journals that exist.
+     *
+     * @return array{gross:float,net:float,status:string,payout_status:string,unsettled:bool}
+     */
+    public function recomputeBookingFigures(Booking $booking): array
+    {
+        $settled = ['approved', 'no_show_confirmed', 'refunded', 'cancelled', 'teacher_rejected'];
+        $unsettled = $booking->participants()->whereNotIn('status', $settled)->exists();
+        $earning = $booking->participants()->whereIn('status', ['approved', 'no_show_confirmed'])->count();
+        $baseGross = $earning * (float) $booking->total_amount;
+        $gross = round(max(0, $baseGross - $this->tutorShareRefunded($booking)), 2);
+        $net = round(max(0, $gross * (100 - (float) $booking->commission_percent) / 100), 2);
+        $pending = $booking->refunds()->where('status', 'pending')->count() > 0;
+
+        return [
+            'gross' => $gross,
+            'net' => $net,
+            'status' => $unsettled ? 'partially_refunded' : ($earning > 0 ? 'completed' : 'refunded'),
+            'payout_status' => $pending ? 'locked' : ($gross <= 0 || $net <= 0 ? 'cancelled' : 'ready'),
+            'unsettled' => $unsettled,
+        ];
+    }
+
+    /**
+     * A session was refunded. When the refund is already paid (automatic wallet
+     * refunds) the booking figures are corrected right away; a pending refund
+     * keeps the payout locked until it settles.
+     */
+    public function releaseBookingForSessionRefund(Booking $booking, string $reason): void
+    {
+        $fresh = $booking->fresh();
+        if (! $fresh) {
+            return;
+        }
+
+        $this->scheduleRelease->releaseBooking($fresh, $reason);
+        if ($fresh->packageSession()->exists()) {
+            PackageSession::query()
+                ->where('booking_id', $fresh->id)
+                ->update(['booking_id' => null, 'status' => 'refunded']);
+        }
+
+        $hasPaidRefund = $fresh->refunds()->where('status', 'paid')->exists();
+        $hasPendingRefund = $fresh->refunds()->where('status', 'pending')->exists();
+
+        if ($hasPaidRefund && ! $hasPendingRefund) {
+            $figure = $this->recomputeBookingFigures($fresh);
+            $fresh->update([
+                'gross_amount' => $figure['gross'],
+                'teacher_net_amount' => $figure['net'],
+                'payout_status' => $figure['payout_status'],
+                'status' => $fresh->status === 'refunded' ? 'refunded' : $figure['status'],
+            ]);
+
+            return;
+        }
+
+        $fresh->update([
+            'status' => 'refund_pending',
+            'payout_status' => 'locked',
+        ]);
     }
 
     private function restorePromotionClaim(Order $order, string $reason): void

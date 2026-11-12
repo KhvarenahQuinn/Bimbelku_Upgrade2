@@ -106,6 +106,23 @@ class StudentController extends Controller
         ]);
     }
 
+    private function canAppealLapsedSession(Booking $booking, int $studentId): bool
+    {
+        if (! $booking->participants()->where('student_id', $studentId)->whereHas('order', fn ($q) => $q->where('status', 'paid'))->exists()) {
+            return false;
+        }
+        if ($booking->disputes()->where('student_id', $studentId)->exists() || $booking->reports()->exists()) {
+            return false;
+        }
+        if ($booking->end_at === null || $booking->end_at->copy()->addHours(72)->isPast()) {
+            return false;
+        }
+        $graceMinutes = max(30, (int) (\App\Models\Setting::where('key', 'session_checkin_after_minutes')->value('value') ?? 30));
+
+        return $booking->status === 'admin_review_required'
+            || ($booking->status === 'confirmed' && $booking->end_at->copy()->addMinutes($graceMinutes)->isPast());
+    }
+
     public function getMyClasses(Request $request)
     {
         $studentId = $request->user()->id;
@@ -152,7 +169,7 @@ class StudentController extends Controller
             ->pluck('booking_id')
             ->flip();
 
-        $data = $bookings->map(function (Booking $booking) use ($ratedBookingIds) {
+        $data = $bookings->map(function (Booking $booking) use ($ratedBookingIds, $studentId) {
             $participant = $booking->participants->first();
             $isJoinedGuest = ! $participant;
             $learningRequest = $participant?->bookingRequest ?? $booking->bookingRequest;
@@ -237,6 +254,7 @@ class StudentController extends Controller
                     && $hasSessionAccess
                     && ! $booking->student_confirmed_at
                     && now()->gte($booking->start_at->copy()->addMinutes(15)),
+                'can_appeal_lapsed_session' => $this->canAppealLapsedSession($booking, (int) $studentId),
                 'workspace' => [
                     'can_open' => $hasSessionAccess,
                     'latest_message' => ! $isJoinedGuest && $booking->latestClassroomMessage ? [

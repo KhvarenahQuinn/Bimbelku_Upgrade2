@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use DomainException;
 use Illuminate\Database\Eloquent\Model;
 
 class Booking extends Model
@@ -143,5 +144,40 @@ class Booking extends Model
     public function replacementBookings()
     {
         return $this->hasMany(self::class, 'replacement_of_booking_id');
+    }
+
+    /**
+     * Nilai sesi yang masih boleh dikembalikan ke murid. Refund yang sudah
+     * diputuskan (pending/paid) mengurangi gross supaya satu sesi tidak bisa
+     * dikembalikan dua kali oleh jalur yang berbeda.
+     */
+    public function refundableRemaining(): float
+    {
+        $gross = round((float) $this->gross_amount, 2);
+        if ($gross <= 0) {
+            return 0.0;
+        }
+
+        $refunded = round((float) Refund::query()
+            ->where('booking_id', $this->id)
+            ->where('cost_bearer', 'tutor_share')
+            ->whereIn('status', ['pending', 'paid'])
+            ->sum('amount'), 2);
+
+        return round(max(0, $gross - $refunded), 2);
+    }
+
+    public function assertRefundable(float $amount): void
+    {
+        $amount = round($amount, 2);
+        if ($amount <= 0) {
+            throw new DomainException('Nominal refund sesi harus lebih dari nol.');
+        }
+        $remaining = $this->refundableRemaining();
+        if ($amount > $remaining + 0.009) {
+            throw new DomainException(round((float) $this->gross_amount, 2) > 0 && $remaining <= 0.009
+                ? 'Sesi ini sudah dikembalikan seluruhnya.'
+                : 'Nominal refund melebihi nilai sesi yang masih dapat dikembalikan.');
+        }
     }
 }

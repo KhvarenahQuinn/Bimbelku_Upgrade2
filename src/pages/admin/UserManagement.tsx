@@ -372,8 +372,8 @@ export default function UserManagement() {
         <div className="divide-y divide-gray-100 md:hidden">
           {isLoading ? <div className="p-10 text-center text-sm text-gray-500"><Loader2 className="mr-2 inline animate-spin" />Memuat data...</div> : filteredUsers.length > 0 ? filteredUsers.map((u) => (
             <article key={u.id} className={`p-4 ${u.status === "banned" ? "bg-red-50/50" : "bg-white"}`}>
-              <div className="flex min-w-0 items-start gap-3"><div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-bold ${u.role === "teacher" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>{u.name.charAt(0).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="break-words font-black text-gray-900">{u.name}</p><p className="mt-1 break-all text-xs text-gray-500">{u.email}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${u.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{u.status === "active" ? "Aktif" : "Diblokir"}</span></div>
-              <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => openModal(u)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gray-100 px-3 text-xs font-black text-gray-700"><Eye size={14} />Detail</button><button type="button" onClick={() => toggleStatus(u)} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-black ${u.status === "active" ? "border-red-200 text-red-600" : "border-green-200 text-green-700"}`}>{u.status === "active" ? <><Ban size={14} />Blokir</> : <><CheckCircle size={14} />Aktifkan</>}</button></div>
+              <div className="flex min-w-0 items-start gap-3"><div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-bold ${u.role === "teacher" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>{u.name.charAt(0).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="break-words font-black text-gray-900">{u.name}</p><p className="mt-1 break-all text-xs text-gray-500">{u.email}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${u.status === "active" ? "bg-green-100 text-green-700" : u.status === "rejected" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-700"}`}>{u.status === "active" ? "Aktif" : u.status === "rejected" ? "Ditolak" : "Diblokir"}</span></div>
+              <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => openModal(u)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gray-100 px-3 text-xs font-black text-gray-700"><Eye size={14} />Detail</button>{u.status === "rejected" ? <button type="button" disabled className="inline-flex min-h-11 cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 text-xs font-black text-gray-400" title="Tutor ditolak hanya dapat diproses ulang lewat menu Verifikasi Tutor."><Ban size={14} />Tidak aktif</button> : <button type="button" onClick={() => toggleStatus(u)} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-black ${u.status === "active" ? "border-red-200 text-red-600" : "border-green-200 text-green-700"}`}>{u.status === "active" ? <><Ban size={14} />Blokir</> : <><CheckCircle size={14} />Aktifkan</>}</button>}</div>
             </article>
           )) : <div className="p-10 text-center text-sm text-gray-500">Data tidak ditemukan.</div>}
         </div>
@@ -407,9 +407,9 @@ export default function UserManagement() {
                     <td className="px-6 py-4 text-sm text-gray-600">{u.email}</td>
                     {activeTab === "teacher" && <td className="px-6 py-4 text-sm font-semibold text-gray-700"><span>{u.subject_name || "Belum diisi"}</span>{u.subject_data_warning && <span className="mt-1 block rounded-lg bg-amber-100 px-2 py-1 text-[10px] font-black leading-4 text-amber-800">{u.subject_data_warning}</span>}</td>}
                     <td className="px-6 py-4">
-                      <span className={`flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded-full w-fit ${u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'active' ? 'bg-green-600' : 'bg-red-600'}`}></span>
-                        {u.status === 'active' ? 'Aktif' : 'Blokir'}
+                      <span className={`flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded-full w-fit ${u.status === 'active' ? 'bg-green-100 text-green-700' : u.status === 'rejected' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-700'}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'active' ? 'bg-green-600' : u.status === 'rejected' ? 'bg-amber-600' : 'bg-red-600'}`}></span>
+                        {u.status === 'active' ? 'Aktif' : u.status === 'rejected' ? 'Ditolak' : 'Blokir'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
@@ -421,7 +421,16 @@ export default function UserManagement() {
                       </button>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {u.status === 'active' ? (
+                      {u.status === 'rejected' ? (
+                        <button
+                          type="button"
+                          disabled
+                          title="Tutor ditolak hanya dapat diproses ulang lewat menu Verifikasi Tutor."
+                          className="inline-flex cursor-not-allowed items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-bold text-gray-400"
+                        >
+                          <Ban size={14} /> Tidak aktif
+                        </button>
+                      ) : u.status === 'active' ? (
                         <button 
                           onClick={() => toggleStatus(u)}
                           className="inline-flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors"

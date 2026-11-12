@@ -84,6 +84,7 @@ export default function ClassDetail() {
                   {data.info.method}
                 </span>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-600">{data.info.type}</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 font-mono text-[10px] font-black tracking-wider text-slate-600">Sesi #{data.info.id}</span>
                 <span className="rounded-full bg-indigo-50 px-3 py-1 text-[10px] font-black text-indigo-700">{data.info.status_label}</span>
               </div>
 
@@ -144,7 +145,7 @@ export default function ClassDetail() {
                     <li key={sess.id} className="flex min-w-0 flex-wrap gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 sm:flex-nowrap sm:items-center">
                       <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-black sm:mt-0 ${sess.is_completed ? "bg-emerald-100 text-emerald-700" : "bg-white text-slate-500 shadow-sm"}`}>{idx + 1}</span>
                       <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm font-black text-slate-800">Pertemuan {idx + 1}: {sess.title}</p>
+                        <p className="break-words text-sm font-black text-slate-800">Sesi #{sess.id} · Pertemuan {idx + 1}: {sess.title}</p>
                         <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500"><Clock size={12} />{sess.date}</p>
                       </div>
                       <span className={`ml-12 max-w-full break-words rounded-full px-3 py-1.5 text-[11px] font-black sm:ml-0 sm:shrink-0 ${sess.is_completed ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>

@@ -55,6 +55,8 @@ class TeacherController extends Controller
         $profileData['bank_name'] = $profile->bank_name;
         $profileData['payout_channel_code'] = $inferredChannel;
         $profileData['payout_channel_options'] = XenditPayoutChannelCatalog::options();
+        $profileData['payout_verification_method'] = $profile->payout_verification_method ?? 'otp';
+        $profileData['payout_verification_method_updated_at'] = $profile->payout_verification_method_updated_at;
         $profileData['account_number'] = $profile->account_number;
         $profileData['account_name'] = $profile->account_name;
         $profileData['bank_account_changed_at'] = $profile->bank_account_changed_at;
@@ -71,8 +73,17 @@ class TeacherController extends Controller
 
         $user->subjects = $profile->subjects;
 
+        // Halaman Keamanan tutor memakai dua field ini untuk menentukan apakah
+        // dialog ganti kata sandi harus meminta kata sandi lama (akun Google
+        // belum punya kata sandi lokal).
+        $accountSecurity = [
+            'has_password' => (bool) ($user->has_password ?? true),
+            'password_updated_at' => $user->password_updated_at?->toIso8601String(),
+        ];
+
         return response()->json([
             'user' => $user,
+            'account_security' => $accountSecurity,
             'profile' => $profileData,
         ]);
     }
@@ -660,7 +671,7 @@ class TeacherController extends Controller
             ->whereDoesntHave('disputes', fn ($query) => $query->whereNull('resolved_at'));
         $balanceRows = (clone $completedBookings)
             ->selectRaw("COALESCE(SUM(CASE WHEN payout_status = 'locked' THEN teacher_net_amount ELSE 0 END), 0) AS held")
-            ->selectRaw('COALESCE(SUM(CASE WHEN teacher_net_amount - teacher_paid_amount - teacher_reserved_amount > 0 THEN teacher_net_amount - teacher_paid_amount - teacher_reserved_amount ELSE 0 END), 0) AS available')
+            ->selectRaw('COALESCE(SUM(teacher_net_amount - teacher_paid_amount - teacher_reserved_amount), 0) AS available')
             ->selectRaw('COALESCE(SUM(teacher_reserved_amount), 0) AS requested')
             ->selectRaw('COALESCE(SUM(teacher_paid_amount), 0) AS paid')
             ->selectRaw('COALESCE(SUM(gross_amount), 0) AS total_gross')
@@ -718,11 +729,12 @@ class TeacherController extends Controller
 
         return response()->json([
             'current_period' => Carbon::now()->translatedFormat('F Y'),
-            'balance' => round((float) ($balanceRows?->available ?? 0)),
-            'pending_amount' => round((float) ($balanceRows?->available ?? 0)),
+            'balance' => round(max(0, (float) ($balanceRows?->available ?? 0))),
+            'pending_amount' => round(max(0, (float) ($balanceRows?->available ?? 0))),
             'balances' => [
                 'held' => round((float) ($balanceRows?->held ?? 0)),
-                'available' => round((float) ($balanceRows?->available ?? 0)),
+                'available' => round(max(0, (float) ($balanceRows?->available ?? 0))),
+                'overpaid' => round(max(0, -(float) ($balanceRows?->available ?? 0))),
                 'requested' => round((float) ($balanceRows?->requested ?? 0)),
                 'paid' => round((float) ($balanceRows?->paid ?? 0)),
             ],
@@ -771,6 +783,10 @@ class TeacherController extends Controller
                     'processed_at' => $item->processed_at,
                     'review_notes' => $item->review_notes,
                 ]),
+            'payout_verification' => [
+                'method' => $profile?->payout_verification_method ?? 'otp',
+                'updated_at' => $profile?->payout_verification_method_updated_at,
+            ],
         ]);
     }
 }

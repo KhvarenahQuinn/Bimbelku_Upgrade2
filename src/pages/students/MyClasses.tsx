@@ -90,6 +90,7 @@ interface ClassItem {
   can_approve: boolean;
   can_dispute: boolean;
   can_report_teacher_absence: boolean;
+  can_appeal_lapsed_session?: boolean;
   attention?: {
     kind: "review" | "presence";
     title: string;
@@ -296,6 +297,7 @@ const groupClassRows = (groups: GroupClassResponse): ClassItem[] => groups.map((
       can_approve: false,
       can_dispute: false,
       can_report_teacher_absence: false,
+      can_appeal_lapsed_session: false,
       progress_url: hasLearningAccess && ["confirmed", "completed"].includes(group.status)
         ? `/student/progress/cheap-class/${group.id}`
         : undefined,
@@ -315,6 +317,9 @@ export default function MyClasses() {
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeCategory, setDisputeCategory] = useState("");
   const [disputeEvidence, setDisputeEvidence] = useState<File | null>(null);
+  const [appeal, setAppeal] = useState<ClassItem | null>(null);
+  const [appealReason, setAppealReason] = useState("");
+  const [appealEvidence, setAppealEvidence] = useState<File | null>(null);
   const [absenceReport, setAbsenceReport] = useState<ClassItem | null>(null);
   const [absenceReason, setAbsenceReason] = useState("");
   const [absenceEvidence, setAbsenceEvidence] = useState<File | null>(null);
@@ -623,6 +628,32 @@ export default function MyClasses() {
     }
   };
 
+  const submitAppeal = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!appeal) return;
+    if (appealReason.trim().length < 30) {
+      notify.error("Jelaskan kronologi minimal 30 karakter.");
+      return;
+    }
+    const payload = new FormData();
+    payload.append("reason", appealReason.trim());
+    if (appealEvidence) payload.append("evidence", appealEvidence);
+    setProcessing(appeal.id);
+    try {
+      const response = await http.post(`/student/bookings/${appeal.id}/appeal`, payload);
+      notify.success(response.data.message);
+      setAppeal(null);
+      setSelected(null);
+      setAppealReason("");
+      setAppealEvidence(null);
+      await loadClasses();
+    } catch (error) {
+      notify.error(getApiError(error));
+    } finally {
+      setProcessing(null);
+    }
+  };
+
   const submitRating = async () => {
     if (!ratingClass) return;
     setProcessing(ratingClass.id);
@@ -892,6 +923,7 @@ export default function MyClasses() {
             {selected.class_kind !== "group" && selected.viewer_only && <p className="rounded-xl bg-indigo-50 p-3 text-xs font-bold leading-5 text-indigo-800">Kamu dapat mengikuti jadwal ini. Absen dan konfirmasi sesi dilakukan oleh akun pemesan.</p>}
             {selected.class_kind !== "group" && !selected.viewer_only && selected.order?.status === "paid" && <Button variant="outline" className="rounded-xl border-indigo-200 text-indigo-700" onClick={() => { setHubReturnClass(selected); setHubBookingId(selected.id); setSelected(null); }}><MessageCircle size={16} className="mr-2" />Buka ruang belajar</Button>}
             {selected.can_report_teacher_absence && <Button variant="outline" className="rounded-xl border-rose-200 text-rose-700" onClick={() => setAbsenceReport(selected)}><ShieldAlert size={16} className="mr-2" />Tutor belum hadir setelah 15 menit</Button>}
+            {selected.can_appeal_lapsed_session && <Button variant="outline" className="rounded-xl border-amber-200 text-amber-800" onClick={() => setAppeal(selected)}><MessageSquareWarning size={16} className="mr-2" />Sesi tidak terlaksana</Button>}
             {selected.completion_notes && <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4"><div className="flex items-center gap-2 font-black text-emerald-900"><FileCheck2 size={18} />Hasil belajar dari tutor</div><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-emerald-800">Durasi aktual {selected.actual_duration_minutes ?? "-"} menit</span>{selected.scheduled_duration_minutes ? <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-600">Jadwal {selected.scheduled_duration_minutes} menit</span> : null}</div><p className="mt-3 text-sm leading-6 text-emerald-800">{selected.completion_notes}</p>{selected.objection_deadline && <p className="mt-2 text-xs font-bold text-emerald-700">Batas keputusan: {dateTime(selected.objection_deadline)}</p>}</div>}
             {selected.dispute && <div className="flex gap-3 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800"><MessageSquareWarning className="shrink-0" /><div><p className="font-black">Keberatan {selected.dispute.status}</p><p className="mt-1 leading-6">{selected.dispute.reason}</p></div></div>}
             {selected.refund && <div className="flex gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-800"><ShieldAlert className="shrink-0" /><div><p className="font-black">Refund {selected.refund.status} · {rupiah(selected.refund.amount)}</p><p className="mt-1">{selected.refund.reason}</p></div></div>}
@@ -924,6 +956,26 @@ export default function MyClasses() {
             </>
             <div><Label>Bukti tambahan (opsional)</Label><Input className="mt-2" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onChange={(event) => selectDisputeEvidence(event.target.files?.[0])} /></div>
             <Button className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing === dispute?.id || !disputeCategory}>Kirim ke Admin</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(appeal)} onOpenChange={(open) => {
+        if (!open) {
+          setAppeal(null);
+          setAppealReason("");
+          setAppealEvidence(null);
+        }
+      }}>
+        <DialogContent className="rounded-[2rem] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Sesi tidak terlaksana</DialogTitle>
+            <DialogDescription>Ceritakan kronologi. Admin akan memeriksa bukti kehadiran kedua pihak sebelum memutus refund.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={submitAppeal} className="space-y-4">
+            <div><Label>Kronologi</Label><Textarea required minLength={30} maxLength={3000} className="mt-2 min-h-32 rounded-xl" value={appealReason} onChange={(event) => setAppealReason(event.target.value)} placeholder="Contoh: saya menunggu di ruang kelas 20 menit, tetapi tutor tidak pernah masuk dan tidak mengirim pesan." /></div>
+            <div><Label>Bukti tambahan <span className="font-normal text-slate-400">(opsional)</span></Label><Input className="mt-2" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onChange={(event) => setAppealEvidence(event.target.files?.[0] || null)} /></div>
+            <Button className="w-full rounded-xl bg-amber-600 hover:bg-amber-700" disabled={processing === appeal?.id || appealReason.trim().length < 30}>Kirim banding</Button>
           </form>
         </DialogContent>
       </Dialog>
