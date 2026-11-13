@@ -36,3 +36,9 @@ bimbelku-backend/bimbelku_db
 *.sql
 
 .kilo/
+
+# — do not commit
+.mylarp/
+
+# IYKYK
+AGENTS.md
