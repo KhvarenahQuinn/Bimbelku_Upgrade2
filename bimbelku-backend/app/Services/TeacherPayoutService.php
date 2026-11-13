@@ -208,6 +208,9 @@ class TeacherPayoutService
                 'account_name' => $profile->account_name,
                 'payout_channel_code' => $channelCode,
             ]);
+            // Fix the gateway reference at creation so every retry reuses the
+            // same idempotency key instead of deriving a new one.
+            $payout->forceFill(['gateway_reference_id' => $this->gateway->payoutReference($payout)])->save();
             $payoutRequest->update(['payout_id' => $payout->id]);
 
             Notification::updateOrCreate(['unique_key' => "payout-processing:{$payout->id}"], [

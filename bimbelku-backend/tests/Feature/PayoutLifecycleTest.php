@@ -69,6 +69,38 @@ class PayoutLifecycleTest extends TestCase
         $this->assertDatabaseHas('payouts', ['id' => $payout->id, 'gateway_payout_id' => 'po-payload-1', 'gateway_status' => 'ACCEPTED']);
     }
 
+    public function test_create_payout_sends_a_valid_idempotency_key(): void
+    {
+        Http::fake(['https://api.xendit.test/v3/payouts' => Http::response(['payout_id' => 'po-idem', 'status' => 'ACCEPTED'])]);
+        $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Yogyakarta']);
+        TeacherProfile::create([
+            'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
+            'account_number' => '1234567890', 'account_name' => $teacher->name,
+        ]);
+        $payout = Payout::create([
+            'user_id' => $teacher->id, 'amount' => 120000, 'period' => 'November 2026', 'total_classes' => 0,
+            'status' => 'processing', 'payment_provider' => 'xendit', 'account_number' => '1234567890',
+            'account_name' => $teacher->name, 'bank_name' => 'BCA', 'payout_channel_code' => 'BCA', 'booking_ids' => [],
+        ]);
+
+        app(XenditMoneyMovementService::class)->createPayout($payout, $teacher->load('teacherProfile'));
+
+        $captured = null;
+        Http::assertSent(function (Request $request) use (&$captured) {
+            if ($request->url() !== 'https://api.xendit.test/v3/payouts') {
+                return false;
+            }
+            $captured = $request->header('idempotency-key');
+            $captured = is_array($captured) ? implode(',', $captured) : $captured;
+
+            return true;
+        });
+
+        $this->assertNotNull($captured, 'Payout request carried no idempotency-key header at all.');
+        $this->assertGreaterThanOrEqual(10, strlen((string) $captured), 'idempotency-key was: '.(string) $captured);
+        $this->assertSame('BKU-PAY-'.str_pad((string) $payout->id, 8, '0', STR_PAD_LEFT), (string) $captured);
+    }
+
     public function test_fallback_sends_both_amount_fields_when_gateway_rejects_destination_amount(): void
     {
         $calls = 0;

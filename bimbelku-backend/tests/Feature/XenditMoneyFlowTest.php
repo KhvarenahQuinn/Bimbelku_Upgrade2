@@ -205,11 +205,14 @@ class XenditMoneyFlowTest extends TestCase
             // agar bisa difilter langsung pada dashboard Xendit.
             && $request['reference_id'] === $order->order_id
             && str_starts_with((string) data_get($request->data(), 'customer.reference_id'), 'USER-'.$student->id.'-'.$order->order_id));
+        // Xendit rejects idempotency keys under 10 characters, so the id is
+        // padded to a fixed width rather than used bare.
         Http::assertSent(fn (Request $request) => $request->url() === 'https://api.xendit.test/refunds'
-            && $request->hasHeader('idempotency-key', 'BKU-RFD-'.$refund->id)
+            && $request->hasHeader('idempotency-key', 'BKU-RFD-'.str_pad((string) $refund->id, 8, '0', STR_PAD_LEFT))
             && $request['payment_request_id'] === 'pr-test-1' && $request['amount'] === 150000);
         Http::assertSent(fn (Request $request) => $request->url() === 'https://api.xendit.test/v3/payouts'
             && $request->hasHeader('api-version', '2025-09-01')
+            && $request->hasHeader('idempotency-key', 'BKU-PAY-'.str_pad((string) $payout->id, 8, '0', STR_PAD_LEFT))
             && data_get($request->data(), 'recipient.account_details.routing_value_1') === 'CENAIDJA');
     }
 

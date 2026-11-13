@@ -50,7 +50,7 @@ class XenditMoneyMovementService
             return $this->refundPayload($refund);
         }
 
-        $reference = $refund->gateway_reference_id ?: 'BKU-RFD-'.$refund->id;
+        $reference = $refund->gateway_reference_id ?: $this->refundReference($refund);
         $refund = $this->storeRefundResponse($refund, [
             'payment_provider' => 'xendit',
             'destination_method' => 'xendit_original',
@@ -168,7 +168,10 @@ class XenditMoneyMovementService
             return $this->payoutPayload($payout);
         }
 
-        $reference = $payout->gateway_reference_id ?: 'BKU-PAY-'.$payout->id;
+        // Xendit rejects an idempotency-key shorter than 10 characters. A bare
+        // id produces "BKU-PAY-1" (9) for the first payout, so the id is padded
+        // to a fixed width instead of relying on ids being large already.
+        $reference = $payout->gateway_reference_id ?: $this->payoutReference($payout);
         // Creating the payout is the only place that writes gateway_status
         // directly; every later transition goes through applyGatewayStatus().
         $payout->forceFill(['gateway_reference_id' => $reference, 'gateway_status' => 'SUBMITTING'])->save();
@@ -418,6 +421,20 @@ class XenditMoneyMovementService
             'payout_status' => $payout->status,
             'failure_code' => $payout->gateway_failure_code,
         ];
+    }
+
+    /**
+     * Gateway idempotency keys must be at least 10 characters. Padding the id
+     * keeps the length constant regardless of how small the sequence is.
+     */
+    public function payoutReference(Payout $payout): string
+    {
+        return 'BKU-PAY-'.str_pad((string) $payout->id, 8, '0', STR_PAD_LEFT);
+    }
+
+    public function refundReference(Refund $refund): string
+    {
+        return 'BKU-RFD-'.str_pad((string) $refund->id, 8, '0', STR_PAD_LEFT);
     }
 
     private function client(?callable $shouldRetry = null): PendingRequest
