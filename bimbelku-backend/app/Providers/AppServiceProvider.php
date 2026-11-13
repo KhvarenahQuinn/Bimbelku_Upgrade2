@@ -132,6 +132,7 @@ class AppServiceProvider extends ServiceProvider
         $registerIsolatedLimiter('student-payment-pin-reset-request', 3, 'Permintaan reset PIN terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('student-payment-pin-reset', 10, 'Percobaan reset PIN terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('session-action-poll', 60, 'Pemeriksaan status sesi terlalu sering. Tunggu :seconds detik lalu coba lagi.');
+        $registerIsolatedLimiter('conversation-messages-poll', 120, 'Pemeriksaan pesan terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['booking']);
         $registerIsolatedLimiter('booking-message-send', 30, 'Pesan dikirim terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['booking']);
         $registerIsolatedLimiter('booking-schedule-options', 30, 'Pilihan jadwal dimuat terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['booking']);
         $registerIsolatedLimiter('booking-schedule-change-create', 5, 'Permintaan perubahan jadwal dibuat terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['booking']);
@@ -199,6 +200,7 @@ class AppServiceProvider extends ServiceProvider
         $registerIsolatedLimiter('admin-matching-assign-teacher', 10, 'Penetapan tutor dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['bookingRequest']);
         $registerIsolatedLimiter('admin-refund-reconcile', 10, 'Pemeriksaan refund dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['refund']);
         $registerIsolatedLimiter('admin-refund-retry', 5, 'Pengulangan refund dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['refund']);
+        $registerIsolatedLimiter('admin-payout-reconcile', 10, 'Pemeriksaan pencairan dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['payout']);
         $registerIsolatedLimiter('admin-tutor-exit', 5, 'Refund keluar tutor dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['learningPackage']);
         $registerIsolatedLimiter('admin-session-decision', 20, 'Keputusan sesi dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('student-session-appeal', 5, 'Banding sesi dibuat terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['booking']);

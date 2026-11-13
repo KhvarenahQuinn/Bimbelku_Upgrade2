@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Notification;
 use App\Models\PaymentGatewayEvent;
 use App\Models\Payout;
 use App\Models\Refund;
@@ -16,6 +15,7 @@ class XenditWebhookService
     public function __construct(
         private readonly RefundSettlementService $refunds,
         private readonly TeacherPayoutService $payouts,
+        private readonly XenditMoneyMovementService $gateways,
     ) {}
 
     public function handle(string $eventType, string $eventId, array $payload, array $data): void
@@ -109,40 +109,21 @@ class XenditWebhookService
             return;
         }
 
-        if (in_array($payout->status, ['completed', 'failed'], true)) {
+        // A settled payout is not final for the bank: it can still be REVERSED
+        // after the money was sent. Only `failed` and `reversed` are terminal
+        // here; a completed payout must still reach applyGatewayStatus().
+        $incomingStatus = strtoupper((string) (Arr::get($data, 'status') ?: Str::afterLast($eventType, '.')));
+        $needsReversal = $payout->status === 'completed' && $incomingStatus === 'REVERSED';
+        if (! $needsReversal && in_array($payout->status, ['completed', 'failed', 'reversed'], true)) {
             $event->update(['status' => 'processed', 'processed_at' => now()]);
 
             return;
         }
         try {
-            $status = strtoupper((string) (Arr::get($data, 'status') ?: Str::afterLast($eventType, '.')));
-            $succeeded = $eventType === 'v3_payout.succeeded' || $status === 'SUCCEEDED';
-            $failed = in_array($status, ['FAILED', 'REJECTED', 'REVERSED', 'CANCELLED', 'EXPIRED'], true);
-            $payout->forceFill([
-                'gateway_payout_id' => Arr::get($data, 'payout_id') ?: $payout->gateway_payout_id,
-                'gateway_status' => $status,
-                'gateway_failure_code' => Arr::get($data, 'failure_code'),
-                'gateway_processed_at' => now(),
-                'status' => 'processing',
-            ])->save();
-
-            if ($succeeded) {
-                $this->payouts->complete($payout->fresh());
-                Notification::firstOrCreate(['unique_key' => "payout-completed:{$payout->id}"], [
-                    'user_id' => $payout->user_id,
-                    'title' => 'Pendapatan berhasil dikirim',
-                    'message' => 'Pencairan sebesar Rp'.number_format((float) $payout->amount, 0, ',', '.').' berhasil dikirim ke rekening terdaftar.',
-                    'type' => 'success', 'target_url' => '/guru/dompet',
-                ]);
-            } elseif ($failed) {
-                $this->payouts->release($payout->fresh(), 'Penyedia pembayaran: '.($payout->gateway_failure_code ?: $status));
-                Notification::firstOrCreate(['unique_key' => "payout-failed:{$payout->id}:{$status}"], [
-                    'user_id' => $payout->user_id,
-                    'title' => 'Pencairan belum berhasil',
-                    'message' => 'Dana belum terkirim dan otomatis kembali menjadi saldo tersedia. Periksa kembali rekening tujuan.',
-                    'type' => 'warning', 'target_url' => '/guru/dompet#rekening',
-                ]);
-            }
+            $status = $incomingStatus;
+            // All state transitions, allocations, journals and notifications
+            // for gateway-driven payout events live in applyGatewayStatus().
+            $this->gateways->applyGatewayStatus($payout, $status, $data);
             $event->update(['status' => 'processed', 'error' => null, 'processed_at' => now()]);
         } catch (Throwable $exception) {
             $event->update(['status' => 'failed', 'error' => Str::limit($exception->getMessage(), 1500)]);

@@ -37,6 +37,7 @@ class Payout extends Model
         'gateway_status',
         'gateway_failure_code',
         'gateway_processed_at',
+        'gateway_last_checked_at',
         'payout_channel_code',
     ];
 
@@ -50,6 +51,7 @@ class Payout extends Model
         'booking_ids' => 'array',
         'allocation_breakdown' => 'array',
         'gateway_processed_at' => 'datetime',
+        'gateway_last_checked_at' => 'datetime',
     ];
 
     public function user()

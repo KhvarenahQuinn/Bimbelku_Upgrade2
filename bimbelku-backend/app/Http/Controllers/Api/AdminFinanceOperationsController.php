@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CustomerWallet;
 use App\Models\Order;
+use App\Models\Payout;
 use App\Models\Refund;
 use App\Services\RefundSettlementService;
+use App\Services\XenditMoneyMovementService;
 use App\Support\RefundStatusPresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -274,6 +276,26 @@ class AdminFinanceOperationsController extends Controller
         return response()->json([
             'message' => 'Status refund sudah diperiksa ulang.',
             'refund' => $refund->fresh(),
+        ]);
+    }
+
+    public function reconcilePayout(Payout $payout, XenditMoneyMovementService $gateway)
+    {
+        abort_unless(in_array($payout->status, ['processing', 'on_hold'], true), 422, 'Pencairan ini sudah final.');
+        try {
+            $gateway->retrievePayout($payout);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+        $payout->refresh();
+
+        return response()->json([
+            'message' => 'Status pencairan sudah diperiksa ulang.',
+            'status' => $payout->status,
+            'gateway_status' => $payout->gateway_status,
+            'gateway_failure_code' => $payout->gateway_failure_code,
         ]);
     }
 
