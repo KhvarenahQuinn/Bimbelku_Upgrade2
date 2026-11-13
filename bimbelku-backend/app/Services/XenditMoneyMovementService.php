@@ -187,7 +187,9 @@ class XenditMoneyMovementService
                 ]),
                 'address' => [
                     'country' => 'ID',
-                    'street_line_1' => $teacher->address ?: 'Alamat tutor terverifikasi BimbelKu',
+                    // Never substitute a placeholder: an invented street line
+                    // would be sent to the bank as the recipient's address.
+                    'street_line_1' => $teacher->address,
                 ],
                 'account_details' => [
                     'currency' => 'IDR',
