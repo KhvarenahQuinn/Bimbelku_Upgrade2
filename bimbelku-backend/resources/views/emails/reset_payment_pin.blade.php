@@ -4,7 +4,7 @@
     <title>Reset PIN Pembayaran</title>
 </head>
 <body style="font-family: Arial, sans-serif; padding: 20px;">
-    <h2>Halo!</h2>
+    <h2>Halo{{ filled($name ?? null) ? " ".$name : "" }}!</h2>
     <p>Kami menerima permintaan untuk mengatur ulang PIN pembayaran akun BimbelKu Anda.</p>
     <p>Klik tombol di bawah ini untuk membuat PIN pembayaran baru:</p>
     <br>

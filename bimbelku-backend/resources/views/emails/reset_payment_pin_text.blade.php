@@ -1,4 +1,4 @@
-Halo!
+Halo{{ filled($name ?? null) ? " ".$name : "" }}!
 
 Kami menerima permintaan untuk mengatur ulang PIN pembayaran akun BimbelKu Anda.
 

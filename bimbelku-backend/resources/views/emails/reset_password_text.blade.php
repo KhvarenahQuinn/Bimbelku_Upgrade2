@@ -1,4 +1,4 @@
-Halo!
+Halo{{ filled($name ?? null) ? " ".$name : "" }}!
 
 Anda menerima email ini karena kami menerima permintaan reset password untuk akun Anda.
 

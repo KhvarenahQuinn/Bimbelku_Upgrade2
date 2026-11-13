@@ -67,7 +67,7 @@ class PasswordResetController extends Controller
 
         // Kirim Email
         try {
-            Mail::to($email)->send(new ResetPasswordMail($url));
+            Mail::to($email)->send(new ResetPasswordMail($url, $user?->name));
         } catch (\Throwable $exception) {
             DB::table('password_reset_tokens')->where('email', $email)->delete();
             RateLimiter::clear($cooldownKey);

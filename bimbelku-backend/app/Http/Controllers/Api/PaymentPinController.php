@@ -190,7 +190,7 @@ class PaymentPinController extends Controller
             .'/reset-pin?'.http_build_query(['token' => $token, 'email' => $email]);
 
         try {
-            Mail::to($email)->send(new ResetPaymentPinMail($url));
+            Mail::to($email)->send(new ResetPaymentPinMail($url, $user->name));
         } catch (\Throwable $exception) {
             DB::table('payment_pin_reset_tokens')->where('email', $email)->delete();
             report($exception);
