@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\Payout;
 use App\Models\Refund;
 use App\Services\RefundSettlementService;
+use App\Services\TeacherPayoutService;
 use App\Services\XenditMoneyMovementService;
 use App\Support\RefundStatusPresenter;
 use Illuminate\Database\Eloquent\Builder;
@@ -296,6 +297,25 @@ class AdminFinanceOperationsController extends Controller
             'status' => $payout->status,
             'gateway_status' => $payout->gateway_status,
             'gateway_failure_code' => $payout->gateway_failure_code,
+        ]);
+    }
+
+    /**
+     * The escape hatch for the one-active-payout guard. Without this a stuck
+     * payout would lock the tutor out of requesting again forever, so it ships
+     * together with the guard and the stuck-payout alarm.
+     */
+    public function forceFailPayout(Payout $payout, Request $request, TeacherPayoutService $payouts)
+    {
+        abort_unless(in_array($payout->status, ['processing', 'on_hold'], true), 422, 'Pencairan ini sudah final.');
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:10', 'max:500'],
+        ]);
+        $payouts->release($payout, $validated['reason']);
+
+        return response()->json([
+            'message' => 'Pencairan ditandai gagal. Tutor dapat mengajukan ulang.',
+            'payout' => $payout->fresh(),
         ]);
     }
 

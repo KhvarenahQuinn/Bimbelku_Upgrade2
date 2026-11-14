@@ -21,6 +21,11 @@ Schedule::command('payments:reconcile-payouts')
     ->runInBackground()
     ->withoutOverlapping(10);
 
+Schedule::command('payments:alert-stuck-payouts')
+    ->everyFifteenMinutes()
+    ->runInBackground()
+    ->withoutOverlapping(10);
+
 Schedule::command('bookings:expire')
     ->everyMinute()
     ->withoutOverlapping(5);

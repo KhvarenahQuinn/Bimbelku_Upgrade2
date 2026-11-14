@@ -9,6 +9,9 @@ class Payout extends Model
 {
     use HasFactory;
 
+    /** Statuses that hold the one-active-payout guard. Single source of truth. */
+    public const ACTIVE_STATUSES = ['processing', 'on_hold'];
+
     protected $hidden = ['proof_url'];
 
     protected $fillable = [
@@ -18,6 +21,7 @@ class Payout extends Model
         'total_classes',
         'proof_url', // Pastikan kolom ini ada di fillable
         'status',
+        'active_guard',
         'booking_id',
         'gross_amount',
         'commission_amount',
@@ -53,6 +57,18 @@ class Payout extends Model
         'gateway_processed_at' => 'datetime',
         'gateway_last_checked_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        // Single sync point: active_guard mirrors user_id while the payout is
+        // active and clears on any terminal status. Deriving it here means a
+        // new status writer cannot forget to maintain the guard.
+        static::saving(function (Payout $payout) {
+            $payout->active_guard = in_array($payout->status, self::ACTIVE_STATUSES, true)
+                ? $payout->user_id
+                : null;
+        });
+    }
 
     public function user()
     {

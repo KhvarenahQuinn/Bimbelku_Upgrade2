@@ -32,8 +32,8 @@ use App\Http\Controllers\Api\NoteController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PasswordResetController;
-use App\Http\Controllers\Api\PayoutVerificationController;
 use App\Http\Controllers\Api\PaymentPinController;
+use App\Http\Controllers\Api\PayoutVerificationController;
 use App\Http\Controllers\Api\PrivateClassJoinController;
 use App\Http\Controllers\Api\PrivateParticipantPricingController;
 use App\Http\Controllers\Api\ProgramController;
@@ -65,6 +65,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth-register');
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
+Route::post('/login/admin', [AuthController::class, 'adminLogin'])->middleware('throttle:auth-login-admin');
 Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect'])->middleware('throttle:auth-login');
 Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->middleware('throttle:auth-login');
 Route::post('/auth/google/exchange', [GoogleAuthController::class, 'exchange'])->middleware('throttle:auth-login');
@@ -355,6 +356,8 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
         Route::get('/finance', [AdminController::class, 'getFinanceData']);
         Route::post('/finance/payouts/{payout}/reconcile', [AdminFinanceOperationsController::class, 'reconcilePayout'])
             ->middleware(['throttle:admin-payout-reconcile', 'finance.audit:payout_reconcile']);
+        Route::post('/finance/payouts/{payout}/force-fail', [AdminFinanceOperationsController::class, 'forceFailPayout'])
+            ->middleware(['throttle:admin-payout-force-fail', 'finance.audit:payout_force_fail']);
 
         Route::get('/commission-setting', [AdminController::class, 'getCommissionSetting']);
         Route::post('/commission-setting', [AdminController::class, 'updateCommissionSetting'])
