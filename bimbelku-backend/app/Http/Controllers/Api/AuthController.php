@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\GuestPackageLinkService;
 use App\Services\OneTimeCodeService;
 use App\Services\PersistentLoginService;
+use App\Support\AdminPermissionCatalog;
 use App\Support\EducationCatalog;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -24,6 +25,12 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
+    /**
+     * Pesan tunggal untuk seluruh kegagalan portal admin. Jangan pernah
+     * dibedakan per penyebab.
+     */
+    private const GENERIC_ADMIN_LOGIN_ERROR = 'Email atau kata sandi salah.';
+
     // --- FITUR REGISTER ---
     public function register(Request $request, OneTimeCodeService $codes)
     {
@@ -385,6 +392,55 @@ class AuthController extends Controller
             'remember_device' => $session['remembered'],
             'pending_guest_order' => $guestOrders->pendingCodeFor($user),
             'user' => [...$user->toArray(), 'is_primary_admin' => $user->role === 'admin' && $user->isPrimaryAdmin()],
+        ])->withCookie($session['cookie']);
+    }
+
+    /**
+     * Portal admin memakai endpoint sendiri supaya klien tidak perlu dipercaya
+     * mengirim `login_portal`. Setiap kegagalan memakai pesan yang sama:
+     * membedakan "bukan admin" dari "kredensial salah" akan membuat URL ini
+     * bisa dipakai menebak peran akun (role enumeration).
+     */
+    public function adminLogin(Request $request, PersistentLoginService $sessions)
+    {
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
+
+        $genericFailure = response()->json([
+            'message' => self::GENERIC_ADMIN_LOGIN_ERROR,
+        ], 401);
+
+        $user = User::where('email', mb_strtolower(trim((string) $credentials['email'])))->first();
+
+        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+            return $genericFailure;
+        }
+
+        // Akun non-admin atau admin nonaktif tidak boleh tahu bahwa kredensial
+        // mereka benar. Jawaban tetap identik dengan kredensial salah.
+        if ($user->role !== 'admin' || $user->status !== 'active') {
+            return $genericFailure;
+        }
+
+        // Sesi admin selalu pendek; portal ini tidak menawarkan "ingat perangkat".
+        $session = $sessions->issue($user, false, 'password');
+
+        return response()->json([
+            'message' => 'Login berhasil',
+            'access_token' => $session['access_token'],
+            'token_type' => 'Bearer',
+            'session_transport' => 'http_only_cookie',
+            'session_expires_at' => $session['expires_at']->toIso8601String(),
+            'remember_device' => false,
+            'user' => [
+                ...$user->toArray(),
+                'is_primary_admin' => $user->isPrimaryAdmin(),
+                // Guard frontend membaca daftar ini saat login, bukan hanya
+                // saat memuat ulang profil.
+                'admin_permissions' => AdminPermissionCatalog::allCodes(),
+            ],
         ])->withCookie($session['cookie']);
     }
 

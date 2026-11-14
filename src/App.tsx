@@ -33,7 +33,15 @@ const Index = routeLazy(exactPath("/"), () => import("./pages/Index"));
 
 // Guard role tidak diperlukan oleh halaman publik. Muat hanya ketika kelompok
 // rute terlindungi tersebut benar-benar dirender.
-const PrivateRoute = lazy(() => import("./components/PrivateRoute"));
+const RouteGuard = lazy(() =>
+  import("./components/auth/RouteGuard").then((module) => ({ default: module.ProtectedRoute })),
+);
+const GuestOnlyRoute = lazy(() =>
+  import("./components/auth/RouteGuard").then((module) => ({ default: module.GuestOnlyRoute })),
+);
+const HomeRedirectFallback = lazy(() =>
+  import("./components/auth/RouteGuard").then((module) => ({ default: module.HomeRedirectFallback })),
+);
 const StudentPackageRoute = lazy(() => import("./components/StudentPackageRoute"));
 const GuestPackageRoute = lazy(() => import("./components/GuestPackageRoute"));
 const GuestOrderStatus = routeLazy(pathPattern(/^\/pesanan\/[^/]+$/), () => import("./pages/GuestOrderStatus"));
@@ -263,8 +271,8 @@ export const AppContent = () => (
             <Route path="/pesanan/:code" element={<WebsiteContentProvider><GuestOrderStatus /></WebsiteContentProvider>} />
             <Route path="/register" element={<WebsiteContentProvider><Register /></WebsiteContentProvider>} />
             <Route path="/jadi-tutor" element={<WebsiteContentProvider><JadiTutor /></WebsiteContentProvider>} />
-            <Route path="/login" element={<WebsiteContentProvider><Login /></WebsiteContentProvider>} />
-            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/login" element={<GuestOnlyRoute><WebsiteContentProvider><Login /></WebsiteContentProvider></GuestOnlyRoute>} />
+            <Route path="/admin/login" element={<GuestOnlyRoute><AdminLogin /></GuestOnlyRoute>} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/reset-pin" element={<ResetPaymentPin />} />
@@ -283,21 +291,23 @@ export const AppContent = () => (
             {/* =========================================
                 2. RUTE ADMIN (Role: admin)
                ========================================= */}
-            <Route element={<PrivateRoute allowedRoles={['admin']} />}>
+            <Route element={<RouteGuard allowedRoles={['admin']} />}>
               <Route path="/admin" element={<DashboardOverview />} />
               <Route path="/admin/profile" element={<AdminProfile />} />
               <Route path="/admin/tutor-searches" element={<TutorSearchMonitoring />} />
               <Route path="/admin/guru" element={<TeacherVerification />} />
-              <Route path="/admin/pembayaran" element={<Navigate to="/admin/finance?tab=payments" replace />} />
               <Route path="/admin/users" element={<UserManagement />} />
-              <Route path="/admin/settings-payment" element={<Navigate to="/admin/finance?tab=payments" replace />} />
               <Route path="/admin/settings-footer" element={<EditFooter />} />
               <Route path="/admin/website" element={<PublicWebsiteSettings />} />
               <Route path="/admin/website-media" element={<WebsiteMediaSettings />} />
               <Route path="/admin/public-tutors" element={<PublicTutorDirectoryAdmin />} />
-              <Route path="/admin/finance" element={<FinanceCenter />} />
-              <Route path="/admin/refunds" element={<Navigate to="/admin/finance?tab=refunds" replace />} />
-              <Route path="/admin/finance-security" element={<Navigate to="/admin/pembayaran" replace />} />
+              <Route element={<RouteGuard allowedRoles={['admin']} requiredPermissions={['finance.payouts', 'finance.refunds', 'finance.payments']} />}>
+                <Route path="/admin/finance" element={<FinanceCenter />} />
+                <Route path="/admin/pembayaran" element={<Navigate to="/admin/finance?tab=payments" replace />} />
+                <Route path="/admin/settings-payment" element={<Navigate to="/admin/finance?tab=payments" replace />} />
+                <Route path="/admin/refunds" element={<Navigate to="/admin/finance?tab=refunds" replace />} />
+                <Route path="/admin/finance-security" element={<Navigate to="/admin/finance?tab=payments" replace />} />
+              </Route>
               <Route path="/admin/pesan" element={<Navigate to="/admin" replace />} />
               <Route path="/admin/notifikasi" element={<SendMessage />} /> 
               <Route path="/admin/classes" element={<ClassMonitoring />} />
@@ -310,7 +320,9 @@ export const AppContent = () => (
               <Route path="/admin/subjects" element={<SubjectManagement />} />
               <Route path="/admin/subjects/:id/page" element={<SubjectPageContentEditor />} />
               <Route path="/admin/programs" element={<Navigate to="/admin/subjects#programs" replace />} />
-              <Route path="/admin/cases" element={<CaseCenter />} />
+              <Route element={<RouteGuard allowedRoles={['admin']} requiredPermissions={['cases.manage']} />}>
+                <Route path="/admin/cases" element={<CaseCenter />} />
+              </Route>
               <Route path="/admin/stage-five" element={<StageFiveManagement />} />
               <Route path="/admin/access-control" element={<Navigate to="/admin" replace />} />
               <Route path="/admin/audit-log" element={<AdminAuditLog />} />
@@ -322,7 +334,7 @@ export const AppContent = () => (
             {/* =========================================
                 3. RUTE GURU (Role: teacher)
                ========================================= */}
-            <Route element={<PrivateRoute allowedRoles={['teacher']} />}>
+            <Route element={<RouteGuard allowedRoles={['teacher']} />}>
               <Route path="/guru" element={<TeacherDashboard />} />
               <Route path="/guru/kelas" element={<ManageClasses />} />
               <Route path="/guru/profil" element={<TeacherProfile />} />
@@ -361,7 +373,7 @@ export const AppContent = () => (
             {/* =========================================
                 4. RUTE MURID (Role: student)
                ========================================= */}
-            <Route element={<PrivateRoute allowedRoles={['student']} />}>
+            <Route element={<RouteGuard allowedRoles={['student']} />}>
               <Route path="/student/dashboard" element={<Dashboard />} />
               <Route path="/murid" element={<Dashboard />} />
               <Route path="/student/packages" element={<PackageProcess />} />
@@ -388,7 +400,7 @@ export const AppContent = () => (
             {/* =========================================
                 5. RUTE 404 
                ========================================= */}
-            <Route path="*" element={<NotFound />} />
+            <Route path="*" element={<HomeRedirectFallback />} />
 
           </Routes>
         </Suspense>

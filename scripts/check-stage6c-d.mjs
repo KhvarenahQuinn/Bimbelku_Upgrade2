@@ -17,7 +17,7 @@ const migration = read("bimbelku-backend/database/migrations/2026_08_01_000600_b
 const test = read("bimbelku-backend/tests/Feature/StageSixCAccessAuditTest.php");
 const app = read("src/App.tsx");
 const layout = read("src/components/AdminLayout.tsx");
-const privateRoute = read("src/components/PrivateRoute.tsx");
+const privateRoute = read("src/components/auth/RouteGuard.tsx");
 const frontendPermissions = read("src/lib/adminPermissions.ts");
 const auditPage = read("src/pages/admin/AdminAuditLog.tsx");
 const dashboard = read("src/pages/admin/DashboardOverview.tsx");
@@ -59,7 +59,11 @@ expect(app.includes('<Route path="/admin/access-control" element={<Navigate to="
 expect(!layout.includes("Kontrol akses admin"), "menu pengelolaan admin disembunyikan");
 expect(layout.includes('admin.is_primary_admin') && layout.includes('? "Admin utama" : "Admin"'), "identitas sidebar membedakan admin utama dan admin biasa");
 expect(privateRoute.includes("permissionForAdminPath") && privateRoute.includes("canAdmin"), "rute frontend tetap memeriksa role admin");
-expect(frontendPermissions.includes(') => user?.role === "admin";'), "frontend memberi seluruh menu hanya kepada role admin");
+// canAdmin kini menegakkan admin_permissions, bukan lagi meloloskan semua admin.
+expect(
+  frontendPermissions.includes("granted.includes(permission)") && frontendPermissions.includes('user?.role !== "admin"'),
+  "frontend menegakkan admin_permissions per halaman",
+);
 expect(
   auditPage.includes("Catatan perubahan aman")
     && auditPage.includes("Sebelumnya")

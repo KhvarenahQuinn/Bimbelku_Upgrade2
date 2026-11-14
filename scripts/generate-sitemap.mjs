@@ -18,7 +18,27 @@ const staticPaths = [
   "/cara-belajar/sistem-matching-tutor", "/cara-belajar/pembayaran-dan-refund",
   "/tutor", "/seleksi-tutor", "/area-layanan", "/testimonials", "/why-us", "/privacy", "/terms",
 ];
-const urls = new Set(staticPaths.map((path) => `${siteUrl}${path}`));
+/**
+ * Rute privat tidak boleh pernah masuk sitemap. Daftar ini dijaga terpisah
+ * dari staticPaths agar penambahan rute publik di masa depan tidak bisa
+ * diam-diam membocorkan portal admin.
+ */
+const privatePrefixes = [
+  "/admin", "/admin/login", "/guru", "/student", "/payment", "/pesanan",
+  "/login", "/register", "/forgot-password", "/reset-password",
+  "/verify-email", "/oauth", "/complete-profile", "/access-denied",
+];
+
+const isPrivatePath = (pathname) =>
+  privatePrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+
+const allowedPaths = staticPaths.filter((pathname) => {
+  if (!isPrivatePath(pathname)) return true;
+  console.warn(`Sitemap: melewati rute privat ${pathname}`);
+  return false;
+});
+
+const urls = new Set(allowedPaths.map((path) => `${siteUrl}${path}`));
 
 const catalogCandidates = [
   process.env.SEO_PROGRAM_API,
@@ -70,7 +90,8 @@ if (catalog) {
 
 // Only emit lastmod when the actual page content timestamp is known. A build
 // date on every URL would claim that unchanged pages were updated today.
-const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${[...urls].map((url) => `  <url><loc>${url.replace(/&/g, "&amp;")}</loc></url>`).join("\n")}\n</urlset>\n`;
+const finalUrls = [...urls].filter((url) => !isPrivatePath(url.slice(siteUrl.length).split(/[?#]/)[0]));
+const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${finalUrls.map((url) => `  <url><loc>${url.replace(/&/g, "&amp;")}</loc></url>`).join("\n")}\n</urlset>\n`;
 writeFileSync(new URL("../public/sitemap.xml", import.meta.url), xml, "utf8");
 const robotsPath = new URL("../public/robots.txt", import.meta.url);
 const robots = readFileSync(robotsPath, "utf8").replace(/^Sitemap:.*(?:\r?\n)?/gim, "").trimEnd();
