@@ -19,6 +19,26 @@ use RuntimeException;
 class XenditMoneyMovementService
 {
     /**
+     * Webhook `data.status` values are taken from the Payouts v3 PayoutStatus
+     * enum. The webhook *event* is named `v3_payout.pending_compliance`, but
+     * the status inside that payload is the longer form; matching only the
+     * event name left the hold path dead in production.
+     */
+    private const STATUS_PENDING_COMPLIANCE = 'PENDING_COMPLIANCE_ASSESSMENT';
+
+    /** @var list<string> */
+    private const TERMINAL_FAILURE_STATUSES = ['FAILED', 'REJECTED', 'CANCELLED', 'EXPIRED', 'COMPLIANCE_REJECTED'];
+
+    /** @var list<string> */
+    private const KNOWN_STATUSES = [
+        'ACCEPTED', 'PENDING_COMPLIANCE_ASSESSMENT', 'REJECTED', 'ROUTING', 'REQUESTED',
+        'READY', 'LOCKED', 'EXPIRED', 'FAILED', 'SUCCEEDED', 'CANCELLED', 'REVERSED',
+        // Present in the lifecycle table, absent from the OpenAPI enum. Kept so
+        // a compliance rejection still releases instead of stranding funds.
+        'COMPLIANCE_REJECTED',
+    ];
+
+    /**
      * TeacherPayoutService already injects this service, so the reverse
      * dependency is resolved lazily per call. Injecting it in the constructor
      * creates a container cycle that recurses until PHP runs out of memory.
@@ -43,7 +63,10 @@ class XenditMoneyMovementService
         if ($breakdown['external_funded_amount'] <= 0.009) {
             throw new RuntimeException('Refund ini tidak memiliki bagian pembayaran eksternal.');
         }
-        if (blank($refund->order?->gateway_payment_request_id)) {
+        // Payments API v3 refunds reference the captured *payment*, not the
+        // payment request. `gateway_payment_id` is filled at settlement time.
+        $paymentId = (string) ($refund->order?->gateway_payment_id ?? '');
+        if ($paymentId === '') {
             throw new RuntimeException('Referensi pembayaran asal tidak tersedia pada transaksi ini.');
         }
         if (filled($refund->gateway_refund_id) && ! in_array($refund->gateway_status, ['FAILED', 'REJECTED'], true)) {
@@ -63,15 +86,18 @@ class XenditMoneyMovementService
         if ($refund->status === 'paid' || $refund->gateway_status === 'SUCCEEDED') {
             return $this->refundPayload($refund);
         }
-        $refund->loadMissing('order');
-        $response = $this->client()->withHeader('idempotency-key', $reference)->post(config('xendit.base_url').'/refunds', [
-            'reference_id' => $reference,
-            'payment_request_id' => $refund->order->gateway_payment_request_id,
-            'currency' => config('xendit.currency', 'IDR'),
-            'amount' => (int) round($breakdown['external_funded_amount']),
-            'reason' => 'REQUESTED_BY_CUSTOMER',
-            'metadata' => ['refund_id' => (string) $refund->id, 'order_id' => (string) $refund->order_id],
-        ]);
+        $response = $this->client()
+            ->withHeaders([
+                'api-version' => (string) config('xendit.refund_api_version', '2024-11-11'),
+                'idempotency-key' => $reference,
+            ])
+            ->post(config('xendit.base_url').'/v3/refunds', [
+                'reference_id' => $reference,
+                'payment_id' => $paymentId,
+                'amount' => (int) round($breakdown['external_funded_amount']),
+                'reason' => 'REQUESTED_BY_CUSTOMER',
+                'metadata' => ['refund_id' => (string) $refund->id, 'order_id' => (string) $refund->order_id],
+            ]);
         if (! $response->successful()) {
             $body = is_array($response->json()) ? $response->json() : [];
             $definitive = in_array($response->status(), [400, 401, 403, 404, 422], true);
@@ -94,7 +120,9 @@ class XenditMoneyMovementService
             'payment_provider' => 'xendit',
             'destination_method' => 'xendit_original',
             'destination_selected_at' => $refund->destination_selected_at ?: now(),
-            'gateway_refund_id' => $data['id'] ?? null,
+            // v3 names the identifier `refund_id`; `id` is kept as a fallback
+            // for any response that still uses the legacy field name.
+            'gateway_refund_id' => $data['refund_id'] ?? $data['id'] ?? null,
             'gateway_status' => strtoupper((string) ($data['status'] ?? 'PENDING')),
             'gateway_failure_code' => $data['failure_code'] ?? null,
             'gateway_failure_message' => $data['failure_message'] ?? $data['message'] ?? null,
@@ -115,7 +143,9 @@ class XenditMoneyMovementService
             return $this->createRefund($refund);
         }
 
-        $response = $this->client()->get(config('xendit.base_url').'/refunds/'.$refund->gateway_refund_id);
+        $response = $this->client()
+            ->withHeader('api-version', (string) config('xendit.refund_api_version', '2024-11-11'))
+            ->get(config('xendit.base_url').'/v3/refunds/'.rawurlencode((string) $refund->gateway_refund_id));
         if (! $response->successful()) {
             throw new RuntimeException('Status refund belum dapat diperiksa.');
         }
@@ -168,21 +198,29 @@ class XenditMoneyMovementService
             return $this->payoutPayload($payout);
         }
 
-        // Xendit rejects an idempotency-key shorter than 10 characters. A bare
-        // id produces "BKU-PAY-1" (9) for the first payout, so the id is padded
-        // to a fixed width instead of relying on ids being large already.
+        // Xendit rejects an idempotency-key shorter than 10 characters at
+        // runtime. A bare id produces "BKU-PAY-1" (9) for the first payout, so
+        // the id is padded to a fixed width. The published spec documents only
+        // a 100-character maximum; this padding is defensive, not required.
         $reference = $payout->gateway_reference_id ?: $this->payoutReference($payout);
         // Creating the payout is the only place that writes gateway_status
         // directly; every later transition goes through applyGatewayStatus().
         $payout->forceFill(['gateway_reference_id' => $reference, 'gateway_status' => 'SUBMITTING'])->save();
-        $names = preg_split('/\s+/', trim($teacher->name), 2) ?: ['Tutor'];
+        $names = preg_split('/\s+/', trim((string) $teacher->name), 2) ?: [];
+        $givenName = trim((string) ($names[0] ?? '')) ?: 'Tutor';
+        $surname = trim((string) ($names[1] ?? ''));
         $amount = (int) round((float) $payout->amount);
         $body = [
             'reference_id' => $reference,
             'recipient' => [
                 'type' => 'INDIVIDUAL',
-                'given_name' => $names[0] ?: 'Tutor',
-                'surname' => $names[1] ?? null,
+                'given_name' => $givenName,
+                // `surname` is documented as "required if type is INDIVIDUAL",
+                // but a single-word name has none and the schema does not
+                // enforce it. The key is omitted rather than sent as null;
+                // whether Xendit accepts a missing surname for a domestic bank
+                // payout is unverified, so a sandbox payout should confirm it.
+                ...($surname !== '' ? ['surname' => $surname] : []),
                 'relationship' => 'EMPLOYEE',
                 'details' => array_filter([
                     'personal_email' => $teacher->email,
@@ -193,6 +231,10 @@ class XenditMoneyMovementService
                     // Never substitute a placeholder: an invented street line
                     // would be sent to the bank as the recipient's address.
                     'street_line_1' => $teacher->address,
+                    // Required by the v3 validator although the published schema
+                    // does not list it. Sourced from the validated city field,
+                    // never parsed out of the free-text street address.
+                    'city' => (string) ($profile?->location ?? ''),
                 ],
                 'account_details' => [
                     'currency' => 'IDR',
@@ -204,17 +246,20 @@ class XenditMoneyMovementService
                 ],
             ],
             'payout_details' => [
+                // The v3 validator rejects a payout without source_currency even
+                // though the documented example omits it.
+                'source_currency' => (string) config('xendit.currency', 'IDR'),
                 'destination_currency' => 'IDR',
                 'destination_amount' => $amount,
             ],
             'source_of_fund' => 'BUSINESS_REVENUE',
             'purpose_code' => 'SALARY',
-            'description' => 'Pendapatan tutor BimbelKu',
+            // Bank statements truncate this well before the 100-char API limit
+            // (BCA cuts at 15), so a short literal is used instead of a sentence.
+            'description' => 'BimbelKu',
             'metadata' => ['payout_id' => (string) $payout->id, 'teacher_id' => (string) $teacher->id],
         ];
         $send = function (array $payload) use ($reference) {
-            // A validation rejection must reach the caller so it can decide on
-            // the documented fallback; retrying the same body only burns time.
             return $this->client(static fn (RequestException $exception): bool => $exception instanceof ConnectionException)
                 ->withHeaders([
                     'api-version' => (string) config('xendit.payout_api_version', '2025-09-01'),
@@ -222,18 +267,9 @@ class XenditMoneyMovementService
                 ])
                 ->post(config('xendit.base_url').'/v3/payouts', $payload);
         };
+        // No amount fallback: source_currency is always sent, and a body carrying
+        // both source_amount and destination_amount is rejected outright.
         $response = $send($body);
-        if ($response->status() === 422 || $response->status() === 400) {
-            // Documented fallback: only when validation complains about the
-            // destination amount, send both fields with the same value.
-            $errorBody = $response->json();
-            $message = strtolower((string) (is_array($errorBody) ? ($errorBody['message'] ?? '') : ''));
-            if (str_contains($message, 'destination_amount') || str_contains($message, 'source_amount')) {
-                $body['payout_details']['source_currency'] = 'IDR';
-                $body['payout_details']['source_amount'] = $amount;
-                $response = $send($body);
-            }
-        }
         if (! $response->successful()) {
             // Only a definitive validation/auth rejection releases the reservation.
             // A timeout, conflict, rate limit or server error needs reconciliation.
@@ -266,7 +302,11 @@ class XenditMoneyMovementService
         }
 
         try {
-            $response = $this->client()->get(config('xendit.base_url').'/v3/payouts/'.$payout->gateway_payout_id);
+            // The v3 API rejects a GET without this header even though only the
+            // POST documents it, so every payout call must carry it.
+            $response = $this->client()
+                ->withHeader('api-version', (string) config('xendit.payout_api_version', '2025-09-01'))
+                ->get(config('xendit.base_url').'/v3/payouts/'.$payout->gateway_payout_id);
             if (! $response->successful()) {
                 throw new RuntimeException('Status pencairan belum dapat diperiksa dari penyedia pembayaran.');
             }
@@ -292,7 +332,7 @@ class XenditMoneyMovementService
      *
      * REVERSED on a settled payout must undo the allocation before releasing,
      * otherwise the tutor permanently loses the money while the ledger still
-     * balances. `on_hold` (PENDING_COMPLIANCE) keeps the reservation locked.
+     * balances. PENDING_COMPLIANCE_ASSESSMENT keeps the reservation locked.
      */
     public function applyGatewayStatus(Payout $payout, string $gatewayStatus, ?array $data = null): Payout
     {
@@ -319,6 +359,16 @@ class XenditMoneyMovementService
             if ($previousStatus === 'failed' && ! in_array($status, ['REVERSED'], true)) {
                 return $current;
             }
+            // An unrecognised status must be visible: it changes nothing and
+            // keeps the reservation, which is the wrong outcome if Xendit has
+            // added a terminal status we do not know yet.
+            if (! in_array($status, self::KNOWN_STATUSES, true)) {
+                Log::warning('unknown_payout_status', [
+                    'payout_id' => $current->id,
+                    'gateway_status' => $status,
+                    'gateway_failure_code' => $data['failure_code'] ?? null,
+                ]);
+            }
 
             $current->forceFill([
                 'gateway_payout_id' => ($data['payout_id'] ?? null) ?: $current->gateway_payout_id,
@@ -330,7 +380,7 @@ class XenditMoneyMovementService
                 // `reversed` is written last, after release() has moved the
                 // reservation back; release() refuses terminal statuses.
                 'REVERSED' => 'processing',
-                'PENDING_COMPLIANCE' => 'on_hold',
+                self::STATUS_PENDING_COMPLIANCE => 'on_hold',
                 'SUCCEEDED' => 'processing',
                 default => $previousStatus,
             };
@@ -338,7 +388,7 @@ class XenditMoneyMovementService
 
             if ($status === 'SUCCEEDED') {
                 $this->payouts()->complete($current);
-            } elseif (in_array($status, ['FAILED', 'REJECTED', 'CANCELLED', 'EXPIRED', 'REVERSED'], true)) {
+            } elseif (in_array($status, [...self::TERMINAL_FAILURE_STATUSES, 'REVERSED'], true)) {
                 if ($status === 'REVERSED' && $previousStatus === 'completed') {
                     $this->payouts()->revertCompletedAllocation($current);
                 }
@@ -349,7 +399,7 @@ class XenditMoneyMovementService
                     $current->forceFill(['status' => 'reversed', 'gateway_status' => 'REVERSED'])->save();
                     TeacherPayoutRequest::query()->where('payout_id', $current->id)->update(['status' => 'reversed']);
                 }
-            } elseif ($status === 'PENDING_COMPLIANCE') {
+            } elseif ($status === self::STATUS_PENDING_COMPLIANCE) {
                 TeacherPayoutRequest::query()->where('payout_id', $current->id)->update(['status' => 'on_hold']);
             }
 
@@ -377,8 +427,8 @@ class XenditMoneyMovementService
                 'message' => "Dana {$amount} dikembalikan oleh bank. Perbarui rekening lalu ajukan pencairan kembali.",
                 'type' => 'warning', 'target_url' => '/guru/dompet#rekening',
             ]),
-            $status === 'PENDING_COMPLIANCE' => $this->notifyComplianceHold($payout, $amount),
-            in_array($status, ['FAILED', 'REJECTED', 'CANCELLED', 'EXPIRED'], true) => Notification::firstOrCreate(['unique_key' => "payout-failed:{$payout->id}:{$status}"], [
+            $status === self::STATUS_PENDING_COMPLIANCE => $this->notifyComplianceHold($payout, $amount),
+            in_array($status, self::TERMINAL_FAILURE_STATUSES, true) => Notification::firstOrCreate(['unique_key' => "payout-failed:{$payout->id}:{$status}"], [
                 'user_id' => $payout->user_id,
                 'title' => 'Pencairan belum berhasil',
                 'message' => 'Dana belum terkirim dan otomatis kembali menjadi saldo tersedia. Periksa kembali rekening tujuan.',

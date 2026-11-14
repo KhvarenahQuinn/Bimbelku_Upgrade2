@@ -62,7 +62,7 @@ class RefundStatusMachineTest extends TestCase
     public function test_pending_gateway_status_is_persisted_and_exposed_with_timeline(): void
     {
         Http::fake([
-            'https://api.xendit.test/refunds' => Http::response([
+            'https://api.xendit.test/v3/refunds' => Http::response([
                 'id' => 'rfd-pending-1',
                 'status' => 'PENDING',
             ]),
@@ -105,7 +105,7 @@ class RefundStatusMachineTest extends TestCase
     public function test_failed_gateway_refund_is_marked_and_can_switch_to_balance_once(): void
     {
         Http::fake([
-            'https://api.xendit.test/refunds' => Http::response([
+            'https://api.xendit.test/v3/refunds' => Http::response([
                 'id' => 'rfd-failed-1',
                 'status' => 'FAILED',
                 'failure_code' => 'INSUFFICIENT_BALANCE',
@@ -289,7 +289,7 @@ class RefundStatusMachineTest extends TestCase
             'order_id' => $code,
             'amount' => 150000,
             'status' => 'refund_pending',
-            'gateway_payment_request_id' => 'pr-'.$code,
+            'gateway_payment_request_id' => 'pr-'.$code, 'gateway_payment_id' => 'py-'.$code,
         ]);
         $order->forceFill(['payment_provider' => 'xendit'])->save();
 

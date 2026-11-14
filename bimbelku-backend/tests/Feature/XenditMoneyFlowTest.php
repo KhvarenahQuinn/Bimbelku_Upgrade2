@@ -170,7 +170,7 @@ class XenditMoneyFlowTest extends TestCase
                 'payment_session_id' => 'ps-test-1', 'payment_link_url' => 'https://checkout.xendit.test/1',
                 'status' => 'ACTIVE', 'expires_at' => now()->addHour()->toIso8601String(),
             ]),
-            'https://api.xendit.test/refunds' => Http::response(['id' => 'rfd-test-1', 'status' => 'PENDING']),
+            'https://api.xendit.test/v3/refunds' => Http::response(['refund_id' => 'rfd-test-1', 'status' => 'PENDING']),
             'https://api.xendit.test/v3/payouts' => Http::response(['payout_id' => 'po-test-1', 'status' => 'ACCEPTED']),
         ]);
 
@@ -179,7 +179,10 @@ class XenditMoneyFlowTest extends TestCase
         app(XenditPaymentService::class)->createSession($order, $student);
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'payment_provider' => 'xendit', 'gateway_session_id' => 'ps-test-1']);
 
-        $order->forceFill(['status' => 'refund_pending', 'payment_provider' => 'xendit', 'gateway_payment_request_id' => 'pr-test-1'])->save();
+        $order->forceFill([
+            'status' => 'refund_pending', 'payment_provider' => 'xendit',
+            'gateway_payment_request_id' => 'pr-test-1', 'gateway_payment_id' => 'py-test-1',
+        ])->save();
         $refund = Refund::create(['order_id' => $order->id, 'user_id' => $student->id, 'amount' => 150000, 'reason' => 'Test Xendit', 'status' => 'pending']);
         app(XenditMoneyMovementService::class)->createRefund($refund);
         $this->assertDatabaseHas('refunds', ['id' => $refund->id, 'gateway_refund_id' => 'rfd-test-1', 'destination_method' => 'xendit_original']);
@@ -207,9 +210,16 @@ class XenditMoneyFlowTest extends TestCase
             && str_starts_with((string) data_get($request->data(), 'customer.reference_id'), 'USER-'.$student->id.'-'.$order->order_id));
         // Xendit rejects idempotency keys under 10 characters, so the id is
         // padded to a fixed width rather than used bare.
-        Http::assertSent(fn (Request $request) => $request->url() === 'https://api.xendit.test/refunds'
+        // Payments API v3: refunds post to /v3/refunds with the required
+        // api-version header and reference the captured payment_id, not the
+        // payment request.
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://api.xendit.test/v3/refunds'
+            && $request->hasHeader('api-version', '2024-11-11')
             && $request->hasHeader('idempotency-key', 'BKU-RFD-'.str_pad((string) $refund->id, 8, '0', STR_PAD_LEFT))
-            && $request['payment_request_id'] === 'pr-test-1' && $request['amount'] === 150000);
+            && $request['payment_id'] === 'py-test-1'
+            && ! array_key_exists('payment_request_id', $request->data())
+            && ! array_key_exists('currency', $request->data())
+            && $request['amount'] === 150000);
         Http::assertSent(fn (Request $request) => $request->url() === 'https://api.xendit.test/v3/payouts'
             && $request->hasHeader('api-version', '2025-09-01')
             && $request->hasHeader('idempotency-key', 'BKU-PAY-'.str_pad((string) $payout->id, 8, '0', STR_PAD_LEFT))
@@ -218,13 +228,16 @@ class XenditMoneyFlowTest extends TestCase
 
     public function test_automatic_refund_settles_immediate_gateway_success_only_once(): void
     {
-        Http::fake(['https://api.xendit.test/refunds' => Http::response(['id' => 'rfd-auto-1', 'status' => 'SUCCEEDED'])]);
+        Http::fake(['https://api.xendit.test/v3/refunds' => Http::response(['refund_id' => 'rfd-auto-1', 'status' => 'SUCCEEDED'])]);
         $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
         $order = Order::create([
             'user_id' => $student->id, 'order_id' => 'INV-AUTO-REFUND', 'amount' => 150000,
             'status' => 'refund_pending',
         ]);
-        $order->forceFill(['payment_provider' => 'xendit', 'gateway_payment_request_id' => 'pr-auto-1'])->save();
+        $order->forceFill([
+            'payment_provider' => 'xendit', 'gateway_payment_request_id' => 'pr-auto-1',
+            'gateway_payment_id' => 'py-auto-1',
+        ])->save();
         $refund = Refund::create([
             'order_id' => $order->id, 'user_id' => $student->id, 'amount' => 150000,
             'reason' => 'Tutor tidak ditemukan', 'status' => 'pending',
@@ -247,14 +260,17 @@ class XenditMoneyFlowTest extends TestCase
 
     public function test_gateway_rejection_routes_automatic_refund_to_manual_review(): void
     {
-        Http::fake(['https://api.xendit.test/refunds' => Http::response(['id' => 'rfd-rejected-1', 'status' => 'REJECTED'])]);
+        Http::fake(['https://api.xendit.test/v3/refunds' => Http::response(['refund_id' => 'rfd-rejected-1', 'status' => 'FAILED'])]);
         $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
         $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
         $order = Order::create([
             'user_id' => $student->id, 'order_id' => 'INV-REJECTED-REFUND', 'amount' => 150000,
             'status' => 'refund_pending',
         ]);
-        $order->forceFill(['payment_provider' => 'xendit', 'gateway_payment_request_id' => 'pr-rejected-1'])->save();
+        $order->forceFill([
+            'payment_provider' => 'xendit', 'gateway_payment_request_id' => 'pr-rejected-1',
+            'gateway_payment_id' => 'py-rejected-1',
+        ])->save();
         $refund = Refund::create(['order_id' => $order->id, 'user_id' => $student->id, 'amount' => 150000, 'reason' => 'Tutor tidak ditemukan', 'status' => 'pending']);
 
         Sanctum::actingAs($student);
@@ -294,8 +310,8 @@ class XenditMoneyFlowTest extends TestCase
     public function test_reconciliation_settles_refund_when_success_webhook_is_missing(): void
     {
         Http::fake([
-            'https://api.xendit.test/refunds/rfd-reconcile-1' => Http::response([
-                'id' => 'rfd-reconcile-1', 'status' => 'SUCCEEDED',
+            'https://api.xendit.test/v3/refunds/rfd-reconcile-1' => Http::response([
+                'refund_id' => 'rfd-reconcile-1', 'status' => 'SUCCEEDED',
             ]),
         ]);
         $student = User::factory()->create(['role' => 'student', 'status' => 'active']);

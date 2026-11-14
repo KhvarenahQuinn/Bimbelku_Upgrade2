@@ -36,6 +36,7 @@ final class SessionFinanceFixture
         ]);
         TeacherProfile::create([
             'user_id' => $teacher->id,
+            'location' => 'Yogyakarta',
             'is_accepting_requests' => true,
             'verified_at' => now()->subDay(),
         ]);

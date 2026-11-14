@@ -181,7 +181,7 @@ class PaymentGatewaySafetyTest extends TestCase
     public function test_stale_refund_creation_response_cannot_overwrite_webhook_success(): void
     {
         $order = $this->invoice();
-        $order->forceFill(['gateway_payment_request_id' => 'pr-stale'])->save();
+        $order->forceFill(['gateway_payment_request_id' => 'pr-stale', 'gateway_payment_id' => 'py-stale'])->save();
         $refund = Refund::create(['order_id' => $order->id, 'user_id' => $order->user_id,
             'amount' => 50000, 'reason' => 'Tutor tidak ditemukan', 'status' => 'pending',
             'destination_method' => 'xendit_original']);

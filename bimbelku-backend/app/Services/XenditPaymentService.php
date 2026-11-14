@@ -299,6 +299,9 @@ class XenditPaymentService
                     || in_array($current->status, ['paid', 'refund_pending', 'refunded'], true)) {
                     return false;
                 }
+                // The Session API documents only ACTIVE, COMPLETED, EXPIRED and
+                // CANCELED. `CANCELLED` and `FAILED` are tolerated as aliases so
+                // older rows and payment-level notifications are not rejected.
                 $terminalStatuses = ['ACTIVE', 'EXPIRED', 'CANCELED', 'CANCELLED'];
                 if ($terminalFailure) {
                     $terminalStatuses[] = 'FAILED';

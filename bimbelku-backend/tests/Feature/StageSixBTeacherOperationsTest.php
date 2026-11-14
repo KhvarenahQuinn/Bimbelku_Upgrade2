@@ -10,11 +10,13 @@ use App\Models\TeacherAvailability;
 use App\Models\TeacherProfile;
 use App\Models\User;
 use App\Services\BankAccountNameVerifier;
+use App\Services\OneTimeCodeService;
 use App\Services\TeacherPayoutService;
 use App\Services\XenditWebhookService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
@@ -132,7 +134,7 @@ class StageSixBTeacherOperationsTest extends TestCase
         TeacherProfile::create([
             'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)',
             'payout_channel_code' => 'BCA', 'account_number' => '1234567890',
-            'account_name' => $teacher->name, 'bank_details_version' => 1,
+            'account_name' => $teacher->name, 'bank_details_version' => 1, 'location' => 'Yogyakarta',
         ]);
 
         Sanctum::actingAs($teacher);
@@ -173,7 +175,7 @@ class StageSixBTeacherOperationsTest extends TestCase
         ]);
         TeacherProfile::create([
             'user_id' => $teacher->id, 'bank_name' => 'BCA', 'payout_channel_code' => 'BCA',
-            'account_number' => '1234567890', 'account_name' => $teacher->name,
+            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta',
         ]);
         Sanctum::actingAs($teacher);
 
@@ -210,7 +212,7 @@ class StageSixBTeacherOperationsTest extends TestCase
         [$student, $teacher, $booking] = $this->makeBooking();
         $teacher->update(['address' => 'Yogyakarta']);
         $booking->update(['status' => 'completed', 'completed_at' => now(), 'gross_amount' => 100000, 'teacher_net_amount' => 80000, 'payout_status' => 'ready']);
-        TeacherProfile::create(['user_id' => $teacher->id, 'bank_name' => 'BCA', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name]);
+        TeacherProfile::create(['user_id' => $teacher->id, 'bank_name' => 'BCA', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta']);
         $service = app(TeacherPayoutService::class);
         $otp = $this->issuePayoutOtp($teacher);
         $first = $service->request($teacher, 30000, null, ['otp' => $otp])['payout'];
@@ -229,8 +231,8 @@ class StageSixBTeacherOperationsTest extends TestCase
         $code = '246810';
         \DB::table('verification_codes')->insert([
             'user_id' => $teacher->id,
-            'purpose' => \App\Services\OneTimeCodeService::PAYOUT_BANK_CHANGE,
-            'code_hash' => \Illuminate\Support\Facades\Hash::make($code),
+            'purpose' => OneTimeCodeService::PAYOUT_BANK_CHANGE,
+            'code_hash' => Hash::make($code),
             'attempts' => 0,
             'expires_at' => now()->addMinutes(10),
             'sent_at' => now(),

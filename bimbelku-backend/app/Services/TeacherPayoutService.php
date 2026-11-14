@@ -79,6 +79,11 @@ class TeacherPayoutService
         if (blank($teacher->address)) {
             throw new RuntimeException('Lengkapi alamat asli pada profil tutor sebelum menarik saldo. Data ini diperlukan untuk transfer bank.');
         }
+        // Xendit requires a city alongside the street line; `location` is the
+        // only field validated as a place name, unlike the free-text address.
+        if (blank($profile?->location)) {
+            throw new RuntimeException('Lengkapi kota pada profil tutor sebelum menarik saldo.');
+        }
         if (! $hasNewBankDetails && $profile->payout_hold_until?->isFuture()) {
             throw new RuntimeException('Pencairan ditahan sampai '.$profile->payout_hold_until->translatedFormat('d M Y, H:i').' WIB setelah perubahan rekening.');
         }
@@ -326,7 +331,15 @@ class TeacherPayoutService
 
     private function assertBankNameMatches(User $teacher, array $bankDetails): void
     {
-        $normalize = static fn (string $name): string => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $name) ?? $name));
+        // Compare names ignoring punctuation: "Rina Kartika, S.Pd." and
+        // "Rina Kartika S.Pd." are the same person, and a comma difference must
+        // not block a legitimate bank-details save.
+        $normalize = static function (string $name): string {
+            $name = mb_strtolower($name);
+            $name = preg_replace('/[.,\'\-]+/u', ' ', $name) ?? $name;
+
+            return trim(preg_replace('/\s+/u', ' ', $name) ?? $name);
+        };
         $name = (string) ($bankDetails['account_name'] ?? '');
         if ($normalize($name) !== $normalize((string) $teacher->name)) {
             throw new RuntimeException('Nama pemilik rekening harus sama dengan nama akun tutor.');

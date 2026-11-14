@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
-use App\Models\Refund;
 use App\Models\TeacherProfile;
+use App\Services\OneTimeCodeService;
 use App\Services\TeacherPayoutService;
-use App\Services\XenditMoneyMovementService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
 use RuntimeException;
@@ -167,13 +167,33 @@ class PayoutOtpVerificationTest extends TestCase
         ];
     }
 
+    public function test_bank_holder_name_tolerates_punctuation_differences(): void
+    {
+        Http::fake(['https://api.xendit.test/*' => Http::response(['id' => 'payout-punct', 'status' => 'PROCESSING'], 202)]);
+        $fixture = $this->earningTeacher();
+        $fixture['teacher']->forceFill(['name' => 'Rina Kartika S.Pd.'])->save();
+        Sanctum::actingAs($fixture['teacher']);
+
+        $code = $this->issueOtp($fixture['teacher']);
+        $details = $this->bankDetails();
+        // A comma difference must not block the save: this is the exact drift
+        // that blocked the demo tutor's payout.
+        $details['account_name'] = 'Rina Kartika, S.Pd.';
+
+        $this->postJson('/api/teacher/payout-requests', [
+            'amount' => 20000,
+            'bank_details' => $details,
+            'verification' => ['otp' => $code],
+        ], ['Idempotency-Key' => 'payout-punctuation'])->assertAccepted();
+    }
+
     private function issueOtp($user): string
     {
         $code = '123456';
         \DB::table('verification_codes')->insert([
             'user_id' => $user->id,
-            'purpose' => \App\Services\OneTimeCodeService::PAYOUT_BANK_CHANGE,
-            'code_hash' => \Illuminate\Support\Facades\Hash::make($code),
+            'purpose' => OneTimeCodeService::PAYOUT_BANK_CHANGE,
+            'code_hash' => Hash::make($code),
             'attempts' => 0,
             'expires_at' => now()->addMinutes(10),
             'sent_at' => now(),

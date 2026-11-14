@@ -15,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
+use RuntimeException;
 use Tests\Support\SessionFinanceFixture;
 use Tests\TestCase;
 
@@ -46,7 +47,7 @@ class PayoutLifecycleTest extends TestCase
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Yogyakarta']);
         TeacherProfile::create([
             'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
-            'account_number' => '1234567890', 'account_name' => $teacher->name,
+            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta',
         ]);
         $payout = Payout::create([
             'user_id' => $teacher->id, 'amount' => 120000, 'period' => 'November 2026', 'total_classes' => 0,
@@ -62,8 +63,8 @@ class PayoutLifecycleTest extends TestCase
             return $request->url() === 'https://api.xendit.test/v3/payouts'
                 && $totals['destination_amount'] === 120000
                 && $totals['destination_currency'] === 'IDR'
+                && $totals['source_currency'] === 'IDR'
                 && ! array_key_exists('source_amount', $totals)
-                && ! array_key_exists('source_currency', $totals)
                 && ! array_key_exists('receipt_notification', $request->data());
         });
         $this->assertDatabaseHas('payouts', ['id' => $payout->id, 'gateway_payout_id' => 'po-payload-1', 'gateway_status' => 'ACCEPTED']);
@@ -75,7 +76,7 @@ class PayoutLifecycleTest extends TestCase
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Yogyakarta']);
         TeacherProfile::create([
             'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
-            'account_number' => '1234567890', 'account_name' => $teacher->name,
+            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta',
         ]);
         $payout = Payout::create([
             'user_id' => $teacher->id, 'amount' => 120000, 'period' => 'November 2026', 'total_classes' => 0,
@@ -101,20 +102,13 @@ class PayoutLifecycleTest extends TestCase
         $this->assertSame('BKU-PAY-'.str_pad((string) $payout->id, 8, '0', STR_PAD_LEFT), (string) $captured);
     }
 
-    public function test_fallback_sends_both_amount_fields_when_gateway_rejects_destination_amount(): void
+    public function test_payout_sends_source_currency_and_a_short_description(): void
     {
-        $calls = 0;
-        Http::fake(function (Request $request) use (&$calls) {
-            $calls++;
-
-            return $calls === 1
-                ? Http::response(['error_code' => 'API_VALIDATION_ERROR', 'message' => 'destination_amount is required'], 422)
-                : Http::response(['payout_id' => 'po-fallback-1', 'status' => 'ACCEPTED']);
-        });
-        $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Yogyakarta']);
+        Http::fake(['https://api.xendit.test/v3/payouts' => Http::response(['payout_id' => 'po-payload', 'status' => 'ACCEPTED'])]);
+        $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Jl. Rungkut Asri Timur No. 14']);
         TeacherProfile::create([
             'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
-            'account_number' => '1234567890', 'account_name' => $teacher->name,
+            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Surabaya',
         ]);
         $payout = Payout::create([
             'user_id' => $teacher->id, 'amount' => 50000, 'period' => 'November 2026', 'total_classes' => 0,
@@ -125,22 +119,60 @@ class PayoutLifecycleTest extends TestCase
         app(XenditMoneyMovementService::class)->createPayout($payout, $teacher->load('teacherProfile'));
 
         Http::assertSent(function (Request $request) {
-            $details = $request->data()['payout_details'] ?? [];
+            $data = $request->data();
+            $details = $data['payout_details'] ?? [];
+            $address = $data['recipient']['address'] ?? [];
 
-            return ($details['source_amount'] ?? null) === 50000 && ($details['destination_amount'] ?? null) === 50000;
+            // Xendit rejects the request without source_currency and city even
+            // though neither appears as required in the published schema.
+            return ($details['source_currency'] ?? null) === 'IDR'
+                && ($details['destination_currency'] ?? null) === 'IDR'
+                && array_key_exists('destination_amount', $details)
+                && ! array_key_exists('source_amount', $details)
+                && ($address['city'] ?? null) === 'Surabaya'
+                && ($address['street_line_1'] ?? null) === 'Jl. Rungkut Asri Timur No. 14'
+                && ($data['description'] ?? null) === 'BimbelKu';
         });
-        $this->assertSame(2, $calls);
+        $this->assertSame(1, Http::recorded()->count(), 'Payout must be sent exactly once, with no amount fallback.');
     }
 
-    public function test_pending_compliance_sets_on_hold_and_keeps_reservation(): void
+    public function test_payout_is_rejected_locally_when_the_city_is_missing(): void
+    {
+        Http::fake();
+        [$teacher] = $this->reservedPayout(30000);
+        $teacher->forceFill(['address' => 'Jl. Rungkut Asri Timur No. 14'])->save();
+        $teacher->teacherProfile->forceFill([
+            'location' => null,
+            'bank_name' => 'Bank Central Asia (BCA)',
+            'payout_channel_code' => 'BCA',
+            'account_number' => '1234567890',
+            'account_name' => $teacher->name,
+        ])->save();
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('kota pada profil tutor');
+
+        try {
+            app(TeacherPayoutService::class)->request($teacher->fresh('teacherProfile'), 30000);
+        } finally {
+            // The city gate must stop the request before it reaches Xendit.
+            Http::assertNothingSent();
+        }
+    }
+
+    public function test_pending_compliance_assessment_sets_on_hold_and_keeps_reservation(): void
     {
         [$teacher, $booking, $payout] = $this->reservedPayout(30000);
         $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
         $baseline = (float) $booking->fresh()->teacher_reserved_amount;
 
-        $this->webhook('v3_payout.pending_compliance', 'hold-event-1', ['payout_id' => 'po-hold', 'status' => 'PENDING_COMPLIANCE']);
+        // The webhook event is v3_payout.pending_compliance, but the status in
+        // the payload is the longer PayoutStatus enum value. Asserting the
+        // short form here was what hid the dead branch.
+        $this->webhook('v3_payout.pending_compliance', 'hold-event-1', ['payout_id' => 'po-hold', 'status' => 'PENDING_COMPLIANCE_ASSESSMENT']);
 
         $this->assertSame('on_hold', $payout->fresh()->status);
+        $this->assertSame('PENDING_COMPLIANCE_ASSESSMENT', $payout->fresh()->gateway_status);
         $this->assertSame($baseline, (float) $booking->fresh()->teacher_reserved_amount);
         $this->assertSame('on_hold', TeacherPayoutRequest::query()->where('payout_id', $payout->id)->value('status'));
         $this->assertDatabaseHas('notifications', ['unique_key' => "payout-on-hold:{$payout->id}"]);
@@ -150,7 +182,7 @@ class PayoutLifecycleTest extends TestCase
     public function test_on_hold_can_still_succeed(): void
     {
         [$teacher, $booking, $payout] = $this->reservedPayout(30000);
-        $this->webhook('v3_payout.pending_compliance', 'hold-event-2', ['payout_id' => 'po-hold-succeed', 'status' => 'PENDING_COMPLIANCE']);
+        $this->webhook('v3_payout.pending_compliance', 'hold-event-2', ['payout_id' => 'po-hold-succeed', 'status' => 'PENDING_COMPLIANCE_ASSESSMENT']);
         $this->assertSame('on_hold', $payout->fresh()->status);
 
         $this->webhook('v3_payout.succeeded', 'success-event-1', ['payout_id' => 'po-hold-succeed', 'status' => 'SUCCEEDED']);
@@ -161,6 +193,87 @@ class PayoutLifecycleTest extends TestCase
         $this->assertSame(30000.0, (float) $booking->teacher_paid_amount);
         $this->assertSame(0.0, (float) $booking->teacher_reserved_amount);
         $this->assertSame(1, FinancialJournal::query()->where('event_key', "payout:{$payout->id}:completed")->count());
+    }
+
+    public function test_compliance_rejected_releases_reservation(): void
+    {
+        [$teacher, $booking, $payout] = $this->reservedPayout(30000);
+
+        // COMPLIANCE_REJECTED is in the lifecycle table but not the OpenAPI
+        // enum; if Xendit ever sends it, the funds must not stay reserved.
+        $this->webhook('v3_payout.rejected', 'rejected-event-1', ['payout_id' => 'po-rejected', 'status' => 'COMPLIANCE_REJECTED']);
+
+        $payout->refresh();
+        $booking->refresh();
+        $this->assertSame('failed', $payout->status);
+        $this->assertSame(0.0, (float) $booking->teacher_reserved_amount);
+        $this->assertSame('ready', $booking->payout_status);
+        $this->assertSame('failed', TeacherPayoutRequest::query()->where('payout_id', $payout->id)->value('status'));
+        $this->assertSame(40000.0, app(TeacherPayoutService::class)->availableAmount($teacher->id));
+        $this->assertDatabaseHas('notifications', ['unique_key' => "payout-failed:{$payout->id}:COMPLIANCE_REJECTED"]);
+    }
+
+    public function test_rejected_status_after_on_hold_releases_reservation(): void
+    {
+        [$teacher, $booking, $payout] = $this->reservedPayout(30000);
+        $this->webhook('v3_payout.pending_compliance', 'hold-event-3', ['payout_id' => 'po-hold-reject', 'status' => 'PENDING_COMPLIANCE_ASSESSMENT']);
+        $this->assertSame('on_hold', $payout->fresh()->status);
+
+        $this->webhook('v3_payout.rejected', 'rejected-event-2', ['payout_id' => 'po-hold-reject', 'status' => 'REJECTED']);
+
+        $payout->refresh();
+        $booking->refresh();
+        $this->assertSame('failed', $payout->status);
+        $this->assertSame(0.0, (float) $booking->teacher_reserved_amount);
+        $this->assertSame(40000.0, app(TeacherPayoutService::class)->availableAmount($teacher->id));
+    }
+
+    public function test_single_word_name_omits_surname(): void
+    {
+        Http::fake(['https://api.xendit.test/v3/payouts' => Http::response(['payout_id' => 'po-name', 'status' => 'ACCEPTED'])]);
+        $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Yogyakarta', 'name' => 'Rina']);
+        TeacherProfile::create([
+            'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
+            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta',
+        ]);
+        $payout = Payout::create([
+            'user_id' => $teacher->id, 'amount' => 120000, 'period' => 'November 2026', 'total_classes' => 0,
+            'status' => 'processing', 'payment_provider' => 'xendit', 'account_number' => '1234567890',
+            'account_name' => $teacher->name, 'bank_name' => 'BCA', 'payout_channel_code' => 'BCA', 'booking_ids' => [],
+        ]);
+
+        app(XenditMoneyMovementService::class)->createPayout($payout, $teacher->load('teacherProfile'));
+
+        Http::assertSent(function (Request $request) {
+            $recipient = $request->data()['recipient'] ?? [];
+
+            return $recipient['given_name'] === 'Rina'
+                && ! array_key_exists('surname', $recipient);
+        });
+    }
+
+    public function test_two_word_name_sends_surname(): void
+    {
+        Http::fake(['https://api.xendit.test/v3/payouts' => Http::response(['payout_id' => 'po-name-2', 'status' => 'ACCEPTED'])]);
+        $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Yogyakarta', 'name' => 'Rina Matematika']);
+        TeacherProfile::create([
+            'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
+            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta',
+        ]);
+        $payout = Payout::create([
+            'user_id' => $teacher->id, 'amount' => 120000, 'period' => 'November 2026', 'total_classes' => 0,
+            'status' => 'processing', 'payment_provider' => 'xendit', 'account_number' => '1234567890',
+            'account_name' => $teacher->name, 'bank_name' => 'BCA', 'payout_channel_code' => 'BCA', 'booking_ids' => [],
+        ]);
+
+        app(XenditMoneyMovementService::class)->createPayout($payout, $teacher->load('teacherProfile'));
+
+        Http::assertSent(function (Request $request) {
+            $recipient = $request->data()['recipient'] ?? [];
+
+            return $recipient['given_name'] === 'Rina'
+                && $recipient['surname'] === 'Matematika';
+        });
     }
 
     public function test_reversed_after_completed_reverts_allocation_and_books_journal(): void
@@ -278,6 +391,11 @@ class PayoutLifecycleTest extends TestCase
             ->assertOk()
             ->assertJsonPath('status', 'processing')
             ->assertJsonPath('gateway_status', 'ACCEPTED');
+
+        // A faked response ignores headers, so assert the header explicitly:
+        // without api-version the live GET returns 400 and reconcile always fails.
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://api.xendit.test/v3/payouts/po-manual'
+            && $request->hasHeader('api-version', '2025-09-01'));
 
         $payout->refresh();
         $this->assertSame('processing', $payout->status);

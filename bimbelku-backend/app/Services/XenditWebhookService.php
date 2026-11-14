@@ -35,7 +35,9 @@ class XenditWebhookService
 
     private function handleRefund(string $eventType, string $eventId, array $payload, array $data): void
     {
-        $id = Arr::get($data, 'id');
+        // v3 refund payloads use `refund_id`; `id` is the legacy field name and
+        // is kept so older queued events still match.
+        $id = Arr::get($data, 'refund_id') ?? Arr::get($data, 'id');
         $reference = Arr::get($data, 'reference_id');
         $valid = $this->validIdentity($id) && $this->validIdentity($reference) && (filled($id) || filled($reference));
         $refund = $valid ? Refund::query()
@@ -68,7 +70,7 @@ class XenditWebhookService
             $status = strtoupper((string) (Arr::get($data, 'status') ?: Str::afterLast($eventType, '.')));
             $refund->forceFill([
                 'payment_provider' => 'xendit',
-                'gateway_refund_id' => Arr::get($data, 'id') ?: $refund->gateway_refund_id,
+                'gateway_refund_id' => Arr::get($data, 'refund_id') ?: Arr::get($data, 'id') ?: $refund->gateway_refund_id,
                 'gateway_status' => $status,
                 'gateway_failure_code' => Arr::get($data, 'failure_code'),
                 'gateway_failure_message' => Arr::get($data, 'failure_message') ?: Arr::get($data, 'message'),
