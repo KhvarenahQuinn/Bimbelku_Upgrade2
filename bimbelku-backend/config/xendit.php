@@ -13,4 +13,6 @@ return [
     'cancel_url' => env('XENDIT_CANCEL_URL', rtrim((string) env('FRONTEND_URL'), '/').'/payment?gateway=cancelled'),
     'session_ttl_minutes' => PaymentWindow::MINUTES,
     'payout_api_version' => env('XENDIT_PAYOUT_API_VERSION', '2025-09-01'),
+    // Payments API v3 refunds only accept this single api-version value.
+    'refund_api_version' => env('XENDIT_REFUND_API_VERSION', '2024-11-11'),
 ];

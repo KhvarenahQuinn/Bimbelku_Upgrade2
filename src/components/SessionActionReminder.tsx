@@ -249,7 +249,7 @@ export default function SessionActionReminder() {
     }
   })();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     if (!localStorage.getItem("token") || !["student", "teacher", "admin"].includes(role)) {
       setAction(null);
       setPendingCount(0);
@@ -258,9 +258,12 @@ export default function SessionActionReminder() {
     }
 
     try {
+      // maxAgeMs sudah meredam polling 8 detik. `force` hanya dipakai saat aksi
+      // sesi baru selesai, supaya mount + focus + data-changed tidak
+      // menghasilkan tiga request beruntun.
       const response = await getCached<SessionActionResponse>("/session-action/next", {
         maxAgeMs: 5_000,
-        force: true,
+        force,
       });
       const rawNext = response.data?.data || null;
       const next = rawNext && acknowledgeOnOpen.has(rawNext.kind)
@@ -285,8 +288,20 @@ export default function SessionActionReminder() {
 
   useEffect(() => {
     void load();
-    const onDataChanged = () => void load();
-    const onFocus = () => void load();
+    // Fokus jendela dan event data sering datang beruntun; debounce supaya
+    // satu burst hanya menghasilkan satu request.
+    let debounceTimer: number | null = null;
+    const refresh = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => void load(), 250);
+    };
+    // Aksi sesi yang baru selesai harus langsung terlihat, bukan menunggu cache.
+    const onDataChanged = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = null;
+      void load(true);
+    };
+    const onFocus = () => refresh();
     window.addEventListener("bimbelku:data-changed", onDataChanged);
     window.addEventListener("focus", onFocus);
     const timer = window.setInterval(() => {
@@ -296,6 +311,7 @@ export default function SessionActionReminder() {
       window.removeEventListener("bimbelku:data-changed", onDataChanged);
       window.removeEventListener("focus", onFocus);
       window.clearInterval(timer);
+      if (debounceTimer) window.clearTimeout(debounceTimer);
     };
   }, [load]);
 

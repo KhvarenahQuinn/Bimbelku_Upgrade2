@@ -130,6 +130,7 @@ class TeacherController extends Controller
             'name' => ['nullable', 'string', 'max:255', 'regex:/\pL/u', 'not_regex:/\d/u'],
             'title' => ['nullable', 'string', 'max:150'],
             'location' => ['nullable', 'string', 'max:255', 'regex:/\pL/u'],
+            'address' => ['nullable', 'string', 'max:500'],
             'experience' => ['nullable', 'string', 'max:255'],
             'bio' => ['nullable', 'string', 'max:3000'],
             'whatsapp_number' => ['required', 'string', 'max:16', 'regex:/^\+?[0-9]{8,15}$/'],
@@ -301,6 +302,12 @@ class TeacherController extends Controller
                     $lockedUser->name = $request->name;
                 }
                 $lockedUser->phone = trim((string) $request->whatsapp_number);
+                // Required by payout: Xendit needs a real street line for the
+                // transfer recipient. Intentionally not part of the
+                // re-verification trigger list, since it is not public identity.
+                if ($request->has('address')) {
+                    $lockedUser->address = filled($request->address) ? trim((string) $request->address) : null;
+                }
                 if (isset($newFiles['profile_cover'])) {
                     $lockedUser->profile_cover = $newFiles['profile_cover'][1];
                     $lockedUser->profile_cover_use_default = false;

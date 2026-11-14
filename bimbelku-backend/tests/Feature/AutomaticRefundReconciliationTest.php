@@ -26,8 +26,8 @@ class AutomaticRefundReconciliationTest extends TestCase
     public function test_admin_refund_list_settles_a_succeeded_gateway_refund_without_manual_action(): void
     {
         Http::fake([
-            'https://api.xendit.test/refunds/rfd-auto-admin' => Http::response([
-                'id' => 'rfd-auto-admin',
+            'https://api.xendit.test/v3/refunds/rfd-auto-admin' => Http::response([
+                'refund_id' => 'rfd-auto-admin',
                 'status' => 'SUCCEEDED',
             ]),
         ]);
@@ -49,8 +49,8 @@ class AutomaticRefundReconciliationTest extends TestCase
     public function test_student_order_history_settles_a_succeeded_gateway_refund_without_admin_action(): void
     {
         Http::fake([
-            'https://api.xendit.test/refunds/rfd-auto-student' => Http::response([
-                'id' => 'rfd-auto-student',
+            'https://api.xendit.test/v3/refunds/rfd-auto-student' => Http::response([
+                'refund_id' => 'rfd-auto-student',
                 'status' => 'SUCCEEDED',
             ]),
         ]);
@@ -69,8 +69,8 @@ class AutomaticRefundReconciliationTest extends TestCase
     public function test_admin_refund_list_settles_on_the_next_poll_instead_of_waiting_a_minute(): void
     {
         Http::fake([
-            'https://api.xendit.test/refunds/rfd-auto-fast' => Http::response([
-                'id' => 'rfd-auto-fast',
+            'https://api.xendit.test/v3/refunds/rfd-auto-fast' => Http::response([
+                'refund_id' => 'rfd-auto-fast',
                 'status' => 'SUCCEEDED',
             ]),
         ]);
@@ -91,8 +91,8 @@ class AutomaticRefundReconciliationTest extends TestCase
     public function test_admin_refund_list_retries_a_refund_that_never_reached_the_gateway(): void
     {
         Http::fake([
-            'https://api.xendit.test/refunds' => Http::response([
-                'id' => 'rfd-auto-retry',
+            'https://api.xendit.test/v3/refunds' => Http::response([
+                'refund_id' => 'rfd-auto-retry',
                 'status' => 'SUCCEEDED',
             ]),
         ]);
@@ -121,7 +121,7 @@ class AutomaticRefundReconciliationTest extends TestCase
             'order_id' => $code,
             'amount' => 150000,
             'status' => 'refund_pending',
-            'gateway_payment_request_id' => 'pr-'.$code,
+            'gateway_payment_request_id' => 'pr-'.$code, 'gateway_payment_id' => 'py-'.$code,
         ]);
         $order->forceFill(['payment_provider' => 'xendit'])->save();
 

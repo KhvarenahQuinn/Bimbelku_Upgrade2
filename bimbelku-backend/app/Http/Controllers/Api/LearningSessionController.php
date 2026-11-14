@@ -151,6 +151,84 @@ class LearningSessionController extends Controller
         return response()->json(['data' => $payload]);
     }
 
+    /**
+     * Lean, read-only delta feed for the chat poller.
+     *
+     * This endpoint deliberately does not mark anything as read, does not
+     * generate system messages, and does not hydrate the session payload.
+     * Read receipts belong to POST /conversations/{booking}/read so that an
+     * idle or background tab can never clear the unread badge.
+     */
+    public function conversationMessages(Request $request, Booking $booking)
+    {
+        $validated = $request->validate([
+            'after_id' => ['nullable', 'integer', 'min:0'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+        $viewer = $request->user();
+        $role = $this->sessionRole($viewer, $booking);
+        $this->ensurePaidAccess($viewer, $booking, $role);
+        abort_unless(in_array($role, ['student', 'teacher'], true), 403);
+
+        $conversationBookings = $this->relatedConversationBookings($viewer, $booking);
+        $bookingIds = $conversationBookings->pluck('id');
+        $limit = (int) ($validated['limit'] ?? 50);
+        $after = (int) ($validated['after_id'] ?? 0);
+
+        // A cursor that does not belong to this conversation (foreign, forged,
+        // or from another thread) restarts at the beginning of the window
+        // instead of filtering out every message.
+        if ($after > 0 && ! ClassroomMessage::query()
+            ->whereIn('booking_id', $bookingIds)
+            ->whereKey($after)
+            ->exists()) {
+            $after = 0;
+        }
+
+        $messages = ClassroomMessage::query()
+            ->whereIn('booking_id', $bookingIds)
+            ->with(['sender:id,name,role', 'reads'])
+            ->when($after > 0, fn ($query) => $query->where('id', '>', $after))
+            ->orderBy('id')
+            ->limit($limit)
+            ->get();
+
+        $lastId = (int) ($messages->last()->id ?? $after);
+        $hasMore = $messages->count() === $limit && ClassroomMessage::query()
+            ->whereIn('booking_id', $bookingIds)
+            ->where('id', '>', $lastId)
+            ->exists();
+
+        return response()->json([
+            'data' => $messages
+                ->map(fn (ClassroomMessage $message) => $this->messagePayload($message, (int) $viewer->id, $role))
+                ->values(),
+            'meta' => [
+                'last_id' => $lastId,
+                'has_more' => $hasMore,
+            ],
+        ]);
+    }
+
+    public function markConversationReadExplicit(Request $request, Booking $booking)
+    {
+        $validated = $request->validate([
+            'through_id' => ['required', 'integer', 'min:1'],
+        ]);
+        $viewer = $request->user();
+        $role = $this->sessionRole($viewer, $booking);
+        $this->ensurePaidAccess($viewer, $booking, $role);
+        abort_unless(in_array($role, ['student', 'teacher'], true), 403);
+
+        $conversationBookings = $this->relatedConversationBookings($viewer, $booking);
+        $this->markConversationBookingsRead($conversationBookings, $viewer, 0, (int) $validated['through_id']);
+
+        return response()->json([
+            'message' => 'Pesan ditandai terbaca.',
+            'data' => ['through_id' => (int) $validated['through_id']],
+        ]);
+    }
+
     public function destroyConversation(Request $request, Booking $booking)
     {
         $role = $this->sessionRole($request->user(), $booking);
@@ -252,6 +330,14 @@ class LearningSessionController extends Controller
         ]);
     }
 
+    /**
+     * Full session payload, including the first window of chat messages.
+     *
+     * This is an opening view, not a polling endpoint: it loads the whole
+     * session and marks messages read. Periodic refresh must use
+     * GET /conversations/{booking}/messages (read-only delta) plus an
+     * explicit POST /conversations/{booking}/read.
+     */
     public function show(Request $request, Booking $booking)
     {
         $role = $this->sessionRole($request->user(), $booking);
@@ -1415,10 +1501,10 @@ class LearningSessionController extends Controller
         ];
     }
 
-    private function markConversationBookingsRead($bookings, User $viewer, int $afterMessageId = 0): void
+    private function markConversationBookingsRead($bookings, User $viewer, int $afterMessageId = 0, ?int $throughMessageId = null): void
     {
         foreach ($bookings as $booking) {
-            $this->markConversationRead($booking, $viewer, $afterMessageId);
+            $this->markConversationRead($booking, $viewer, $afterMessageId, $throughMessageId);
         }
     }
 
@@ -1426,9 +1512,11 @@ class LearningSessionController extends Controller
         Booking $booking,
         User $viewer,
         int $afterMessageId = 0,
+        ?int $throughMessageId = null,
     ): void {
         $booking->classroomMessages()
             ->when($afterMessageId > 0, fn ($messages) => $messages->where('id', '>', $afterMessageId))
+            ->when($throughMessageId !== null, fn ($messages) => $messages->where('id', '<=', $throughMessageId))
             ->where(function ($messages) use ($viewer) {
                 $messages->where('sender_id', '!=', $viewer->id)
                     ->orWhere('message_type', 'system');

@@ -60,6 +60,11 @@ type ChatData = {
   permissions: { can_chat: boolean };
 };
 
+type DeltaResponse = {
+  data: Message[];
+  meta: { last_id: number; has_more: boolean };
+};
+
 type PendingMessage = {
   token: string;
   body: string;
@@ -107,17 +112,27 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
   const [listError, setListError] = useState(false);
   const [chatError, setChatError] = useState(false);
   const [sending, setSending] = useState(false);
+  const [newMessagesCount, setNewMessagesCount] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const conversationRequestRef = useRef(0);
   const chatRequestRef = useRef(0);
+  const lastMessageIdRef = useRef(0);
+  const readThroughRef = useRef(0);
+  const markReadTimerRef = useRef<number | null>(null);
   const handleMessageScroll = () => {
     const container = messageListRef.current;
     if (!container) return;
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const wasAtBottom = stickToBottomRef.current;
     stickToBottomRef.current = distanceFromBottom <= 80;
+    if (stickToBottomRef.current) {
+      if (newMessagesCount > 0) setNewMessagesCount(0);
+      if (!wasAtBottom) scheduleReadRef.current?.();
+    }
   };
+  const scheduleReadRef = useRef<(() => void) | null>(null);
 
   const loadConversations = useCallback(async (quiet = false) => {
     const requestId = ++conversationRequestRef.current;
@@ -128,19 +143,14 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
       if (requestId !== conversationRequestRef.current) return;
       const items = Array.isArray(response.data.data) ? response.data.data : [];
       setConversations(items);
-      if (requestedBooking && items.some((item) => item.booking_id === requestedBooking)) {
-        setSelectedId(requestedBooking);
-      }
     } catch (error) {
       if (requestId !== conversationRequestRef.current) return;
-      if (!quiet) {
-        setListError(true);
-        notify.error(getApiError(error, "Daftar percakapan gagal dimuat."));
-      }
+      setListError(true);
+      if (!quiet) notify.error(getApiError(error, "Daftar percakapan gagal dimuat."));
     } finally {
       if (requestId === conversationRequestRef.current) setListLoading(false);
     }
-  }, [requestedBooking]);
+  }, []);
 
   const loadChat = useCallback(async (bookingId: number, quiet = false) => {
     const requestId = ++chatRequestRef.current;
@@ -153,6 +163,8 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
         throw new Error("Payload percakapan tidak lengkap.");
       }
       setChat(response.data);
+      lastMessageIdRef.current = response.data.messages.reduce((max, item) => Math.max(max, item.id), 0);
+      setNewMessagesCount(0);
       setConversations((current) => current.map((item) => item.booking_id === bookingId
         ? { ...item, unread_count: 0 }
         : item));
@@ -167,23 +179,117 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
     }
   }, []);
 
-  useEffect(() => { void loadConversations(); }, [loadConversations]);
+  // Delta feed: only new rows since the last known id. Read-only on the server,
+  // so polling never clears the unread badge on its own.
+  const pollMessages = useCallback(async (bookingId: number) => {
+    const requestId = chatRequestRef.current;
+    let after = lastMessageIdRef.current;
+    try {
+      for (let page = 0; page < 5; page++) {
+        const response = await http.get<DeltaResponse>(`/conversations/${bookingId}/messages`, {
+          params: { after_id: after, limit: 50 },
+        });
+        if (requestId !== chatRequestRef.current) return;
+        const incoming = Array.isArray(response.data?.data) ? response.data.data : [];
+        if (incoming.length === 0) return;
+        const atBottom = stickToBottomRef.current;
+        setChat((current) => {
+          if (!current) return current;
+          const seen = new Set(current.messages.map((item) => item.id));
+          const added = incoming.filter((item) => !seen.has(item.id));
+          return added.length === 0 ? current : { ...current, messages: [...current.messages, ...added] };
+        });
+        after = response.data.meta.last_id;
+        lastMessageIdRef.current = Math.max(lastMessageIdRef.current, after);
+        if (!atBottom) setNewMessagesCount((count) => count + incoming.length);
+        if (!response.data.meta.has_more) break;
+      }
+    } catch {
+      // A transient poll failure must not surface a toast on every tick.
+    }
+  }, []);
+
+  const flushRead = useCallback(async () => {
+    const bookingId = selectedId;
+    if (!bookingId) return;
+    if (document.visibilityState !== "visible" || !document.hasFocus() || !stickToBottomRef.current) return;
+    const through = lastMessageIdRef.current;
+    if (through <= readThroughRef.current) return;
+    readThroughRef.current = through;
+    try {
+      await http.post(`/conversations/${bookingId}/read`, { through_id: through });
+      setChat((current) => current && {
+        ...current,
+        messages: current.messages.map((item) => item.id <= through ? { ...item, is_read: true } : item),
+      });
+      setConversations((current) => current.map((item) => item.booking_id === bookingId
+        ? { ...item, unread_count: 0 }
+        : item));
+    } catch {
+      // The next focus/scroll pass retries the same receipt.
+      readThroughRef.current = 0;
+    }
+  }, [selectedId]);
+
+  const scheduleRead = useCallback(() => {
+    if (markReadTimerRef.current) window.clearTimeout(markReadTimerRef.current);
+    markReadTimerRef.current = window.setTimeout(() => void flushRead(), 1000);
+  }, [flushRead]);
+
+  useEffect(() => {
+    void loadConversations();
+  }, [loadConversations]);
+
+  useEffect(() => {
+    if (selectedId) return;
+    if (!requestedBooking) return;
+    if (!conversations.some((item) => item.booking_id === requestedBooking)) return;
+    setSelectedId(requestedBooking);
+  }, [conversations, requestedBooking, selectedId]);
+
   useEffect(() => {
     if (!selectedId) {
       chatRequestRef.current += 1;
       stickToBottomRef.current = true;
+      lastMessageIdRef.current = 0;
+      readThroughRef.current = 0;
+      setNewMessagesCount(0);
       setChat(null);
       return;
     }
-    void loadChat(selectedId);
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void loadChat(selectedId, true);
-        void loadConversations(true);
-      }
-    }, 15000);
-    return () => window.clearInterval(timer);
-  }, [selectedId, loadChat, loadConversations]);
+    lastMessageIdRef.current = 0;
+    readThroughRef.current = 0;
+    setNewMessagesCount(0);
+    scheduleReadRef.current = scheduleRead;
+    void loadChat(selectedId).then(() => scheduleRead());
+    // Messages poll fast and cheap; the conversation list is heavier because
+    // the server generates system messages while listing, so it stays slow.
+    const messageTimer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void pollMessages(selectedId);
+    }, 5000);
+    const listTimer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadConversations(true);
+    }, 30000);
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      void pollMessages(selectedId);
+      scheduleRead();
+    };
+    const onFocus = () => scheduleRead();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(messageTimer);
+      window.clearInterval(listTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [selectedId, loadChat, loadConversations, pollMessages, scheduleRead]);
+
+  useEffect(() => () => {
+    if (markReadTimerRef.current) window.clearTimeout(markReadTimerRef.current);
+  }, []);
+
   useEffect(() => {
     if (stickToBottomRef.current) {
       endRef.current?.scrollIntoView({ block: "end" });
@@ -237,10 +343,20 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
     if (outgoing.file) payload.append("attachment", outgoing.file);
     payload.append("client_token", outgoing.token);
     try {
-      await http.post(`/bookings/${selectedId}/messages`, payload);
+      const response = await http.post<{ data?: Message }>(`/bookings/${selectedId}/messages`, payload);
       setBody("");
       setFile(null);
-      await Promise.all([loadChat(selectedId, true), loadConversations(true)]);
+      const sent = response.data?.data;
+      if (sent) {
+        // Append the server copy immediately so the bubble appears without
+        // waiting for the next delta tick; the poll dedupes by id.
+        setChat((current) => {
+          if (!current || current.messages.some((item) => item.id === sent.id)) return current;
+          return { ...current, messages: [...current.messages, sent] };
+        });
+        lastMessageIdRef.current = Math.max(lastMessageIdRef.current, sent.id);
+      }
+      await Promise.all([pollMessages(selectedId), loadConversations(true)]);
     } catch (error) {
       setPending(outgoing);
       notify.error(getApiError(error, "Pesan gagal dikirim. Data tetap disimpan untuk dicoba ulang."));
@@ -319,6 +435,23 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
                 ))}
                 <div ref={endRef} />
               </div>
+
+              {newMessagesCount > 0 && (
+                <div className="relative h-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      stickToBottomRef.current = true;
+                      setNewMessagesCount(0);
+                      endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+                      scheduleRead();
+                    }}
+                    className="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-indigo-600 px-4 py-2 text-xs font-black text-white shadow-lg shadow-indigo-200"
+                  >
+                    {newMessagesCount} pesan baru
+                  </button>
+                </div>
+              )}
 
               <form onSubmit={(event) => void send(event)} className="border-t border-slate-200 bg-white p-3 sm:p-4">
                 {file && <div className="mb-2 flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 p-2.5 text-xs text-indigo-800"><Paperclip size={15} /><span className="min-w-0 flex-1 truncate font-bold">{file.name}</span><button type="button" onClick={() => setFile(null)} aria-label="Hapus lampiran"><X size={15} /></button></div>}

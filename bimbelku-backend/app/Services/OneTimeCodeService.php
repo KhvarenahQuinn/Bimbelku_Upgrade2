@@ -34,7 +34,7 @@ class OneTimeCodeService
             default => 'Reset PIN Pembayaran BimbelKu',
         };
         try {
-            Mail::send('emails.verification_code', [
+            Mail::send(['emails.verification_code', 'emails.verification_code_text'], [
                 'name' => $user->name, 'code' => $code, 'purpose' => $purpose,
                 'expiresMinutes' => self::EXPIRES_MINUTES,
             ], fn ($message) => $message->to($user->email)->subject($title));

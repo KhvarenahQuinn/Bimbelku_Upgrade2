@@ -873,6 +873,7 @@ class AdminController extends Controller
                 'status' => match ($p->status) {
                     'completed' => 'Berhasil',
                     'processing' => 'Sedang diproses',
+                    'on_hold' => 'Menunggu dokumen Xendit',
                     'reversed' => 'Dikembalikan bank',
                     default => 'Gagal',
                 },
@@ -881,7 +882,7 @@ class AdminController extends Controller
 
         $pending = Payout::query()
             ->with('user:id,name')
-            ->where('status', 'processing')
+            ->whereIn('status', ['processing', 'on_hold'])
             ->latest()
             ->limit(200)
             ->get()
@@ -894,8 +895,10 @@ class AdminController extends Controller
                 'netAmount' => (float) $payout->amount,
                 'requestedAmount' => (float) ($payout->requested_amount ?? $payout->amount),
                 'taxAmount' => (float) ($payout->tax_amount ?? 0),
-                'status' => 'Sedang diproses',
+                'status' => $payout->status === 'on_hold' ? 'Menunggu dokumen Xendit' : 'Sedang diproses',
+                'statusKey' => $payout->status,
                 'gatewayStatus' => $payout->gateway_status,
+                'gatewayLastCheckedAt' => $payout->gateway_last_checked_at,
                 'createdAt' => $payout->created_at,
             ]);
 

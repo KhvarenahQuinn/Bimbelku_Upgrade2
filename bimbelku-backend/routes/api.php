@@ -135,6 +135,10 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
         ->middleware('throttle:session-action-poll');
     Route::get('/payment-settings/qris', [AdminController::class, 'qrisImage']);
     Route::get('/conversations', [LearningSessionController::class, 'conversations']);
+    Route::get('/conversations/{booking}/messages', [LearningSessionController::class, 'conversationMessages'])
+        ->middleware('throttle:conversation-messages-poll');
+    Route::post('/conversations/{booking}/read', [LearningSessionController::class, 'markConversationReadExplicit'])
+        ->middleware('throttle:conversation-messages-poll');
     Route::delete('/conversations/{booking}', [LearningSessionController::class, 'destroyConversation']);
     Route::post('/bookings/{booking}/messages', [LearningSessionController::class, 'storeMessage'])
         ->middleware('throttle:booking-message-send');
@@ -349,6 +353,8 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
             ->middleware(['idempotency', 'finance.audit:payment_verification']);
 
         Route::get('/finance', [AdminController::class, 'getFinanceData']);
+        Route::post('/finance/payouts/{payout}/reconcile', [AdminFinanceOperationsController::class, 'reconcilePayout'])
+            ->middleware(['throttle:admin-payout-reconcile', 'finance.audit:payout_reconcile']);
 
         Route::get('/commission-setting', [AdminController::class, 'getCommissionSetting']);
         Route::post('/commission-setting', [AdminController::class, 'updateCommissionSetting'])

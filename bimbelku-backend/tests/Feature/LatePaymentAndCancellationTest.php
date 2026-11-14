@@ -213,15 +213,16 @@ class LatePaymentAndCancellationTest extends TestCase
         Http::fake([
             '*/sessions/*' => Http::response(['status' => 'COMPLETED', 'amount' => 50000,
                 'payment_id' => 'pay-recovered', 'payment_request_id' => 'pr-recovered']),
-            '*/refunds' => Http::response(['id' => 'rfd-recovered', 'status' => 'SUCCEEDED']),
+            '*/refunds' => Http::response(['refund_id' => 'rfd-recovered', 'status' => 'SUCCEEDED']),
         ]);
         $this->postJson('/api/webhooks/xendit', ['id' => 'missing-payment-request', 'event' => 'payment_session.completed',
             'data' => ['payment_session_id' => $order->gateway_session_id, 'status' => 'COMPLETED', 'amount' => 50000]],
             ['x-callback-token' => 'test'])->assertOk();
         $this->assertSame('refunded', $order->fresh()->status);
         $this->assertSame('pr-recovered', $order->fresh()->gateway_payment_request_id);
-        Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/refunds')
-            && $request['payment_request_id'] === 'pr-recovered');
+        Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v3/refunds')
+            && $request->hasHeader('api-version', '2024-11-11')
+            && $request['payment_id'] === 'pay-recovered');
     }
 
     public function test_other_user_cannot_cancel_or_close_checkout(): void

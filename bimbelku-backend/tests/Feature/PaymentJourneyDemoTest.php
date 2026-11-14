@@ -350,8 +350,8 @@ class PaymentJourneyDemoTest extends TestCase
             'gateway_payment_request_id' => 'pr-demo-refund-original',
             'external_received_amount' => $order->amount,
         ])->save();
-        Http::fake(['https://api.xendit.test/refunds' => Http::response([
-            'id' => 'rfd-demo-replacement', 'status' => 'SUCCEEDED',
+        Http::fake(['https://api.xendit.test/v3/refunds' => Http::response([
+            'refund_id' => 'rfd-demo-replacement', 'status' => 'SUCCEEDED',
         ])]);
 
         Sanctum::actingAs($student);

@@ -311,7 +311,7 @@ export default function TeacherLayout({ children, title, lockContentScroll = fal
         </header>
 
         <div className={`mobile-app-content min-h-0 flex-1 basis-0 overflow-x-hidden scroll-smooth p-4 pb-[calc(7.25rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-24 xl:p-10 xl:pb-10 ${lockContentScroll ? "overflow-y-hidden" : "overflow-y-auto"}`}>
-          <div className={`mx-auto w-full min-w-0 max-w-7xl ${lockContentScroll ? "flex h-full min-h-0 flex-col" : "pb-20 sm:pb-24 xl:pb-16"}`}>{children}</div>
+          <div className={`mx-auto w-full min-w-0 max-w-7xl ${lockContentScroll ? "flex h-full min-h-0 flex-col" : ""}`}>{children}</div>
         </div>
         {!isDesktop && !sidebarOpen && (
           <Suspense fallback={null}>

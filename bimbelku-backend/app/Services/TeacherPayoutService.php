@@ -11,6 +11,7 @@ use App\Models\TeacherProfile;
 use App\Models\User;
 use App\Support\XenditPayoutChannelCatalog;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
 
@@ -77,6 +78,11 @@ class TeacherPayoutService
         }
         if (blank($teacher->address)) {
             throw new RuntimeException('Lengkapi alamat asli pada profil tutor sebelum menarik saldo. Data ini diperlukan untuk transfer bank.');
+        }
+        // Xendit requires a city alongside the street line; `location` is the
+        // only field validated as a place name, unlike the free-text address.
+        if (blank($profile?->location)) {
+            throw new RuntimeException('Lengkapi kota pada profil tutor sebelum menarik saldo.');
         }
         if (! $hasNewBankDetails && $profile->payout_hold_until?->isFuture()) {
             throw new RuntimeException('Pencairan ditahan sampai '.$profile->payout_hold_until->translatedFormat('d M Y, H:i').' WIB setelah perubahan rekening.');
@@ -207,6 +213,9 @@ class TeacherPayoutService
                 'account_name' => $profile->account_name,
                 'payout_channel_code' => $channelCode,
             ]);
+            // Fix the gateway reference at creation so every retry reuses the
+            // same idempotency key instead of deriving a new one.
+            $payout->forceFill(['gateway_reference_id' => $this->gateway->payoutReference($payout)])->save();
             $payoutRequest->update(['payout_id' => $payout->id]);
 
             Notification::updateOrCreate(['unique_key' => "payout-processing:{$payout->id}"], [
@@ -322,7 +331,15 @@ class TeacherPayoutService
 
     private function assertBankNameMatches(User $teacher, array $bankDetails): void
     {
-        $normalize = static fn (string $name): string => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $name) ?? $name));
+        // Compare names ignoring punctuation: "Rina Kartika, S.Pd." and
+        // "Rina Kartika S.Pd." are the same person, and a comma difference must
+        // not block a legitimate bank-details save.
+        $normalize = static function (string $name): string {
+            $name = mb_strtolower($name);
+            $name = preg_replace('/[.,\'\-]+/u', ' ', $name) ?? $name;
+
+            return trim(preg_replace('/\s+/u', ' ', $name) ?? $name);
+        };
         $name = (string) ($bankDetails['account_name'] ?? '');
         if ($normalize($name) !== $normalize((string) $teacher->name)) {
             throw new RuntimeException('Nama pemilik rekening harus sama dengan nama akun tutor.');
@@ -367,7 +384,8 @@ class TeacherPayoutService
     {
         DB::transaction(function () use ($payout) {
             $locked = Payout::query()->lockForUpdate()->findOrFail($payout->id);
-            if (in_array($locked->status, ['completed', 'failed'], true)) {
+            // `reversed` is terminal; `on_hold` may still settle.
+            if (in_array($locked->status, ['completed', 'failed', 'reversed'], true)) {
                 return;
             }
             $allocations = $locked->allocation_breakdown ?: collect($locked->booking_ids ?? [])->map(fn ($id) => ['booking_id' => $id, 'amount' => null])->all();
@@ -399,7 +417,7 @@ class TeacherPayoutService
     {
         DB::transaction(function () use ($payout, $reason) {
             $locked = Payout::query()->lockForUpdate()->findOrFail($payout->id);
-            if (in_array($locked->status, ['completed', 'failed'], true)) {
+            if (in_array($locked->status, ['completed', 'failed', 'reversed'], true)) {
                 return;
             }
             $allocations = $locked->allocation_breakdown ?: collect($locked->booking_ids ?? [])->map(fn ($id) => ['booking_id' => $id, 'amount' => null])->all();
@@ -417,6 +435,8 @@ class TeacherPayoutService
                     'payout_request_id' => null,
                 ])->save();
             }
+            // Writing status='failed' is safe here: the guard above only lets
+            // non-terminal statuses (processing / on_hold) reach this point.
             $locked->forceFill([
                 'status' => 'failed',
                 'gateway_status' => $locked->gateway_status ?: 'FAILED',
@@ -427,5 +447,49 @@ class TeacherPayoutService
                 'status' => 'failed', 'processed_at' => now(), 'review_notes' => $reason,
             ]);
         }, 3);
+    }
+
+    /**
+     * Undo the `reserved -> paid` move made by complete() when the bank later
+     * returns the transfer. Must run inside the caller's transaction and
+     * before release(), because the funds return to the reservation first and
+     * then travel back to the available balance.
+     *
+     * The reversed amount comes from the allocation stored on the payout, not
+     * from the current teacher_net_amount which may have changed after a
+     * session refund.
+     */
+    public function revertCompletedAllocation(Payout $payout): void
+    {
+        $allocations = $payout->allocation_breakdown ?: collect($payout->booking_ids ?? [])->map(fn ($id) => ['booking_id' => $id, 'amount' => null])->all();
+        foreach ($allocations as $allocation) {
+            $booking = Booking::query()->lockForUpdate()->find($allocation['booking_id'] ?? 0);
+            if (! $booking) {
+                continue;
+            }
+            $amount = $allocation['amount'] === null
+                ? (float) $booking->teacher_paid_amount
+                : (float) $allocation['amount'];
+            $paidBefore = (float) $booking->teacher_paid_amount;
+            $paid = round(max(0, $paidBefore - $amount), 2);
+            if ($paidBefore - $amount < -0.009) {
+                Log::warning('Payout reversal clamped teacher_paid_amount', [
+                    'payout_id' => $payout->id,
+                    'booking_id' => $booking->id,
+                    'paid_before' => $paidBefore,
+                    'reversal_amount' => $amount,
+                ]);
+            }
+            $reserved = round((float) $booking->teacher_reserved_amount + $amount, 2);
+            $available = (float) $booking->teacher_net_amount - $paid - $reserved;
+            $booking->forceFill([
+                'teacher_paid_amount' => $paid,
+                'teacher_reserved_amount' => $reserved,
+                'payout_status' => $available > 0.009 ? 'ready' : 'paid',
+            ])->save();
+        }
+        TeacherPayoutRequest::query()->where('payout_id', $payout->id)->update([
+            'status' => 'reversed',
+        ]);
     }
 }

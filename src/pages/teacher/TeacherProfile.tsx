@@ -61,6 +61,7 @@ interface ProfileState {
   email: string;
   title: string;
   location: string;
+  address: string;
   experience: string;
   bio: string;
   whatsapp_number: string;
@@ -85,6 +86,7 @@ const initialState: ProfileState = {
   email: "",
   title: "",
   location: "",
+  address: "",
   experience: "",
   bio: "",
   whatsapp_number: "",
@@ -154,6 +156,7 @@ export default function TeacherProfile() {
         email: user.email || "",
         title: teacherProfile.title || "",
         location: teacherProfile.location || "",
+        address: user.address || "",
         experience: teacherProfile.experience || "",
         bio: teacherProfile.bio || "",
         whatsapp_number: sanitizePhoneInput(teacherProfile.whatsapp_number || user.phone || ""),
@@ -269,12 +272,17 @@ export default function TeacherProfile() {
       notify.error("Kota atau wilayah wajib mengandung huruf dan tidak boleh hanya berisi angka atau simbol.");
       return;
     }
+    if (profile.address.trim().length > 500) {
+      notify.error("Alamat lengkap maksimal 500 karakter.");
+      return;
+    }
     setSavingProfile(true);
     try {
       const formData = new FormData();
       formData.append("name", profile.name);
       formData.append("title", profile.title);
       formData.append("location", profile.location);
+      formData.append("address", profile.address);
       formData.append("experience", profile.experience);
       formData.append("bio", profile.bio);
       formData.append("whatsapp_number", profile.whatsapp_number);
@@ -496,6 +504,19 @@ export default function TeacherProfile() {
               <Field label="Pengalaman"><Input value={profile.experience} onChange={(event) => setProfile((current) => ({ ...current, experience: event.target.value }))} className="h-12 rounded-xl" placeholder="Contoh: 4 tahun" /></Field>
               <div className="md:col-span-2"><Field label="Nomor WhatsApp/telepon"><Input required inputMode="tel" autoComplete="tel" maxLength={16} value={profile.whatsapp_number} onChange={(event) => setProfile((current) => ({ ...current, whatsapp_number: sanitizePhoneInput(event.target.value) }))} className="h-12 rounded-xl" placeholder="Contoh: 0812 3456 7890" /></Field></div>
               <div className="md:col-span-2"><Field label="Kota atau wilayah tinggal"><Input value={profile.location} onChange={(event) => setProfile((current) => ({ ...current, location: event.target.value }))} className="h-12 rounded-xl" placeholder="Contoh: Jakarta Selatan" /></Field></div>
+              <div className="md:col-span-2">
+                <Field label="Alamat lengkap (sesuai KTP)">
+                  <textarea
+                    value={profile.address}
+                    onChange={(event) => setProfile((current) => ({ ...current, address: event.target.value }))}
+                    maxLength={500}
+                    rows={3}
+                    className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                    placeholder="Contoh: Jl. Melati No. 12, RT 03/RW 05, Kel. Sukamaju, Kec. Cilandak"
+                  />
+                </Field>
+                <p className="mt-1.5 text-[11px] leading-4 text-slate-500">Dipakai untuk transfer pencairan saldo. Tidak ditampilkan di profil publik.</p>
+              </div>
               <div className="md:col-span-2 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 sm:p-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-start gap-3">

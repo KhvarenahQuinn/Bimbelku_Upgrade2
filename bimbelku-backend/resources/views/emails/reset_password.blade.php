@@ -4,7 +4,7 @@
     <title>Reset Password</title>
 </head>
 <body style="font-family: Arial, sans-serif; padding: 20px;">
-    <h2>Halo!</h2>
+    <h2>Halo{{ filled($name ?? null) ? " ".$name : "" }}!</h2>
     <p>Anda menerima email ini karena kami menerima permintaan reset password untuk akun Anda.</p>
     <p>Silakan klik tombol di bawah ini untuk mereset password Anda:</p>
     <br>

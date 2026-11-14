@@ -16,6 +16,11 @@ Schedule::command('payments:reconcile')
     ->runInBackground()
     ->withoutOverlapping(10);
 
+Schedule::command('payments:reconcile-payouts')
+    ->everyFiveMinutes()
+    ->runInBackground()
+    ->withoutOverlapping(10);
+
 Schedule::command('bookings:expire')
     ->everyMinute()
     ->withoutOverlapping(5);
