@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import SeoHead from "@/components/SeoHead";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
 import { API_BASE_URL } from "@/lib/apiBase";
 import { notify } from "@/lib/notify";
@@ -12,6 +13,8 @@ type LoginResponse = {
   error_code?: string;
   errors?: Record<string, string[]>;
 };
+
+const GENERIC_LOGIN_ERROR = "Email atau kata sandi salah.";
 
 /** Portal admin terpisah dari login murid/tutor. */
 export default function AdminLogin() {
@@ -42,7 +45,7 @@ export default function AdminLogin() {
     try {
       const { default: axios } = await import("axios");
       const response = await axios.post<LoginResponse>(
-        `${API_BASE_URL}/login`,
+        `${API_BASE_URL}/login/admin`,
         {
           email: form.email,
           password: form.password,
@@ -53,8 +56,11 @@ export default function AdminLogin() {
         { withCredentials: true },
       );
       const user = response.data.user;
+      // Server sudah menolak portal ini untuk non-admin. Kalau respons tetap
+      // tidak berisi admin, itu kegagalan tak terduga, bukan pesan untuk
+      // membocorkan apakah email terdaftar.
       if (!user || user.role !== "admin") {
-        setSummaryError("Akun ini bukan akun admin. Gunakan halaman login pengguna.");
+        setSummaryError(GENERIC_LOGIN_ERROR);
         return;
       }
       storeBrowserSession(user, response.data.access_token);
@@ -65,7 +71,11 @@ export default function AdminLogin() {
       const data = axios.isAxiosError(error)
         ? (error.response?.data as LoginResponse | undefined)
         : undefined;
-      const message = data?.message || "Email atau kata sandi admin salah.";
+      // Pesan seragam: jangan pernah membedakan "bukan admin" dari "kredensial
+      // salah", supaya URL portal ini tidak bisa dipakai menebak role akun.
+      const message = data?.error_code === "admin_rate_limited"
+        ? (data?.message || "Terlalu banyak percobaan. Coba lagi nanti.")
+        : GENERIC_LOGIN_ERROR;
       setSummaryError(message);
       setErrors(Object.fromEntries(Object.entries(data?.errors || {}).map(([key, value]) => [key, value[0] || message])));
     } finally {
@@ -75,6 +85,13 @@ export default function AdminLogin() {
   };
 
   return (
+    <>
+    <SeoHead
+      title="Login Admin | BimbelKu"
+      description="Portal khusus administrator BimbelKu."
+      canonicalPath="/admin/login"
+      robots="noindex,nofollow,noarchive"
+    />
     <main className="grid min-h-dvh w-full bg-slate-950 lg:h-dvh lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] lg:overflow-hidden">
       <aside className="relative hidden flex-col justify-between overflow-hidden bg-slate-900 px-12 py-10 text-white lg:flex">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-70" style={{ backgroundImage: "radial-gradient(circle at 20% 20%, rgb(249 115 22 / 0.18), transparent 24rem), radial-gradient(circle at 90% 90%, rgb(20 184 166 / 0.14), transparent 22rem)" }} />
@@ -192,5 +209,6 @@ export default function AdminLogin() {
         </div>
       </section>
     </main>
+    </>
   );
 }

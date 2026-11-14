@@ -19,16 +19,27 @@ export type AdminPermission = typeof ADMIN_PERMISSIONS[keyof typeof ADMIN_PERMIS
 export type StoredAdminUser = {
   role?: string;
   admin_type?: "super_admin" | "standard_admin" | string | null;
+  is_primary_admin?: boolean;
   admin_permissions?: string[];
 };
 
 export const isSuperAdmin = (user: StoredAdminUser | null | undefined) =>
-  user?.role === "admin";
+  user?.role === "admin" && (user?.admin_type === "super_admin" || user?.is_primary_admin === true);
 
+/**
+ * Admin utama memegang seluruh izin. Admin biasa hanya boleh masuk ke area
+ * yang tercantum di `admin_permissions` miliknya.
+ */
 export const canAdmin = (
   user: StoredAdminUser | null | undefined,
-  _permission: AdminPermission | string,
-) => user?.role === "admin";
+  permission: AdminPermission | string,
+) => {
+  if (user?.role !== "admin") return false;
+  if (isSuperAdmin(user)) return true;
+  const granted = user?.admin_permissions;
+  if (!Array.isArray(granted)) return false;
+  return granted.includes(permission);
+};
 
 export const permissionForAdminPath = (pathname: string): AdminPermission | null => {
   const path = pathname.replace(/^\/admin\/?/, "");

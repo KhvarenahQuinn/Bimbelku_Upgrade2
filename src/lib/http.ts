@@ -265,6 +265,19 @@ const handleRejectedResponse = (error: unknown) => {
       clearApiCache();
       window.dispatchEvent(new Event("bimbelku:session-expired"));
     }
+
+    // 403 berarti sesi masih sah tetapi aksinya ditolak. Jangan menyentuh
+    // sesi: menghapus token di sini akan memicu redirect ke login, login
+    // berhasil lagi, lalu request yang sama ditolak lagi — loop tanpa akhir.
+    // Halaman pemanggil yang menampilkan pesan "tidak berizin".
+    if (error.response?.status === 403) {
+      const deniedCode = (error.response.data as { error_code?: string } | undefined)?.error_code;
+      if (deniedCode !== "admin_portal_required") {
+        window.dispatchEvent(new CustomEvent("bimbelku:permission-denied", {
+          detail: { path: requestPath },
+        }));
+      }
+    }
   }
   return Promise.reject(error);
 };

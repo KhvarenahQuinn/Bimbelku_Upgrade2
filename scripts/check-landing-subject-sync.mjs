@@ -8,7 +8,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "u
 const controller = read("bimbelku-backend/app/Http/Controllers/Api/LearningCatalogController.php");
 const section = read("src/components/SubjectsSection.tsx");
 const packageBuilder = read("src/pages/students/PackageBuilder.tsx");
-const privateRoute = read("src/components/PrivateRoute.tsx");
+const privateRoute = read("src/components/auth/RouteGuard.tsx");
 const login = read("src/pages/Login.tsx");
 const register = read("src/pages/Register.tsx");
 const footer = read("src/components/Footer.tsx");

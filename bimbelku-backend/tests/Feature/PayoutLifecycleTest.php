@@ -139,7 +139,10 @@ class PayoutLifecycleTest extends TestCase
     public function test_payout_is_rejected_locally_when_the_city_is_missing(): void
     {
         Http::fake();
-        [$teacher] = $this->reservedPayout(30000);
+        [$teacher, , $existing] = $this->reservedPayout(30000);
+        // The city gate is checked before anything else; clear the active
+        // payout so the one-active-payout guard does not mask it.
+        $existing->forceFill(['status' => 'failed'])->save();
         $teacher->forceFill(['address' => 'Jl. Rungkut Asri Timur No. 14'])->save();
         $teacher->teacherProfile->forceFill([
             'location' => null,

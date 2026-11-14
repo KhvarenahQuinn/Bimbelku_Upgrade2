@@ -29,6 +29,7 @@ use App\Support\AdminPermissionCatalog;
 use App\Support\PublicMedia;
 use App\Support\XenditPayoutChannelCatalog;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -1060,6 +1061,20 @@ class AdminController extends Controller
                 return $record;
             });
             $xendit->createPayout($payout, $teacher);
+        } catch (QueryException $exception) {
+            // The admin path creates the payout directly, so the one-active-
+            // payout unique index can fire here. Report it as a plain business
+            // rejection instead of leaking a duplicate-key error.
+            if (($exception->errorInfo[1] ?? null) === 1062) {
+                return response()->json([
+                    'message' => TeacherPayoutService::activePayoutMessage(
+                        (float) (Payout::query()->where('user_id', $validated['teacher_id'])
+                            ->whereIn('status', Payout::ACTIVE_STATUSES)
+                            ->value('amount') ?? 0)
+                    ),
+                ], 422);
+            }
+            throw $exception;
         } catch (\RuntimeException $exception) {
             if (isset($payout)) {
                 DB::transaction(function () use ($payout, $exception) {

@@ -114,6 +114,26 @@ class AppServiceProvider extends ServiceProvider
         // Public authentication. Each endpoint owns a separate IP bucket.
         $registerIsolatedLimiter('auth-register', 5, 'Pendaftaran dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('auth-login', 10, 'Percobaan login terlalu sering. Tunggu :seconds detik lalu coba lagi.');
+
+        // Portal admin: kunci gabungan IP + email. Satu IP yang menebak banyak
+        // email tetap kena batas, dan satu email yang diserang dari banyak IP
+        // juga kena batas. Lebih ketat daripada login umum.
+        RateLimiter::for('auth-login-admin', function (Request $request) {
+            $email = mb_strtolower(trim((string) $request->input('email')));
+            $message = 'Percobaan login admin terlalu sering. Tunggu :seconds detik lalu coba lagi.';
+
+            return Limit::perMinute(5)
+                ->by('auth-login-admin:'.(string) $request->ip().':'.$email)
+                ->response(function (Request $request, array $headers) use ($message) {
+                    $retryAfter = max(1, (int) ($headers['Retry-After'] ?? 60));
+
+                    return response()->json([
+                        'message' => str_replace(':seconds', (string) $retryAfter, $message),
+                        'error_code' => 'admin_rate_limited',
+                        'retry_after_seconds' => $retryAfter,
+                    ], 429, $headers);
+                });
+        });
         $registerIsolatedLimiter('auth-forgot-password', 5, 'Permintaan reset kata sandi terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('auth-reset-password', 5, 'Reset kata sandi dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('auth-email-verification-resend', 5, 'Permintaan kode verifikasi terlalu sering. Tunggu :seconds detik lalu coba lagi.');
@@ -201,6 +221,7 @@ class AppServiceProvider extends ServiceProvider
         $registerIsolatedLimiter('admin-refund-reconcile', 10, 'Pemeriksaan refund dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['refund']);
         $registerIsolatedLimiter('admin-refund-retry', 5, 'Pengulangan refund dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['refund']);
         $registerIsolatedLimiter('admin-payout-reconcile', 10, 'Pemeriksaan pencairan dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['payout']);
+        $registerIsolatedLimiter('admin-payout-force-fail', 5, 'Penandaan gagal pencairan dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['payout']);
         $registerIsolatedLimiter('admin-tutor-exit', 5, 'Refund keluar tutor dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['learningPackage']);
         $registerIsolatedLimiter('admin-session-decision', 20, 'Keputusan sesi dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('student-session-appeal', 5, 'Banding sesi dibuat terlalu sering. Tunggu :seconds detik lalu coba lagi.', ['booking']);

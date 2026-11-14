@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
+use RuntimeException;
 use Tests\TestCase;
 
 class StageSixBTeacherOperationsTest extends TestCase
@@ -216,14 +217,26 @@ class StageSixBTeacherOperationsTest extends TestCase
         $service = app(TeacherPayoutService::class);
         $otp = $this->issuePayoutOtp($teacher);
         $first = $service->request($teacher, 30000, null, ['otp' => $otp])['payout'];
-        $service->request($teacher, 20000, null, ['otp' => $otp]);
+        $reservedAfterFirst = (float) $booking->fresh()->teacher_reserved_amount;
+
+        // A second withdrawal is refused while the first one is still active.
+        // This replaces the old two-pending-withdrawals scenario, which the
+        // one-active-payout guard makes impossible by design.
+        try {
+            $service->request($teacher, 20000, null, ['otp' => $otp]);
+            $this->fail('a second payout must not be accepted while one is active');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('Masih ada pencairan', $exception->getMessage());
+        }
+        $this->assertSame($reservedAfterFirst, (float) $booking->fresh()->teacher_reserved_amount);
+
         $webhooks = app(XenditWebhookService::class);
         $data = ['payout_id' => 'po-first', 'status' => 'FAILED'];
         $webhooks->handle('v3_payout.failed', 'first-failure', $data, $data);
         $webhooks->handle('v3_payout.failed', 'duplicate-failure-new-event', $data, $data);
-        $this->assertSame(20000.0, (float) $booking->fresh()->teacher_reserved_amount);
-        $this->assertSame(60000.0, $service->availableAmount($teacher->id));
         $this->assertSame('failed', $first->fresh()->status);
+        $this->assertSame(0.0, (float) $booking->fresh()->teacher_reserved_amount);
+        $this->assertSame(80000.0, $service->availableAmount($teacher->id));
     }
 
     private function issuePayoutOtp(User $teacher): string
