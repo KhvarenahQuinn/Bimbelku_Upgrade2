@@ -16,6 +16,23 @@ use Illuminate\Support\Facades\Hash;
  */
 class DemoMathTutorSeeder extends Seeder
 {
+    /**
+     * One source for the tutor's legal name. It is written to `users.name` and
+     * to the bank account holder name, which must agree for a payout to pass
+     * the bank-owner check.
+     */
+    private const NAME = 'Rina Kartika, S.Pd.';
+
+    private const ADDRESS = 'Jl. Rungkut Asri Timur No. 14, Kec. Rungkut, Kota Surabaya, Jawa Timur 60293';
+
+    private const CITY = 'Surabaya';
+
+    private const BANK_NAME = 'Bank Central Asia (BCA)';
+
+    private const CHANNEL_CODE = 'BCA';
+
+    private const ACCOUNT_NUMBER = '1234567890';
+
     public function run(): void
     {
         $mathematics = CurriculumSubject::query()
@@ -28,8 +45,9 @@ class DemoMathTutorSeeder extends Seeder
         $tutor = User::updateOrCreate(
             ['email' => 'rina.matematika@bimbelku.com'],
             [
-                'name' => 'Rina Kartika, S.Pd.',
+                'name' => self::NAME,
                 'phone' => '081377788899',
+                'address' => self::ADDRESS,
                 'password' => Hash::make('password123'),
                 'password_updated_at' => now(),
                 'role' => 'teacher',
@@ -48,7 +66,7 @@ class DemoMathTutorSeeder extends Seeder
                 'title' => 'Tutor Matematika SD–SMA',
                 'bio' => 'Mengajar Matematika untuk semua jenjang pendidikan, dari SD, SMP, SMA, hingga kelas umum. Fokus pada pemahaman konsep dan latihan soal.',
                 'experience' => '6 Tahun',
-                'location' => 'Surabaya',
+                'location' => self::CITY,
                 'latitude' => -7.2575,
                 'longitude' => 112.7521,
                 'max_travel_km' => 12,
@@ -60,6 +78,12 @@ class DemoMathTutorSeeder extends Seeder
                 'documents_checked_at' => now(),
                 'whatsapp_test_scheduled_at' => now(),
                 'whatsapp_test_passed_at' => now(),
+                // Seeded so the demo tutor can be paid out without a manual
+                // bank-details save; the holder name is the same constant.
+                'bank_name' => self::BANK_NAME,
+                'payout_channel_code' => self::CHANNEL_CODE,
+                'account_number' => self::ACCOUNT_NUMBER,
+                'account_name' => self::NAME,
             ]
         );
 
