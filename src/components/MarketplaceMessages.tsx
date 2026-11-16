@@ -1,4 +1,5 @@
 import { notify } from "@/lib/notify";
+import { ACTIVE_NAV_TAPPED_EVENT, type ActiveNavTappedDetail } from "@/lib/navigationReset";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -101,13 +102,18 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedBooking = Number(searchParams.get("booking") || 0) || null;
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedId, setSelectedId] = useState<number | null>(requestedBooking);
+  // URL adalah satu-satunya sumber kebenaran percakapan aktif. Menyimpan
+  // salinan di state membuat dua penulis yang bisa berlomba dan membuka ulang
+  // chat yang baru saja ditutup.
+  const selectedId = requestedBooking;
   const [chat, setChat] = useState<ChatData | null>(null);
   const [query, setQuery] = useState("");
   const [body, setBody] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [pending, setPending] = useState<PendingMessage | null>(null);
   const [listLoading, setListLoading] = useState(true);
+  const [listLoaded, setListLoaded] = useState(false);
+  const [listRefreshing, setListRefreshing] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const [listError, setListError] = useState(false);
   const [chatError, setChatError] = useState(false);
@@ -137,18 +143,25 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
   const loadConversations = useCallback(async (quiet = false) => {
     const requestId = ++conversationRequestRef.current;
     if (!quiet) setListLoading(true);
+    // Refresh diam-diam tetap harus menahan pembersihan deep link: respons
+    // sementara bisa kosong dan itu bukan bukti booking sudah hilang.
+    setListRefreshing(true);
     setListError(false);
     try {
       const response = await http.get<{ data: Conversation[] }>("/conversations");
       if (requestId !== conversationRequestRef.current) return;
       const items = Array.isArray(response.data.data) ? response.data.data : [];
       setConversations(items);
+      setListLoaded(true);
     } catch (error) {
       if (requestId !== conversationRequestRef.current) return;
       setListError(true);
       if (!quiet) notify.error(getApiError(error, "Daftar percakapan gagal dimuat."));
     } finally {
-      if (requestId === conversationRequestRef.current) setListLoading(false);
+      if (requestId === conversationRequestRef.current) {
+        setListLoading(false);
+        setListRefreshing(false);
+      }
     }
   }, []);
 
@@ -240,12 +253,28 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
     void loadConversations();
   }, [loadConversations]);
 
+  // Menekan navbar "Pesan" saat percakapan sedang terbuka tidak mengubah route.
+  // Cukup bersihkan query param; itu satu-satunya sumber kebenaran.
   useEffect(() => {
-    if (selectedId) return;
+    const handleActiveNavTap = (event: Event) => {
+      const detail = (event as CustomEvent<ActiveNavTappedDetail>).detail;
+      if (detail?.to !== "/student/messages" && detail?.to !== "/guru/pesan") return;
+      setSearchParams({}, { replace: true });
+    };
+    window.addEventListener(ACTIVE_NAV_TAPPED_EVENT, handleActiveNavTap);
+    return () => window.removeEventListener(ACTIVE_NAV_TAPPED_EVENT, handleActiveNavTap);
+  }, [setSearchParams]);
+
+  // Bersihkan `?booking=` yang tidak ada di daftar percakapan. Dua penjagaan
+  // penting: daftar harus pernah berhasil dimuat penuh, dan tidak boleh sedang
+  // dimuat ulang. Tanpa itu deep link dari notifikasi bisa terhapus sebelum
+  // datanya tiba, atau hilang sesaat saat daftar di-refresh diam-diam.
+  useEffect(() => {
     if (!requestedBooking) return;
-    if (!conversations.some((item) => item.booking_id === requestedBooking)) return;
-    setSelectedId(requestedBooking);
-  }, [conversations, requestedBooking, selectedId]);
+    if (!listLoaded || listLoading || listRefreshing || listError) return;
+    if (conversations.some((item) => item.booking_id === requestedBooking)) return;
+    setSearchParams({}, { replace: true });
+  }, [conversations, listError, listLoaded, listLoading, listRefreshing, requestedBooking, setSearchParams]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -304,7 +333,6 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
   }, [conversations, query]);
 
   const openConversation = (bookingId: number) => {
-    setSelectedId(bookingId);
     setSearchParams({ booking: String(bookingId) }, { replace: true });
     setPending(null);
     setFile(null);
@@ -312,7 +340,6 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
   };
 
   const closeMobileConversation = () => {
-    setSelectedId(null);
     setSearchParams({}, { replace: true });
   };
 
@@ -407,7 +434,7 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
           ) : (
             <>
               <header className="flex min-w-0 items-center gap-3 border-b border-slate-200 px-3 py-3 sm:px-5 sm:py-4">
-                <Button type="button" variant="ghost" size="icon" onClick={closeMobileConversation} className="shrink-0 rounded-xl md:hidden" aria-label="Kembali ke daftar percakapan"><ArrowLeft size={20} /></Button>
+                <Button type="button" variant="ghost" size="icon" onClick={closeMobileConversation} className="shrink-0 rounded-xl xl:hidden" aria-label="Kembali ke daftar percakapan"><ArrowLeft size={20} /></Button>
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-indigo-100 text-indigo-600"><UserRound size={18} /></span>
                 <div className="min-w-0 flex-1"><h2 className="break-words text-sm font-black text-slate-900 sm:text-base">{chat.booking.subject}</h2><p className="mt-0.5 truncate text-[11px] font-bold text-slate-400">{dateTime(chat.booking.start_at)} · Chat BimbelKu</p></div>
                 <Button type="button" variant="ghost" size="icon" onClick={() => void loadChat(selectedId)} className="shrink-0 rounded-xl" aria-label="Muat ulang pesan"><RefreshCw size={17} /></Button>

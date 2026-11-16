@@ -8,6 +8,7 @@ import {
   User,
 } from "lucide-react";
 import { hasMobileAttention, type AttentionNotification } from "@/lib/navigationAttention";
+import { notifyActiveNavTapped } from "@/lib/navigationReset";
 
 type Role = "student" | "teacher";
 type NavItem = {
@@ -76,6 +77,7 @@ export default function MobileBottomNav({ role, attentionNotifications = [] }: {
               key={`${item.to}-${index}`}
               data-tour={item.tour}
               to={item.to}
+              onClick={() => { if (active) notifyActiveNavTapped(item.to); }}
               aria-current={active ? "page" : undefined}
               aria-label={item.label}
               className={`flex min-h-[3.45rem] min-w-0 flex-col items-center justify-center gap-1 rounded-[1rem] px-1 text-[10px] font-bold transition ${
