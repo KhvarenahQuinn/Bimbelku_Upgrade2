@@ -329,6 +329,63 @@ class RefundStatusMachineTest extends TestCase
         );
     }
 
+    public function test_failed_refund_creates_one_admin_attention_notification(): void
+    {
+        Http::fake([
+            'https://api.xendit.test/v3/refunds' => Http::response([
+                'id' => 'rfd-attn-1',
+                'status' => 'FAILED',
+                'failure_code' => 'INSUFFICIENT_BALANCE',
+                'failure_message' => 'Saldo operasional tidak cukup',
+            ]),
+        ]);
+        $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        $order = $this->order($student, 'INV-ATTN-REFUND');
+        $refund = Refund::create([
+            'order_id' => $order->id,
+            'user_id' => $student->id,
+            'amount' => 150000,
+            'reason' => 'Tutor tidak ditemukan',
+            'status' => 'pending',
+            'payment_provider' => 'xendit',
+            'external_refund_amount' => 150000,
+            'wallet_refund_amount' => 0,
+        ]);
+
+        Sanctum::actingAs($student);
+        $this->postJson("/api/student/refunds/{$refund->id}/destination", [
+            'destination_method' => 'xendit_original',
+        ], ['Idempotency-Key' => "refund-attn-original-{$refund->id}"])->assertOk();
+        $this->assertSame('failed', $refund->fresh()->status);
+
+        $adminNotification = Notification::query()
+            ->where('unique_key', "refund-review:{$refund->id}:{$admin->id}")
+            ->first();
+        $this->assertNotNull($adminNotification, 'admin harus menerima notifikasi refund gagal');
+        $this->assertSame($admin->id, $adminNotification->user_id);
+        $this->assertSame('/admin/finance?tab=refunds', $adminNotification->target_url);
+        $this->assertSame('admin_refund_exception', $adminNotification->attention_key);
+        $this->assertFalse((bool) $adminNotification->is_read);
+
+        $studentNotification = Notification::query()
+            ->where('unique_key', "refund-failed:{$refund->id}")
+            ->first();
+        $this->assertNotNull($studentNotification, 'murid harus menerima notifikasi refund gagal');
+        $this->assertSame($student->id, $studentNotification->user_id);
+        $this->assertSame('/student/history', $studentNotification->target_url);
+
+        $this->postJson("/api/student/refunds/{$refund->id}/sync", [], [
+            'Idempotency-Key' => "refund-attn-sync-{$refund->id}",
+        ])->assertOk();
+
+        $this->assertSame(
+            1,
+            Notification::query()->where('unique_key', 'like', "refund-review:{$refund->id}:%")->count(),
+            'proses berulang tidak boleh menduplikasi notifikasi admin'
+        );
+    }
+
     public function test_non_definitive_gateway_error_keeps_refund_pending(): void
     {
         // 5xx belum tentu terminal: baris tetap pending agar bisa direkonsiliasi.
