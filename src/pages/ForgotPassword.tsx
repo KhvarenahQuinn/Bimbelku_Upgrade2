@@ -1,6 +1,7 @@
 import { notify } from "@/lib/notify";
 import { API_BASE_URL } from "@/lib/apiBase";
 import { getApiErrorDetails } from "@/lib/http";
+import { isValidEmail } from "@/lib/validation";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, ArrowLeft, Mail } from "lucide-react";
@@ -23,6 +24,10 @@ const ForgotPassword = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValidEmail(email)) {
+      notify.error("Masukkan alamat email yang valid.");
+      return;
+    }
     setIsLoading(true);
 
     try {

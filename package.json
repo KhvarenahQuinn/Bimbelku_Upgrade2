@@ -52,6 +52,7 @@
     "check:payment-return": "node scripts/check-payment-return.mjs",
     "check:admin-payment-fix": "node scripts/check-admin-payment-verification-fix.mjs",
     "check:navigation-attention": "node scripts/check-navigation-attention.mjs",
+    "check:auth-guards": "node scripts/check-auth-guards.mjs",
     "check:notification-ux": "node scripts/check-notification-ux-fix.mjs",
     "check:matching-fallback": "node scripts/check-matching-fallback-fix.mjs",
     "check:banner-cheap-class": "node scripts/check-banner-cheap-class-reliability.mjs",

@@ -6,6 +6,7 @@ import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import GoogleAuthButton from "@/components/GoogleAuthButton";
 import AuthExperience from "@/components/AuthExperience";
 import { storeBrowserSession } from "@/lib/session";
+import { isValidEmail } from "@/lib/validation";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -26,6 +27,11 @@ export default function Login() {
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     if (loadingRef.current) return;
+    if (!isValidEmail(formData.email)) {
+      setErrors({ email: "Masukkan alamat email yang valid." });
+      setSummaryError("Periksa alamat email Anda, lalu coba lagi.");
+      return;
+    }
     loadingRef.current = true;
     setErrors({});
     setSummaryError("");

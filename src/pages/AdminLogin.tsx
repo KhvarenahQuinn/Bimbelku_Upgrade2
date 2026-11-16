@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } 
 import { API_BASE_URL } from "@/lib/apiBase";
 import { notify } from "@/lib/notify";
 import { storeBrowserSession } from "@/lib/session";
+import { isValidEmail } from "@/lib/validation";
 
 type LoginResponse = {
   access_token?: string;
@@ -38,6 +39,11 @@ export default function AdminLogin() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (loadingRef.current) return;
+    if (!isValidEmail(form.email)) {
+      setSummaryError(GENERIC_LOGIN_ERROR);
+      setErrors({ email: "Masukkan alamat email yang valid." });
+      return;
+    }
     loadingRef.current = true;
     setErrors({});
     setSummaryError("");

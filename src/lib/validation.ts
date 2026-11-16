@@ -84,3 +84,19 @@ export function isValidHttpUrl(value: string): boolean {
     return false;
   }
 }
+
+/**
+ * Pemeriksaan email praktis yang selaras dengan aturan backend (`email` rule
+ * Laravel): wajib ada nama lokal, satu `@`, domain bertitik, tanpa spasi,
+ * tanpa dua titik berurutan, dan label domain tidak boleh diawali/diakhiri
+ * tanda hubung. Tanda `+` pada nama lokal tetap diperbolehkan.
+ */
+const emailPattern = /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+
+export function isValidEmail(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 255) return false;
+  if (normalized.includes("..")) return false;
+  if (!normalized.includes(".")) return false;
+  return emailPattern.test(normalized);
+}

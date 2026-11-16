@@ -41,6 +41,7 @@ import type { SubjectOption } from "@/components/SubjectCombobox";
 import { EDUCATION_LEVELS, GRADES_BY_EDUCATION_LEVEL } from "@/lib/educationCatalog";
 import http, { getApiError, getApiValidationErrors, getCached } from "@/lib/http";
 import {
+  isValidEmail,
   isValidHttpUrl,
   isValidPersonName,
   isValidPhone,
@@ -163,7 +164,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
   const accountErrors = () => {
     const nextErrors: Record<string, string> = {};
     if (!isValidPersonName(form.name)) nextErrors.name = "Nama lengkap harus berisi huruf dan tidak boleh memuat angka.";
-    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) nextErrors.email = "Masukkan alamat email yang valid.";
+    if (!isValidEmail(form.email)) nextErrors.email = "Masukkan alamat email yang valid.";
     if (!isValidPhone(form.phone)) nextErrors.phone = "Nomor WhatsApp/telepon harus berisi 8–15 angka.";
     if (form.password.length < 8) nextErrors.password = "Kata sandi minimal 8 karakter.";
     if (form.password !== form.password_confirmation) nextErrors.password_confirmation = "Konfirmasi kata sandi belum sama.";
@@ -174,6 +175,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
     const nextErrors: Record<string, string> = {};
     if (role === "student") {
       if (!form.date_of_birth) nextErrors.date_of_birth = "Tanggal lahir murid wajib diisi.";
+      else if (form.date_of_birth > today) nextErrors.date_of_birth = "Tanggal lahir tidak boleh melewati hari ini.";
       if (isMinorStudent && !isValidPersonName(form.guardian_name)) nextErrors.guardian_name = "Nama orang tua atau wali harus berisi huruf dan tidak boleh memuat angka.";
       if (isMinorStudent && !isValidPhone(form.guardian_phone)) nextErrors.guardian_phone = "Nomor orang tua atau wali harus berisi 8–15 angka.";
       if (isMinorStudent && !form.guardian_relationship) nextErrors.guardian_relationship = "Pilih hubungan orang tua atau wali dengan murid.";
