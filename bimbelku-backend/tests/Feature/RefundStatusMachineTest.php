@@ -8,6 +8,7 @@ use App\Models\Notification;
 use App\Models\Order;
 use App\Models\Refund;
 use App\Models\User;
+use App\Services\XenditMoneyMovementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
@@ -280,6 +281,82 @@ class RefundStatusMachineTest extends TestCase
             'event' => $event,
             'data' => $data,
         ], ['x-callback-token' => 'refund-webhook-token']);
+    }
+
+    public function test_definitive_gateway_rejection_moves_status_to_failed(): void
+    {
+        // Bug yang pernah terjadi: kegagalan 4xx hanya menulis gateway_status
+        // FAILED, sehingga baris menggantung di status pending selamanya dan
+        // lolos dari query yang menyaring status.
+        Http::fake([
+            'api.xendit.test/v3/refunds' => Http::response([
+                'error_code' => 'INELIGIBLE_TRANSACTION_STATUS',
+                'message' => 'payment has passed refund validity period',
+            ], 400),
+        ]);
+        $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
+        $order = $this->order($student, 'INV-REFUND-WINDOW');
+        $refund = Refund::create([
+            'order_id' => $order->id,
+            'user_id' => $student->id,
+            'amount' => 150000,
+            'reason' => 'Pengembalian penuh untuk pengujian jendela validitas',
+            'source_type' => 'no_teacher',
+            'status' => 'pending',
+            'payment_provider' => 'xendit',
+            'external_refund_amount' => 150000,
+            'wallet_refund_amount' => 0,
+        ]);
+
+        try {
+            app(XenditMoneyMovementService::class)->createRefund($refund);
+            $this->fail('refund yang ditolak gateway harus melempar exception');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('ditolak', $exception->getMessage());
+        }
+
+        $fresh = $refund->fresh();
+        $this->assertSame('failed', $fresh->status, 'status utama harus ikut gagal, bukan menggantung di pending');
+        $this->assertSame('FAILED', $fresh->gateway_status);
+        $this->assertSame('INELIGIBLE_TRANSACTION_STATUS', $fresh->gateway_failure_code);
+
+        // Kegagalan definitif harus memberi tahu admin tepat sekali. unique_key
+        // menjaga ini idempoten walau jalur sync dan reconcile sama-sama jalan.
+        $this->assertSame(
+            1,
+            Notification::query()->where('unique_key', "refund-manual:{$fresh->id}")->count(),
+            'refund gagal definitif harus memicu tepat satu notifikasi manual review'
+        );
+    }
+
+    public function test_non_definitive_gateway_error_keeps_refund_pending(): void
+    {
+        // 5xx belum tentu terminal: baris tetap pending agar bisa direkonsiliasi.
+        Http::fake([
+            'api.xendit.test/v3/refunds' => Http::response(['message' => 'Unavailable'], 500),
+        ]);
+        $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
+        $order = $this->order($student, 'INV-REFUND-UNAVAILABLE');
+        $refund = Refund::create([
+            'order_id' => $order->id,
+            'user_id' => $student->id,
+            'amount' => 150000,
+            'reason' => 'Pengembalian penuh saat gateway tidak tersedia',
+            'source_type' => 'no_teacher',
+            'status' => 'pending',
+            'payment_provider' => 'xendit',
+            'external_refund_amount' => 150000,
+            'wallet_refund_amount' => 0,
+        ]);
+
+        try {
+            app(XenditMoneyMovementService::class)->createRefund($refund);
+            $this->fail('kegagalan gateway harus melempar exception');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('belum dapat dibuat', $exception->getMessage());
+        }
+
+        $this->assertSame('pending', $refund->fresh()->status, 'galat sementara tidak boleh mematikan refund');
     }
 
     private function order(User $student, string $code): Order

@@ -101,12 +101,26 @@ class XenditMoneyMovementService
         if (! $response->successful()) {
             $body = is_array($response->json()) ? $response->json() : [];
             $definitive = in_array($response->status(), [400, 401, 403, 404, 422], true);
-            $refund = $this->storeRefundResponse($refund, array_filter([
-                'gateway_status' => $definitive ? 'FAILED' : null,
-                'gateway_failure_code' => $body['error_code'] ?? $body['failure_code'] ?? null,
-                'gateway_failure_message' => $body['message'] ?? null,
-                'last_reconciled_at' => now(),
-            ], fn ($value) => $value !== null));
+            $failureCode = $body['error_code'] ?? $body['failure_code'] ?? null;
+            $failureMessage = $body['message'] ?? null;
+            // Kegagalan definitif adalah terminal: status utama harus ikut
+            // pindah ke "failed". Menulis hanya gateway_status membuat baris
+            // menggantung di "pending" selamanya, tidak terlihat oleh query
+            // yang menyaring status, tetapi sudah mati di sisi Xendit.
+            if ($definitive) {
+                app(RefundSettlementService::class)->markGatewayFailure(
+                    $refund,
+                    is_string($failureCode) ? $failureCode : null,
+                    is_string($failureMessage) ? $failureMessage : null,
+                );
+                $refund = $refund->fresh() ?? $refund;
+            } else {
+                $refund = $this->storeRefundResponse($refund, array_filter([
+                    'gateway_failure_code' => $failureCode,
+                    'gateway_failure_message' => $failureMessage,
+                    'last_reconciled_at' => now(),
+                ], fn ($value) => $value !== null));
+            }
             if ($refund->status === 'paid' || $refund->gateway_status === 'SUCCEEDED') {
                 return $this->refundPayload($refund);
             }
