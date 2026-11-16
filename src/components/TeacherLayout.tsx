@@ -26,10 +26,12 @@ interface TeacherLayoutProps {
   children: React.ReactNode;
   title: string;
   lockContentScroll?: boolean;
+  /** Lihat catatan di `StudentLayout.hideBottomNav`. */
+  hideBottomNav?: boolean;
   onAttentionNotificationsChange?: (notifications: AttentionNotification[]) => void;
 }
 
-export default function TeacherLayout({ children, title, lockContentScroll = false, onAttentionNotificationsChange }: TeacherLayoutProps) {
+export default function TeacherLayout({ children, title, lockContentScroll = false, hideBottomNav = false, onAttentionNotificationsChange }: TeacherLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia(DESKTOP_MEDIA_QUERY).matches);
   const [userData, setUserData] = useState<any>(() => storedTeacher());
@@ -310,10 +312,10 @@ export default function TeacherLayout({ children, title, lockContentScroll = fal
           </div>
         </header>
 
-        <div className={`mobile-app-content min-h-0 flex-1 basis-0 overflow-x-hidden scroll-smooth p-4 pb-[calc(7.25rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-24 xl:p-10 xl:pb-10 ${lockContentScroll ? "overflow-y-hidden" : "overflow-y-auto"}`}>
-          <div className={`mx-auto w-full min-w-0 max-w-7xl ${lockContentScroll ? "flex h-full min-h-0 flex-col" : "pb-20 sm:pb-24 xl:pb-16"}`}>{children}</div>
+        <div className={`mobile-app-content min-h-0 flex-1 basis-0 overflow-x-hidden scroll-smooth p-4 sm:p-6 xl:p-10 ${hideBottomNav ? "pb-4 xl:pb-10" : "pb-[calc(7.25rem+env(safe-area-inset-bottom))] sm:pb-24 xl:pb-10"} ${lockContentScroll ? "overflow-y-hidden" : "overflow-y-auto"}`}>
+          <div className={`mx-auto w-full min-w-0 max-w-7xl ${lockContentScroll ? "flex h-full min-h-0 flex-col" : hideBottomNav ? "pb-0 xl:pb-16" : "pb-20 sm:pb-24 xl:pb-16"}`}>{children}</div>
         </div>
-        {!isDesktop && !sidebarOpen && (
+        {!isDesktop && !sidebarOpen && !hideBottomNav && (
           <Suspense fallback={null}>
             <MobileBottomNav role="teacher" attentionNotifications={attentionNotifications} />
           </Suspense>

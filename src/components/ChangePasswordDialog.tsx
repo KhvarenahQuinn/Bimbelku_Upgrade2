@@ -89,7 +89,7 @@ export default function ChangePasswordDialog({
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger asChild>
-        <Button type="button" className="h-11 rounded-xl bg-slate-900 px-5 font-bold hover:bg-indigo-700">
+        <Button type="button" className="h-11 w-full shrink-0 rounded-xl bg-slate-900 px-5 font-bold hover:bg-indigo-700 sm:w-auto">
           <KeyRound className="mr-2" size={17} />
           {hasPassword ? "Ubah Kata Sandi" : "Buat Kata Sandi"}
         </Button>

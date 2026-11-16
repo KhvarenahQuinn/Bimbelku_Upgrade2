@@ -174,13 +174,13 @@ export default function Settings() {
             </p>
           </header>
           <div className="space-y-4 px-5 py-5 sm:px-6">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-start gap-3">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-slate-100 text-slate-600">
                   <ShieldCheck size={20} />
                 </span>
-                <div>
-                  <p className="text-sm font-black text-slate-800">{user?.email || "Email akun"}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-slate-800">{user?.email || "Email akun"}</p>
                   <p className="mt-0.5 text-xs font-medium text-slate-500">
                     {user?.has_password === false ? "Kata sandi belum dibuat" : "Kata sandi aktif"}
                   </p>

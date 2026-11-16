@@ -25,6 +25,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Aplikasi ini tidak punya route bernama `login`: autentikasi memakai
+        // bearer token / cookie sesi, bukan redirect ke halaman web. Tanpa ini
+        // middleware `auth` memanggil route('login') untuk tamu dan melempar
+        // RouteNotFoundException (500) sebelum handler JSON sempat berjalan.
+        // Kembalikan null supaya tamu dapat 401 JSON, bukan redirect.
+        $middleware->redirectGuestsTo(fn () => null);
+
         $middleware->prependToGroup('api', AuthenticateFromSessionCookie::class);
         $middleware->append(ApplySecurityHeaders::class);
 
