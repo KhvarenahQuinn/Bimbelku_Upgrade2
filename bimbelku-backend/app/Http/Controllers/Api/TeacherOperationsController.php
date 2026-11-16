@@ -62,13 +62,11 @@ class TeacherOperationsController extends Controller
             ->whereHas('request', fn ($query) => $query->where('status', 'pending'))
             ->count();
 
-        $balance = Booking::query()
-            ->where('teacher_id', $teacherId)
-            ->where('status', 'completed')
-            ->selectRaw('COALESCE(SUM(CASE WHEN teacher_net_amount - teacher_paid_amount - teacher_reserved_amount > 0 THEN teacher_net_amount - teacher_paid_amount - teacher_reserved_amount ELSE 0 END), 0) AS available')
-            ->selectRaw('COALESCE(SUM(teacher_reserved_amount), 0) AS requested')
-            ->selectRaw("COALESCE(SUM(CASE WHEN payout_status = 'locked' THEN teacher_net_amount ELSE 0 END), 0) AS held")
-            ->first();
+        // Satu sumber kebenaran. Versi lama melewatkan filter sengketa dan
+        // memakai rumus available yang berbeda, sehingga angka di sini bisa
+        // lebih tinggi daripada yang boleh dicairkan.
+        $summary = app(TeacherPayoutService::class)->balanceSummary($teacherId);
+        $balance = (object) $summary;
         $rating = Rating::query()
             ->where('teacher_id', $teacherId)
             ->selectRaw('COUNT(*) AS rating_count, COALESCE(AVG(rating), 0) AS rating_average')
