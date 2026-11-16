@@ -39,12 +39,68 @@ class TeacherPayoutService
      */
     public function availableAmount(int $teacherId): float
     {
-        return round((float) Booking::query()
+        return round((float) $this->balanceSummary($teacherId)['signed_available'], 2);
+    }
+
+    /**
+     * Satu sumber kebenaran untuk angka saldo tutor. Dashboard, tombol
+     * pencairan, dan daftar kelayakan harus membaca dari sini agar angka yang
+     * tampil tidak pernah berbeda dari plafon yang benar-benar boleh ditarik.
+     *
+     * Basis query sengaja dipusatkan: hanya booking `completed` dan tidak
+     * sedang bersengketa. Dulu `TeacherOperationsController` melewatkan filter
+     * sengketa, sehingga tutor bisa melihat saldo lebih tinggi daripada yang
+     * bisa dicairkan.
+     *
+     * `held` bukan uang terpisah — penting untuk UI: `held` adalah BAGIAN
+     * dari `available`, bukan tambahan di atasnya, sehingga
+     * `held + available` tidak punya arti. Booking `locked` belum punya
+     * alokasi tersimpan, jadi seluruh nominalnya sudah ikut terhitung di
+     * `available`. Karena itu `held` dibatasi agar tidak pernah melebihi
+     * `available`; nilai mentahnya tidak bisa dipulihkan dari field ini.
+     *
+     * Jangan menampilkan `held` dan `available` sebagai dua angka yang
+     * dijumlahkan tanpa penjelasan.
+     *
+     * @return array{signed_available:float,available:float,overpaid:float,held:float,requested:float,paid:float}
+     */
+    public function balanceSummary(int $teacherId): array
+    {
+        $row = $this->completedBookings($teacherId)
+            ->selectRaw('COALESCE(SUM(teacher_net_amount - teacher_paid_amount - teacher_reserved_amount), 0) AS signed_available')
+            ->selectRaw('COALESCE(SUM(teacher_reserved_amount), 0) AS requested')
+            ->selectRaw('COALESCE(SUM(teacher_paid_amount), 0) AS paid')
+            // Hindari GREATEST: SQLite tidak punya fungsi itu dan test memakai
+            // SQLite, sedangkan produksi memakai MySQL. CASE portabel di keduanya.
+            ->selectRaw(
+                "COALESCE(SUM(CASE WHEN payout_status = 'locked' THEN "
+                .'CASE WHEN teacher_net_amount - teacher_paid_amount - teacher_reserved_amount > 0 '
+                .'THEN teacher_net_amount - teacher_paid_amount - teacher_reserved_amount ELSE 0 END '
+                .'ELSE 0 END), 0) AS held'
+            )
+            ->first();
+
+        $signed = round((float) ($row?->signed_available ?? 0), 2);
+
+        return [
+            'signed_available' => $signed,
+            'available' => round(max(0, $signed), 2),
+            'overpaid' => round(max(0, -$signed), 2),
+            // `held` dibatasi agar tidak pernah melebihi `available`; nilai
+            // sebenarnya hanya bermakna sebagai rincian.
+            'held' => round(min(max(0, (float) ($row?->held ?? 0)), max(0, $signed)), 2),
+            'requested' => round((float) ($row?->requested ?? 0), 2),
+            'paid' => round((float) ($row?->paid ?? 0), 2),
+        ];
+    }
+
+    /** Query dasar bersama: booking selesai milik tutor, tanpa sengketa terbuka. */
+    private function completedBookings(int $teacherId)
+    {
+        return Booking::query()
             ->where('teacher_id', $teacherId)
             ->where('status', 'completed')
-            ->whereDoesntHave('disputes', fn ($query) => $query->whereNull('resolved_at'))
-            ->selectRaw('COALESCE(SUM(teacher_net_amount - teacher_paid_amount - teacher_reserved_amount), 0) AS available')
-            ->value('available'), 2);
+            ->whereDoesntHave('disputes', fn ($query) => $query->whereNull('resolved_at'));
     }
 
     /** Amount the tutor was overpaid and therefore cannot withdraw. */

@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\BankAccountNameVerifier;
 use App\Services\TeacherMatchingService;
 use App\Services\TeacherOfferReleaseService;
+use App\Services\TeacherPayoutService;
 use App\Support\EducationCatalog;
 use App\Support\PublicMedia;
 use App\Support\XenditPayoutChannelCatalog;
@@ -676,11 +677,11 @@ class TeacherController extends Controller
             ->where('teacher_id', $user->id)
             ->where('status', 'completed')
             ->whereDoesntHave('disputes', fn ($query) => $query->whereNull('resolved_at'));
+        // Saldo dibaca dari satu sumber kebenaran di service, bukan dihitung
+        // ulang di sini, supaya angka dashboard selalu sama dengan plafon
+        // pencairan yang ditegakkan TeacherPayoutService::request().
+        $balance = app(TeacherPayoutService::class)->balanceSummary((int) $user->id);
         $balanceRows = (clone $completedBookings)
-            ->selectRaw("COALESCE(SUM(CASE WHEN payout_status = 'locked' THEN teacher_net_amount ELSE 0 END), 0) AS held")
-            ->selectRaw('COALESCE(SUM(teacher_net_amount - teacher_paid_amount - teacher_reserved_amount), 0) AS available')
-            ->selectRaw('COALESCE(SUM(teacher_reserved_amount), 0) AS requested')
-            ->selectRaw('COALESCE(SUM(teacher_paid_amount), 0) AS paid')
             ->selectRaw('COALESCE(SUM(gross_amount), 0) AS total_gross')
             ->selectRaw('COALESCE(SUM(gross_amount - teacher_net_amount), 0) AS total_commission')
             ->first();
@@ -736,14 +737,14 @@ class TeacherController extends Controller
 
         return response()->json([
             'current_period' => Carbon::now()->translatedFormat('F Y'),
-            'balance' => round(max(0, (float) ($balanceRows?->available ?? 0))),
-            'pending_amount' => round(max(0, (float) ($balanceRows?->available ?? 0))),
+            'balance' => $balance['available'],
+            'pending_amount' => $balance['available'],
             'balances' => [
-                'held' => round((float) ($balanceRows?->held ?? 0)),
-                'available' => round(max(0, (float) ($balanceRows?->available ?? 0))),
-                'overpaid' => round(max(0, -(float) ($balanceRows?->available ?? 0))),
-                'requested' => round((float) ($balanceRows?->requested ?? 0)),
-                'paid' => round((float) ($balanceRows?->paid ?? 0)),
+                'held' => $balance['held'],
+                'available' => $balance['available'],
+                'overpaid' => $balance['overpaid'],
+                'requested' => $balance['requested'],
+                'paid' => $balance['paid'],
             ],
             'totals' => [
                 'gross' => round((float) ($balanceRows?->total_gross ?? 0)),
