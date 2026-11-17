@@ -539,6 +539,14 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
               const refundDestinationUnlocked = !matchingWindowOpen
                 || item.status === "cancelled"
                 || item.status === "refund_pending";
+              
+              // Helper: tooltip explaining the 60-minute refund choice window
+              const refundWindowTooltip = (
+                <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-[11px] font-medium text-white bg-slate-900 rounded-lg shadow-lg whitespace-nowrap">
+                  Pilihan tujuan refund (Saldo BimbelKu / Metode asal) terbuka setelah masa pencarian tutor 60 menit berakhir, atau saat paket dibatalkan.
+                </div>
+              );
+              
               return (
                 <article key={item.id} className="min-w-0 max-w-full overflow-hidden rounded-[1.6rem] border border-slate-100 bg-white shadow-sm sm:rounded-[2rem]">
                   <div className="flex min-w-0 flex-col justify-between gap-4 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:p-6">
@@ -580,6 +588,12 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
                         }} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-black text-white sm:flex-none">
                           <CreditCard size={17} /> Bayar Paket
                         </Link>
+                      )}
+                      {rejectionReason && (
+                        <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold leading-5 text-rose-900">
+                          <p className="font-black">Pembayaran ditolak</p>
+                          <p className="mt-1">{rejectionReason}</p>
+                        </div>
                       )}
                       {canChangeSchedule && (
                         <Link to={`/student/packages/${item.id}/reschedule`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-black text-indigo-700 sm:flex-none">
@@ -633,12 +647,25 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
                         <p className="mt-3 rounded-xl border border-violet-200 bg-white/80 p-3 text-xs font-semibold leading-5 text-violet-900">{refund.status_message}</p>
                       )}
 
-                      {refundNeedsDestination && refundDestinationUnlocked && (
-                        <div className="mt-3 rounded-xl border border-violet-200 bg-white p-3">
-                          <p className="font-black text-slate-900">Mau menerima refund ke mana?</p>
-                          <p className="mt-1 text-xs leading-5 text-slate-600">
-                            Pilih tujuan pengembalian dana. Pembayaran melalui penyedia pembayaran dapat dikembalikan otomatis ke metode pembayaran asal tanpa menunggu bukti transfer admin.
-                          </p>
+{refundNeedsDestination && refundDestinationUnlocked && (
+                        <div className="relative mt-3 rounded-xl border border-violet-200 bg-white p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="font-black text-slate-900">Mau menerima refund ke mana?</p>
+                              <p className="mt-1 text-xs leading-5 text-slate-600">
+                                Pilih tujuan pengembalian dana. Pembayaran melalui penyedia pembayaran dapat dikembalikan otomatis ke metode pembayaran asal tanpa menunggu bukti transfer admin.
+                              </p>
+                            </div>
+                            {/* Tooltip explaining the 60-minute window */}
+                            <div className="absolute top-2 right-2 flex-shrink-0">
+                              <span className="group relative inline-block" tabIndex={0} role="button" aria-label="Penjelasan jendela refund">
+                                <HelpCircle size={14} className="text-slate-400 hover:text-slate-600 cursor-help" />
+                                <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1 px-3 py-2 text-[11px] font-medium text-white bg-slate-900 rounded-lg shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-opacity duration-200">
+                                  Pilihan tujuan refund (Saldo BimbelKu / Metode asal) terbuka setelah masa pencarian tutor 60 menit berakhir, atau saat paket dibatalkan.
+                                </div>
+                              </span>
+                            </div>
+                          </div>
                           <div className="mt-3 grid gap-2 sm:grid-cols-2">
                             <div className="min-w-0">
                               <button
@@ -658,11 +685,17 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
                               type="button"
                               onClick={() => void requestRefundDestination(refund.id, "xendit_original")}
                               disabled={!canReturnToOriginal || refundSubmitting === refund.id}
-                              className="flex min-h-12 items-center gap-2 rounded-xl border border-violet-200 bg-white px-3 py-2 text-left text-violet-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                              className="relative flex min-h-12 items-center gap-2 rounded-xl border border-violet-200 bg-white px-3 py-2 text-left text-violet-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                             >
                               <Building2 size={17} className="shrink-0" />
-                              <span><span className="block font-black">Metode pembayaran asal</span><span className="block text-[10px] font-medium">{canReturnToOriginal ? `${rupiah(refundExternal)} kembali otomatis via penyedia pembayaran` : "Tidak tersedia untuk pembayaran ini"}</span></span>
+                              <span><span className="block font-black">Metode pembayaran asal</span><span className="block text-[10px] font-medium">{canReturnToOriginal ? `${rupiah(refundExternal)} kembali otomatis via penyedia pembayaran` : "Tersedia untuk pembayaran online terverifikasi"}</span></span>
                             </button>
+                            {/* Tooltip for disabled original method */}
+                            {!canReturnToOriginal && (
+                              <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-[11px] font-medium text-white bg-slate-900 rounded-lg shadow-lg whitespace-nowrap">
+                                Tersedia untuk pembayaran online terverifikasi (QRIS, e-wallet, VA via Xendit)
+                              </div>
+                            )}
                           </div>
                           {!canReturnToOriginal && <p className="mt-2 text-[11px] font-semibold leading-5 text-slate-500">Pengembalian ke metode asal tidak tersedia. Pilih Saldo BimbelKu agar dana tetap dapat digunakan.</p>}
                         </div>

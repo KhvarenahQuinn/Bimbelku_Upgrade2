@@ -318,6 +318,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
         }
 
         if (selectionUrl) {
+          notify.success("Mengarahkan ke WhatsApp untuk melanjutkan seleksi tutor...");
           window.location.assign(selectionUrl);
           return;
         }
