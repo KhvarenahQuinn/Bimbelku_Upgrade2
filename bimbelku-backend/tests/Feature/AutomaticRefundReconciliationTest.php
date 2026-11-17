@@ -125,7 +125,7 @@ class AutomaticRefundReconciliationTest extends TestCase
         ]);
         $order->forceFill(['payment_provider' => 'xendit'])->save();
 
-        return Refund::create([
+        $refund = Refund::create([
             'order_id' => $order->id,
             'user_id' => $student->id,
             'amount' => 150000,
@@ -134,11 +134,18 @@ class AutomaticRefundReconciliationTest extends TestCase
             'status' => 'pending',
             'destination_method' => 'xendit_original',
             'destination_selected_at' => now()->subMinutes(2),
-            'gateway_refund_id' => $gatewayRefundId,
             'gateway_reference_id' => 'BKU-RFD-TEST-'.$code,
-            'gateway_status' => $gatewayRefundId ? 'PENDING' : null,
             'gateway_submitted_at' => $gatewayRefundId ? now()->subMinutes(2) : null,
             'last_reconciled_at' => $lastReconciledAt ?: now()->subMinutes(2),
         ]);
+
+        // `gateway_refund_id` dan `gateway_status` dijaga pada model Refund;
+        // fixture harus memakai forceFill() seperti service.
+        $refund->forceFill([
+            'gateway_refund_id' => $gatewayRefundId,
+            'gateway_status' => $gatewayRefundId ? 'PENDING' : null,
+        ])->save();
+
+        return $refund->fresh();
     }
 }

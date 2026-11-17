@@ -164,8 +164,8 @@ class PaymentGatewaySafetyTest extends TestCase
         $order = $this->invoice();
         $refund = Refund::create(['order_id' => $order->id, 'user_id' => $order->user_id,
             'amount' => 50000, 'reason' => 'Tutor tidak ditemukan', 'status' => 'pending',
-            'gateway_refund_id' => 'rfd-stale', 'gateway_status' => 'SUBMITTING',
             'destination_method' => 'xendit_original']);
+        $refund->forceFill(['gateway_refund_id' => 'rfd-stale', 'gateway_status' => 'SUBMITTING'])->save();
         Http::fake(function () use ($refund, $status) {
             Refund::whereKey($refund->id)->update(['status' => 'paid', 'gateway_status' => 'SUCCEEDED', 'gateway_failure_code' => null]);
 
@@ -254,7 +254,8 @@ class PaymentGatewaySafetyTest extends TestCase
     {
         $order = $this->invoice();
         $refund = Refund::create(['order_id' => $order->id, 'user_id' => $order->user_id, 'amount' => 50000,
-            'reason' => 'Uji sengketa', 'status' => 'pending', 'gateway_refund_id' => 'rfd-safety', 'gateway_status' => 'PENDING']);
+            'reason' => 'Uji sengketa', 'status' => 'pending']);
+        $refund->forceFill(['gateway_refund_id' => 'rfd-safety', 'gateway_status' => 'PENDING'])->save();
         $this->webhook('refund.failed', ['status' => 'FAILED'])->assertOk();
         $this->assertSame('PENDING', $refund->fresh()->gateway_status);
         $this->assertNull(PaymentGatewayEvent::firstOrFail()->refund_id);
@@ -264,7 +265,8 @@ class PaymentGatewaySafetyTest extends TestCase
     {
         $order = $this->invoice();
         $refund = Refund::create(['order_id' => $order->id, 'user_id' => $order->user_id, 'amount' => 50000,
-            'reason' => 'Uji sengketa', 'status' => 'paid', 'gateway_refund_id' => 'rfd-safety', 'gateway_status' => 'SUCCEEDED']);
+            'reason' => 'Uji sengketa']);
+        $refund->forceFill(['status' => 'paid', 'gateway_refund_id' => 'rfd-safety', 'gateway_status' => 'SUCCEEDED'])->save();
         $this->webhook('refund.failed', ['id' => 'rfd-safety', 'status' => 'FAILED'])->assertOk();
         $this->assertSame('SUCCEEDED', $refund->fresh()->gateway_status);
         $this->assertSame('paid', $refund->fresh()->status);
@@ -288,9 +290,10 @@ class PaymentGatewaySafetyTest extends TestCase
         $order = $this->invoice();
         $order->forceFill(['status' => 'refund_pending', 'payment_provider' => 'xendit'])->saveQuietly();
         $refund = Refund::create(['order_id' => $order->id, 'user_id' => $order->user_id, 'amount' => 50000,
-            'reason' => 'Tutor tidak ditemukan', 'status' => 'pending', 'gateway_refund_id' => 'rfd-safety',
-            'gateway_reference_id' => 'ref-refund', 'gateway_status' => 'PENDING',
+            'reason' => 'Tutor tidak ditemukan', 'status' => 'pending',
+            'gateway_reference_id' => 'ref-refund',
             'destination_method' => 'xendit_original', 'destination_selected_at' => now()]);
+        $refund->forceFill(['gateway_refund_id' => 'rfd-safety', 'gateway_status' => 'PENDING'])->save();
         foreach ([1, 2] as $delivery) {
             $this->webhook('refund.succeeded', ['id' => 'rfd-safety', 'reference_id' => 'ref-refund', 'status' => 'SUCCEEDED'])->assertOk();
         }

@@ -124,7 +124,7 @@ class XenditMoneyMovementService
             if ($refund->status === 'paid' || $refund->gateway_status === 'SUCCEEDED') {
                 return $this->refundPayload($refund);
             }
-            report(new RuntimeException('Xendit refund failed: '.$response->status().' '.$response->body()));
+            Log::channel('payments')->error('xendit_refund_failed', ['status' => $response->status(), 'refund_id' => $refund->id]);
             throw new RuntimeException($definitive
                 ? 'Pengembalian dana ke metode pembayaran asal ditolak. Pilih Saldo BimbelKu atau hubungi bantuan.'
                 : 'Refund otomatis belum dapat dibuat. Periksa saldo operasional dan coba kembali.');
@@ -290,7 +290,7 @@ class XenditMoneyMovementService
             if (in_array($response->status(), [400, 401, 403, 404, 422], true)) {
                 $payout->forceFill(['gateway_status' => 'FAILED'])->save();
             }
-            report(new RuntimeException('Xendit payout failed: '.$response->status().' '.$response->body()));
+            Log::channel('payouts')->error('xendit_payout_failed', ['status' => $response->status(), 'payout_id' => $payout->id]);
             throw new RuntimeException('Pencairan otomatis belum dapat dibuat. Periksa saldo operasional dan rekening tutor.');
         }
         $data = $response->json();
@@ -357,13 +357,13 @@ class XenditMoneyMovementService
             // `reversed` is terminal: a late failure/delivery notice must never
             // reopen it or post a second journal.
             if ($previousStatus === 'reversed' && $status !== 'REVERSED') {
-                Log::info('Ignored payout transition after reversal', ['payout_id' => $current->id, 'gateway_status' => $status]);
+                Log::channel('payouts')->info('Ignored payout transition after reversal', ['payout_id' => $current->id, 'gateway_status' => $status]);
 
                 return $current;
             }
             // A settled payout can only move to `reversed`.
             if ($previousStatus === 'completed' && ! in_array($status, ['SUCCEEDED', 'REVERSED'], true)) {
-                Log::info('Ignored payout transition after completion', ['payout_id' => $current->id, 'gateway_status' => $status]);
+                Log::channel('payouts')->info('Ignored payout transition after completion', ['payout_id' => $current->id, 'gateway_status' => $status]);
 
                 return $current;
             }
@@ -377,7 +377,7 @@ class XenditMoneyMovementService
             // keeps the reservation, which is the wrong outcome if Xendit has
             // added a terminal status we do not know yet.
             if (! in_array($status, self::KNOWN_STATUSES, true)) {
-                Log::warning('unknown_payout_status', [
+                Log::channel('payouts')->warning('unknown_payout_status', [
                     'payout_id' => $current->id,
                     'gateway_status' => $status,
                     'gateway_failure_code' => $data['failure_code'] ?? null,

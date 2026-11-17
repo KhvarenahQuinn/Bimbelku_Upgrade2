@@ -279,7 +279,7 @@ class NewStudentCheckoutSimulationTest extends TestCase
         ]);
 
         app(CustomerWalletService::class)->creditRefund($refund, $student->id);
-        $refund->update(['status' => 'paid', 'processed_at' => now()]);
+        $refund->forceFill(['status' => 'paid', 'processed_at' => now()])->save();
         $sourceOrder->update(['status' => 'refunded']);
     }
 }

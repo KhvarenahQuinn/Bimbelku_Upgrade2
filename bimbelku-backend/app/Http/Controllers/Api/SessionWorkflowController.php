@@ -1375,7 +1375,8 @@ class SessionWorkflowController extends Controller
                     $walletTransaction = $wallets->creditRefund($lockedRefund, (int) $request->user()->id);
                 }
 
-                $lockedRefund->update([
+                // `status`, `proof`, dan `processed_at` dijaga pada model Refund.
+                $lockedRefund->forceFill([
                     'status' => 'paid',
                     'destination_method' => $destinationMethod,
                     // Tujuan sudah dipilih dan disnapshot oleh murid. Admin hanya
@@ -1384,7 +1385,7 @@ class SessionWorkflowController extends Controller
                     'processed_by' => $request->user()->id,
                     'processed_at' => now(),
                     'notes' => $validated['notes'] ?? null,
-                ]);
+                ])->save();
                 $isTeacherReplacement = $lockedRefund->source_type === 'teacher_replacement';
                 if (! $isTeacherReplacement) {
                     $lockedRefund->order->update(['status' => 'refunded']);

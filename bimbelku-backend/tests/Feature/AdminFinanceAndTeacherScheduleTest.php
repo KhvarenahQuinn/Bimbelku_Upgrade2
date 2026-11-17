@@ -148,13 +148,13 @@ class AdminFinanceAndTeacherScheduleTest extends TestCase
         Sanctum::actingAs($admin);
         $this->getJson('/api/admin/dashboard-stats')->assertOk()->assertJsonPath('counts.refunds', 0);
 
-        $refund->update(['destination_method' => 'bank_transfer', 'destination_selected_at' => now()]);
+        $refund->forceFill(['destination_method' => 'bank_transfer', 'destination_selected_at' => now()])->save();
         $this->getJson('/api/admin/dashboard-stats')->assertOk()->assertJsonPath('counts.refunds', 1);
 
-        $refund->update(['destination_method' => 'xendit_original', 'gateway_status' => 'PENDING']);
+        $refund->forceFill(['destination_method' => 'xendit_original', 'gateway_status' => 'PENDING'])->save();
         $this->getJson('/api/admin/dashboard-stats')->assertOk()->assertJsonPath('counts.refunds', 0);
 
-        $refund->update(['gateway_status' => 'FAILED']);
+        $refund->forceFill(['gateway_status' => 'FAILED'])->save();
         $this->getJson('/api/admin/dashboard-stats')->assertOk()->assertJsonPath('counts.refunds', 1);
     }
 
@@ -168,13 +168,22 @@ class AdminFinanceAndTeacherScheduleTest extends TestCase
             'amount' => 100000,
             'status' => 'refund_pending',
         ]);
-        $createRefund = fn (array $attributes) => Refund::create(array_merge([
-            'order_id' => $order->id,
-            'user_id' => $student->id,
-            'amount' => 100000,
-            'reason' => 'Uji urutan refund',
-            'status' => 'pending',
-        ], $attributes));
+        // `status` dan `gateway_status` dijaga pada model Refund, jadi fixture
+        // menyimpannya lewat forceFill() seperti service.
+        $createRefund = function (array $attributes) use ($order, $student) {
+            $guarded = array_intersect_key($attributes, array_flip(['status', 'gateway_status', 'gateway_refund_id', 'processed_at', 'proof']));
+            $refund = Refund::create(array_merge([
+                'order_id' => $order->id,
+                'user_id' => $student->id,
+                'amount' => 100000,
+                'reason' => 'Uji urutan refund',
+            ], array_diff_key($attributes, $guarded)));
+            if ($guarded !== []) {
+                $refund->forceFill($guarded)->save();
+            }
+
+            return $refund;
+        };
 
         $waiting = $createRefund(['created_at' => now(), 'updated_at' => now()]);
         $transfer = $createRefund([

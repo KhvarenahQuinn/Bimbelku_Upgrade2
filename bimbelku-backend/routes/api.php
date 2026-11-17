@@ -63,7 +63,7 @@ use App\Http\Controllers\Api\WebsiteTutorGalleryController;
 use App\Http\Controllers\Api\XenditPaymentController;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth-register');
+Route::post('/register', [AuthController::class, 'register'])->middleware(['throttle:auth-register', 'turnstile']);
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
 Route::post('/login/admin', [AuthController::class, 'adminLogin'])->middleware('throttle:auth-login-admin');
 Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect'])->middleware('throttle:auth-login');
@@ -71,7 +71,7 @@ Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->
 Route::post('/auth/google/exchange', [GoogleAuthController::class, 'exchange'])->middleware('throttle:auth-login');
 Route::post('/auth/google/complete-profile', [GoogleAuthController::class, 'completeProfile'])
     ->middleware(['auth:sanctum', 'throttle:auth-register']);
-Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink'])->middleware('throttle:auth-forgot-password');
+Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink'])->middleware(['throttle:auth-forgot-password', 'turnstile']);
 Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:auth-reset-password');
 Route::post('/payment-pin/reset-with-token', [PaymentPinController::class, 'resetWithEmailToken'])->middleware('throttle:payment-pin-reset-token');
 Route::post('/email/verification/resend', [EmailVerificationController::class, 'resend'])->middleware('throttle:auth-email-verification-resend');
@@ -102,7 +102,11 @@ Route::get('/testimonials', [WebsiteContentController::class, 'testimonials'])->
 Route::get('/public-media/{path}', PublicMediaController::class)
     ->where('path', '.*')
     ->middleware('throttle:public-media');
-Route::post('/webhooks/xendit', [XenditPaymentController::class, 'webhook']);
+// Webhook tetap di luar auth: Xendit tidak membawa token Sanctum. Autentikasi
+// memakai x-callback-token (hash_equals) di controller; throttle hanya membatasi
+// kerja perbandingan token dari pemanggil tak dikenal.
+Route::post('/webhooks/xendit', [XenditPaymentController::class, 'webhook'])
+    ->middleware('throttle:public-webhook');
 
 Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->group(function () {
     Route::get('/user', [UserController::class, 'show']);

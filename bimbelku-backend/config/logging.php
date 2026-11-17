@@ -73,6 +73,51 @@ return [
             'replace_placeholders' => true,
         ],
 
+        /*
+        | Kanal domain: memisahkan jejak pembayaran, pencairan, webhook, dan
+        | keamanan dari log aplikasi umum. Nilainya hanya metadata operasional
+        | (id, status, kode kegagalan) — tidak pernah token, kunci, PIN, nomor
+        | rekening penuh, atau data pribadi.
+        */
+
+        'payments' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/payments.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_DOMAIN_DAYS', 30),
+            'replace_placeholders' => true,
+        ],
+
+        'payouts' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/payouts.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_DOMAIN_DAYS', 30),
+            'replace_placeholders' => true,
+        ],
+
+        'webhooks' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/webhooks.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_DOMAIN_DAYS', 30),
+            'replace_placeholders' => true,
+        ],
+
+        'security' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/security.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_DOMAIN_DAYS', 90),
+            'replace_placeholders' => true,
+        ],
+
+        'domains' => [
+            'driver' => 'stack',
+            'channels' => ['payments', 'payouts', 'webhooks', 'security'],
+            'ignore_exceptions' => false,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
