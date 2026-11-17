@@ -41,7 +41,7 @@ class XenditMoneyFlowTest extends TestCase
         $manualOrder = Order::create(['user_id' => $student->id, 'order_id' => 'INV-MANUAL-REFUND', 'amount' => 10000, 'status' => 'refund_pending']);
         $manual = Refund::create(['order_id' => $manualOrder->id, 'user_id' => $student->id, 'amount' => 10000, 'reason' => 'Sengketa sesi', 'status' => 'pending']);
         $this->assertTrue(Notification::query()->where('unique_key', 'like', "refund-action:{$manual->id}:%")->where('is_read', false)->exists());
-        $manual->update(['status' => 'paid']);
+        $manual->forceFill(['status' => 'paid'])->save();
         $this->assertFalse(Notification::query()->where('unique_key', 'like', "refund-action:{$manual->id}:%")->where('is_read', false)->exists());
     }
 

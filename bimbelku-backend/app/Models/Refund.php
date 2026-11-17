@@ -9,7 +9,15 @@ class Refund extends Model
 {
     use HasAutomaticPublicCode;
 
-    protected $guarded = ['id'];
+    /**
+     * Kolom penyelesaian dijaga dari mass assignment: identitas gateway,
+     * status terminal, waktu proses, dan bukti transfer hanya boleh ditulis
+     * service lewat forceFill() dengan kunci eksplisit. Kolom identitas
+     * (user_id, order_id) dan nominal sengaja tidak dijaga karena ketiganya
+     * harus ditetapkan saat pembuatan refund; nilainya divalidasi service,
+     * bukan berasal langsung dari input request.
+     */
+    protected $guarded = ['id', 'status', 'gateway_refund_id', 'gateway_status', 'processed_at', 'proof'];
 
     protected $hidden = ['proof'];
 

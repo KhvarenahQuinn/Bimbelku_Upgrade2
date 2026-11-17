@@ -10,6 +10,7 @@ use App\Http\Middleware\EnsureAdminPermission;
 use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\RefreshPersistentSession;
+use App\Http\Middleware\VerifyTurnstile;
 use App\Models\Promotion;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
@@ -25,6 +26,27 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Di belakang Cloudflare (atau reverse proxy lain) Laravel hanya tahu
+        // skema asli dan IP klien bila proxy dipercaya. Daftar diambil dari
+        // TRUSTED_PROXIES (dipisah koma; "REMOTE_ADDR" berarti memercayai
+        // proxy yang langsung terhubung). Kosong = tidak ada proxy dipercaya,
+        // sehingga pengembangan lokal tetap memakai koneksi langsung.
+        $trustedProxies = array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('TRUSTED_PROXIES', ''))
+        ), fn (string $proxy): bool => $proxy !== ''));
+
+        if ($trustedProxies !== []) {
+            $middleware->trustProxies(
+                at: $trustedProxies,
+                headers: Request::HEADER_X_FORWARDED_FOR
+                    | Request::HEADER_X_FORWARDED_HOST
+                    | Request::HEADER_X_FORWARDED_PORT
+                    | Request::HEADER_X_FORWARDED_PROTO
+                    | Request::HEADER_X_FORWARDED_PREFIX,
+            );
+        }
+
         // Aplikasi ini tidak punya route bernama `login`: autentikasi memakai
         // bearer token / cookie sesi, bukan redirect ke halaman web. Tanpa ini
         // middleware `auth` memanggil route('login') untuk tamu dan melempar
@@ -44,6 +66,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.audit' => AuditAdminAction::class,
             'feature' => EnsureFeatureEnabled::class,
             'persistent.session' => RefreshPersistentSession::class,
+            'turnstile' => VerifyTurnstile::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

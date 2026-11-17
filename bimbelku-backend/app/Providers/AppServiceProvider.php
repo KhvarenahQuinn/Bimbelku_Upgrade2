@@ -17,6 +17,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Routing\UrlRoutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -36,6 +37,15 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         app(BankAccountNameVerifier::class)->assertNotEnabledInProduction();
+
+        // Turnstile bersifat opsional: kosong = mati. Jangan biarkan produksi
+        // diam-diam kehilangan perlindungan bot, jadi catat peringatan yang
+        // terlihat di kanal `security` saat kunci tidak diisi.
+        if (! config('turnstile.enabled') && app()->environment('production')) {
+            Log::channel('security')->warning('turnstile_disabled_in_production', [
+                'hint' => 'Set TURNSTILE_SECRET_KEY untuk mengaktifkan verifikasi anti-bot pada /register dan /forgot-password.',
+            ]);
+        }
 
         Gate::policy(TeacherReplacementRequest::class, TeacherReplacementRequestPolicy::class);
 
@@ -110,6 +120,9 @@ class AppServiceProvider extends ServiceProvider
         // accidental polling without blocking a normal landing-page visit.
         $registerIsolatedLimiter('public-read', 120, 'Permintaan publik terlalu sering. Tunggu :seconds detik lalu coba lagi.');
         $registerIsolatedLimiter('public-media', 300, 'Media dimuat terlalu sering. Tunggu :seconds detik lalu coba lagi.');
+        // Webhook pembayaran tidak membawa token pengguna, jadi batasnya per IP
+        // dan sengaja longgar: Xendit dapat mengirim retry beruntun.
+        $registerIsolatedLimiter('public-webhook', 120, 'Webhook diterima terlalu sering. Tunggu :seconds detik lalu coba lagi.');
 
         // Public authentication. Each endpoint owns a separate IP bucket.
         $registerIsolatedLimiter('auth-register', 5, 'Pendaftaran dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.');

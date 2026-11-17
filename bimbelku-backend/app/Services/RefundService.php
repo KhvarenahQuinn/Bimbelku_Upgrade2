@@ -86,14 +86,16 @@ class RefundService
             // Credit wallet balance atomically
             $walletTransaction = $this->wallets->creditRefund($locked, $actorId);
 
-            $locked->update([
+            // `status` dan `processed_at` dijaga pada model Refund, jadi
+            // penyelesaian wajib lewat forceFill().
+            $locked->forceFill([
                 'status' => 'paid',
                 'destination_method' => 'bimbelku_balance',
                 'destination_selected_at' => $locked->destination_selected_at ?: now(),
                 'processed_by' => $actorId,
                 'processed_at' => now(),
                 'notes' => $locked->notes ?: 'Refund otomatis ke Saldo BimbelKu.',
-            ]);
+            ])->save();
 
             $order = $locked->order;
             if ($order) {

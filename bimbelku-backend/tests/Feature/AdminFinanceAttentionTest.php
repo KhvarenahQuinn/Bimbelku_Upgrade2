@@ -29,10 +29,9 @@ class AdminFinanceAttentionTest extends TestCase
             'user_id' => $student->id,
             'amount' => 100000,
             'reason' => 'Pengiriman refund gagal',
-            'status' => 'failed',
             'created_at' => now()->subDays(2),
             'updated_at' => now()->subDays(2),
-        ]);
+        ])->forceFill(['status' => 'failed'])->save();
 
         $staleOrder = $this->order($student, 'INV-ATTN-STALE');
         Refund::create([

@@ -322,7 +322,9 @@ class RefundSettlementService
                 }
             }
 
-            $locked->update([
+            // `status`, `proof`, dan `processed_at` dijaga dari mass assignment
+            // pada model Refund, jadi penyelesaian wajib lewat forceFill().
+            $locked->forceFill([
                 'status' => 'paid',
                 'destination_method' => $destinationMethod,
                 'destination_selected_at' => $locked->destination_selected_at ?: now(),
@@ -331,7 +333,7 @@ class RefundSettlementService
                 'processed_at' => now(),
                 'notes' => $notes,
                 'gateway_processed_at' => $destinationMethod === 'xendit_original' ? now() : $locked->gateway_processed_at,
-            ]);
+            ])->save();
 
             if ($locked->source_type !== 'teacher_replacement') {
                 $locked->order->update(['status' => 'refunded']);

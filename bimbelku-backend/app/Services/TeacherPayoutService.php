@@ -542,6 +542,11 @@ class TeacherPayoutService
      */
     public function revertCompletedAllocation(Payout $payout): void
     {
+        // Urutan lock seragam: Payout dulu, baru Booking, sama seperti
+        // complete() dan release(). Pemanggil saat ini (applyGatewayStatus)
+        // sudah memegang lock pada baris payout yang sama, jadi ini hanya
+        // menjaga helper tetap benar bila dipanggil dari jalur lain.
+        $payout = Payout::query()->lockForUpdate()->findOrFail($payout->id);
         $allocations = $payout->allocation_breakdown ?: collect($payout->booking_ids ?? [])->map(fn ($id) => ['booking_id' => $id, 'amount' => null])->all();
         foreach ($allocations as $allocation) {
             $booking = Booking::query()->lockForUpdate()->find($allocation['booking_id'] ?? 0);
@@ -554,7 +559,7 @@ class TeacherPayoutService
             $paidBefore = (float) $booking->teacher_paid_amount;
             $paid = round(max(0, $paidBefore - $amount), 2);
             if ($paidBefore - $amount < -0.009) {
-                Log::warning('Payout reversal clamped teacher_paid_amount', [
+                Log::channel('payouts')->warning('Payout reversal clamped teacher_paid_amount', [
                     'payout_id' => $payout->id,
                     'booking_id' => $booking->id,
                     'paid_before' => $paidBefore,

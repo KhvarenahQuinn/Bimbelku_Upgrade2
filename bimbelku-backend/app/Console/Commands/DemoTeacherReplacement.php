@@ -344,12 +344,12 @@ class DemoTeacherReplacement extends Command
                 'destination_selection_version' => max(1, (int) $locked->destination_selection_version + 1),
             ])->save();
             $wallets->creditRefund($locked, $admin->id);
-            $locked->update([
+            $locked->forceFill([
                 'status' => 'paid',
                 'processed_by' => $admin->id,
                 'processed_at' => now(),
                 'notes' => 'Shortcut demo lokal melalui service refund production.',
-            ]);
+            ])->save();
             $partialRefunds->completeTeacherReplacementRefund($locked->fresh());
         }, 3);
         $this->info('Refund sesi tersisa selesai ke Saldo BimbelKu. Order asli tetap paid.');
