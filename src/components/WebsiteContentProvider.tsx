@@ -93,3 +93,12 @@ export function useWebsiteContent() {
   if (!value) throw new Error("useWebsiteContent harus digunakan di dalam WebsiteContentProvider.");
   return value;
 }
+
+/**
+ * Varian tanpa lemparan untuk komponen global yang boleh hidup di luar
+ * provider, mis. tombol WhatsApp mengambang yang dipasang sekali di root.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useOptionalWebsiteContent() {
+  return useContext(WebsiteContentContext);
+}

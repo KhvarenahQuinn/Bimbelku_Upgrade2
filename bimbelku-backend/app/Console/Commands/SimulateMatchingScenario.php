@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\BookingRequest;
 use App\Models\CustomerWallet;
+use App\Models\CustomerWalletTransaction;
 use App\Models\LearningPackage;
 use App\Models\MatchingOperationLog;
 use App\Models\Order;
@@ -23,7 +24,7 @@ use App\Services\RefundSettlementService;
 use App\Services\TeacherMatchingService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class SimulateMatchingScenario extends Command
@@ -70,17 +71,20 @@ class SimulateMatchingScenario extends Command
                 break;
             default:
                 $this->error("Unknown scenario: {$scenario}");
-                $this->info("Available scenarios: expire-60min, auto-refund-wallet, manual-refund-bank, race-condition, all");
+                $this->info('Available scenarios: expire-60min, auto-refund-wallet, manual-refund-bank, race-condition, all');
+
                 return self::FAILURE;
         }
 
-        $allPassed = !in_array(false, $results, true);
+        $allPassed = ! in_array(false, $results, true);
         if ($allPassed) {
-            $this->info("=== All simulated scenarios completed successfully! ===");
+            $this->info('=== All simulated scenarios completed successfully! ===');
+
             return self::SUCCESS;
         }
 
-        $this->error("=== Some simulated scenarios failed! ===");
+        $this->error('=== Some simulated scenarios failed! ===');
+
         return self::FAILURE;
     }
 
@@ -90,8 +94,8 @@ class SimulateMatchingScenario extends Command
      */
     private function simulateExpire60Min(TeacherMatchingService $matchingService): bool
     {
-        $this->line("<comment>[1/4] Scenario: expire-60min</comment>");
-        $this->line("Creating test package, booking request, and teacher offer...");
+        $this->line('<comment>[1/4] Scenario: expire-60min</comment>');
+        $this->line('Creating test package, booking request, and teacher offer...');
 
         $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
         $teacher = $this->createTeacher('Fisika');
@@ -113,7 +117,7 @@ class SimulateMatchingScenario extends Command
             $package->update(['status' => 'teacher_pending']);
         }
 
-        $this->line("Adjusting timestamps to 61 minutes ago (exceeding strict 60-minute window)...");
+        $this->line('Adjusting timestamps to 61 minutes ago (exceeding strict 60-minute window)...');
         $sixtyOneMinsAgo = now()->subMinutes(61);
         $oneMinAgo = now()->subMinute();
 
@@ -131,7 +135,7 @@ class SimulateMatchingScenario extends Command
             'expires_at' => $oneMinAgo,
         ]);
 
-        $this->line("Running expiry checker (expireOfferAndContinue & dispatchNextOffer)...");
+        $this->line('Running expiry checker (expireOfferAndContinue & dispatchNextOffer)...');
         $matchingService->expireOfferAndContinue($offer->fresh());
 
         // Check the updated states
@@ -140,7 +144,7 @@ class SimulateMatchingScenario extends Command
         $package->refresh();
         $offer->refresh();
 
-        $this->line("Verification Results:");
+        $this->line('Verification Results:');
         $this->line(" - Offer status: <info>{$offer->status}</info> (expected: expired)");
         $this->line(" - Request status: <info>{$request->status}</info> (expected: no_teacher)");
         $this->line(" - Subject status: <info>{$subject->status}</info> (expected: no_teacher)");
@@ -156,12 +160,12 @@ class SimulateMatchingScenario extends Command
             ->where('action', 'matching_exhausted')
             ->exists();
 
-        $this->line(" - Audit log 'offer_expired': ".($offerExpiredLogged ? "<info>YES</info>" : "<error>NO</error>"));
-        $this->line(" - Audit log 'matching_exhausted': ".($matchingExhaustedLogged ? "<info>YES</info>" : "<error>NO</error>"));
+        $this->line(" - Audit log 'offer_expired': ".($offerExpiredLogged ? '<info>YES</info>' : '<error>NO</error>'));
+        $this->line(" - Audit log 'matching_exhausted': ".($matchingExhaustedLogged ? '<info>YES</info>' : '<error>NO</error>'));
 
         $searchAgeSeconds = $matchingService->searchAgeSeconds($request);
         $cappedAt60Min = $searchAgeSeconds <= 3600;
-        $this->line(" - Search duration capped at 60 mins: {$searchAgeSeconds}s ".($cappedAt60Min ? "<info>(Capped)</info>" : "<error>(Not capped)</error>"));
+        $this->line(" - Search duration capped at 60 mins: {$searchAgeSeconds}s ".($cappedAt60Min ? '<info>(Capped)</info>' : '<error>(Not capped)</error>'));
 
         $success = $offer->status === 'expired'
             && $request->status === 'no_teacher'
@@ -170,9 +174,9 @@ class SimulateMatchingScenario extends Command
             && $cappedAt60Min;
 
         if ($success) {
-            $this->info("✔ Scenario expire-60min: PASSED");
+            $this->info('✔ Scenario expire-60min: PASSED');
         } else {
-            $this->error("✘ Scenario expire-60min: FAILED");
+            $this->error('✘ Scenario expire-60min: FAILED');
         }
 
         return $success;
@@ -186,8 +190,8 @@ class SimulateMatchingScenario extends Command
         RefundService $refundService,
         CustomerWalletService $walletService
     ): bool {
-        $this->line("<comment>[2/4] Scenario: auto-refund-wallet</comment>");
-        $this->line("Creating student with initial wallet balance and paid package...");
+        $this->line('<comment>[2/4] Scenario: auto-refund-wallet</comment>');
+        $this->line('Creating student with initial wallet balance and paid package...');
 
         $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
         $initialBalance = 75000.0;
@@ -196,7 +200,7 @@ class SimulateMatchingScenario extends Command
             'current_balance' => $initialBalance,
             'reserved_balance' => 0,
         ]);
-        \App\Models\CustomerWalletTransaction::unguarded(fn () => \App\Models\CustomerWalletTransaction::create([
+        CustomerWalletTransaction::unguarded(fn () => CustomerWalletTransaction::create([
             'customer_wallet_id' => $wallet->id,
             'user_id' => $student->id,
             'event_key' => 'sim-wallet-init-'.$student->id,
@@ -210,12 +214,12 @@ class SimulateMatchingScenario extends Command
 
         [$package, , , $order] = $this->createPaidPackage($student, 120000.0);
 
-        $this->line("Initial student balance: Rp ".number_format($initialBalance, 0, ',', '.'));
-        $this->line("Package order amount: Rp ".number_format(120000, 0, ',', '.'));
-        $this->line("Executing cancel & refund to wallet (destination: wallet)...");
+        $this->line('Initial student balance: Rp '.number_format($initialBalance, 0, ',', '.'));
+        $this->line('Package order amount: Rp '.number_format(120000, 0, ',', '.'));
+        $this->line('Executing cancel & refund to wallet (destination: wallet)...');
 
         $eventDispatched = false;
-        \Illuminate\Support\Facades\Event::listen('auto_wallet_refund_processed', function () use (&$eventDispatched) {
+        Event::listen('auto_wallet_refund_processed', function () use (&$eventDispatched) {
             $eventDispatched = true;
         });
 
@@ -226,13 +230,13 @@ class SimulateMatchingScenario extends Command
         $refund = $result['refund']?->fresh();
         $newBalance = (float) $wallet->fresh()->current_balance;
 
-        $this->line("Verification Results:");
+        $this->line('Verification Results:');
         $this->line(" - Package status: <info>{$package->status}</info> (expected: refunded)");
         $this->line(" - Order status: <info>{$order->status}</info> (expected: refunded)");
         $this->line(" - Refund status: <info>{$refund?->status}</info> (expected: paid)");
         $this->line(" - Refund destination: <info>{$refund?->destination_method}</info> (expected: bimbelku_balance)");
-        $this->line(" - New wallet balance: Rp ".number_format($newBalance, 0, ',', '.')." (expected: Rp ".number_format($initialBalance + 120000, 0, ',', '.').")");
-        $this->line(" - Audit event 'auto_wallet_refund_processed': ".($eventDispatched ? "<info>DISPATCHED</info>" : "<error>NOT DISPATCHED</error>"));
+        $this->line(' - New wallet balance: Rp '.number_format($newBalance, 0, ',', '.').' (expected: Rp '.number_format($initialBalance + 120000, 0, ',', '.').')');
+        $this->line(" - Audit event 'auto_wallet_refund_processed': ".($eventDispatched ? '<info>DISPATCHED</info>' : '<error>NOT DISPATCHED</error>'));
 
         $success = $package->status === 'refunded'
             && $order->status === 'refunded'
@@ -241,9 +245,9 @@ class SimulateMatchingScenario extends Command
             && $eventDispatched;
 
         if ($success) {
-            $this->info("✔ Scenario auto-refund-wallet: PASSED");
+            $this->info('✔ Scenario auto-refund-wallet: PASSED');
         } else {
-            $this->error("✘ Scenario auto-refund-wallet: FAILED");
+            $this->error('✘ Scenario auto-refund-wallet: FAILED');
         }
 
         return $success;
@@ -257,8 +261,8 @@ class SimulateMatchingScenario extends Command
         RefundService $refundService,
         RefundSettlementService $settlementService
     ): bool {
-        $this->line("<comment>[3/4] Scenario: manual-refund-bank</comment>");
-        $this->line("Creating student, admin, and paid package...");
+        $this->line('<comment>[3/4] Scenario: manual-refund-bank</comment>');
+        $this->line('Creating student, admin, and paid package...');
 
         $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
         $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
@@ -269,7 +273,7 @@ class SimulateMatchingScenario extends Command
             'current_balance' => $initialBalance,
             'reserved_balance' => 0,
         ]);
-        \App\Models\CustomerWalletTransaction::unguarded(fn () => \App\Models\CustomerWalletTransaction::create([
+        CustomerWalletTransaction::unguarded(fn () => CustomerWalletTransaction::create([
             'customer_wallet_id' => $wallet->id,
             'user_id' => $student->id,
             'event_key' => 'sim-wallet-init-'.$student->id,
@@ -283,7 +287,7 @@ class SimulateMatchingScenario extends Command
 
         [$package, , , $order] = $this->createPaidPackage($student, 150000.0);
 
-        $this->line("Executing cancel & refund targeting Original Payment (bank)...");
+        $this->line('Executing cancel & refund targeting Original Payment (bank)...');
 
         $result = $refundService->cancelPackage($package, 'bank', [
             'bank_name' => 'BCA',
@@ -296,25 +300,25 @@ class SimulateMatchingScenario extends Command
         $refund = $result['refund']?->fresh();
         $walletBalanceBeforeAdmin = (float) $wallet->fresh()->current_balance;
 
-        $this->line("Verification Results (Before Admin Approval):");
+        $this->line('Verification Results (Before Admin Approval):');
         $this->line(" - Package status: <info>{$package->status}</info> (expected: refund_pending)");
         $this->line(" - Order status: <info>{$order->status}</info> (expected: refund_pending)");
         $this->line(" - Refund status: <info>{$refund?->status}</info> (expected: pending)");
-        $this->line(" - Student wallet balance unchanged: Rp ".number_format($walletBalanceBeforeAdmin, 0, ',', '.'));
+        $this->line(' - Student wallet balance unchanged: Rp '.number_format($walletBalanceBeforeAdmin, 0, ',', '.'));
 
         $preApprovalOk = $package->status === 'refund_pending'
             && $order->status === 'refund_pending'
             && $refund?->status === 'pending'
             && abs($walletBalanceBeforeAdmin - $initialBalance) < 0.01;
 
-        $this->line("Simulating manual Admin approval & settlement in Admin Dashboard...");
+        $this->line('Simulating manual Admin approval & settlement in Admin Dashboard...');
         $settlementService->settle($refund, 'bank_transfer', $admin->id, 'transfer_proof.jpg', 'Approved by admin finance');
 
         $package->refresh();
         $order->refresh();
         $refund->refresh();
 
-        $this->line("Verification Results (After Admin Approval):");
+        $this->line('Verification Results (After Admin Approval):');
         $this->line(" - Package status: <info>{$package->status}</info> (expected: refunded)");
         $this->line(" - Order status: <info>{$order->status}</info> (expected: refunded)");
         $this->line(" - Refund status: <info>{$refund->status}</info> (expected: paid)");
@@ -326,9 +330,9 @@ class SimulateMatchingScenario extends Command
         $success = $preApprovalOk && $postApprovalOk;
 
         if ($success) {
-            $this->info("✔ Scenario manual-refund-bank: PASSED");
+            $this->info('✔ Scenario manual-refund-bank: PASSED');
         } else {
-            $this->error("✘ Scenario manual-refund-bank: FAILED");
+            $this->error('✘ Scenario manual-refund-bank: FAILED');
         }
 
         return $success;
@@ -340,8 +344,8 @@ class SimulateMatchingScenario extends Command
      */
     private function simulateRaceCondition(PackageCheckoutService $checkoutService): bool
     {
-        $this->line("<comment>[4/4] Scenario: race-condition</comment>");
-        $this->line("Creating student, package search, and 2 eligible tutors...");
+        $this->line('<comment>[4/4] Scenario: race-condition</comment>');
+        $this->line('Creating student, package search, and 2 eligible tutors...');
 
         $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
         $teacher1 = $this->createTeacher('Biologi');
@@ -369,11 +373,11 @@ class SimulateMatchingScenario extends Command
             'expires_at' => now()->addMinutes(30),
         ]);
 
-        $this->line("Tutor 1 accepting offer...");
+        $this->line('Tutor 1 accepting offer...');
         $tutor1Result = $checkoutService->acceptPackageOffer($offer1, $teacher1);
-        $this->line(" - Tutor 1 accept: <info>SUCCESS</info>");
+        $this->line(' - Tutor 1 accept: <info>SUCCESS</info>');
 
-        $this->line("Tutor 2 attempting to accept offer concurrently...");
+        $this->line('Tutor 2 attempting to accept offer concurrently...');
         $tutor2ErrorStatus = null;
         $tutor2ErrorMessage = null;
 
@@ -386,7 +390,7 @@ class SimulateMatchingScenario extends Command
             $tutor2ErrorMessage = $e->getMessage();
         }
 
-        $this->line("Verification Results:");
+        $this->line('Verification Results:');
         $this->line(" - Tutor 2 HTTP response code: <info>{$tutor2ErrorStatus}</info> (expected: 409 or 422)");
         $this->line(" - Tutor 2 message: '{$tutor2ErrorMessage}'");
         $this->line(" - Tutor 1 offer status: <info>{$offer1->fresh()->status}</info> (expected: accepted)");
@@ -400,9 +404,9 @@ class SimulateMatchingScenario extends Command
             && (int) $subject->fresh()->assigned_teacher_id === (int) $teacher1->id;
 
         if ($success) {
-            $this->info("✔ Scenario race-condition: PASSED");
+            $this->info('✔ Scenario race-condition: PASSED');
         } else {
-            $this->error("✘ Scenario race-condition: FAILED");
+            $this->error('✘ Scenario race-condition: FAILED');
         }
 
         return $success;

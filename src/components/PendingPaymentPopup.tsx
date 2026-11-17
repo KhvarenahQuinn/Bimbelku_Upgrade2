@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { X, Clock, CreditCard, Loader2, AlertTriangle, ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { setPendingPaymentWidgetVisible } from "@/lib/floatingLayer";
 import http, { getCached } from "@/lib/http";
 import { clearBrowserSession } from "@/lib/session";
 
@@ -179,16 +180,24 @@ export default function PendingPaymentPopup() {
   };
 
   // Render Guard: Jangan tampilkan widget jika...
-  if (
-    !isVisible || 
-    !order || 
-    location.pathname === '/payment' || // Sembunyikan jika sudah di halaman bayar
-    location.pathname === '/login' ||   // Sembunyikan di login
-    isNaN(timeLeft) || 
-    timeLeft <= 0
-  ) {
-      return null;
-  }
+  const widgetVisible = Boolean(
+    isVisible
+    && order
+    && location.pathname !== '/payment'
+    && location.pathname !== '/login'
+    && !isNaN(timeLeft)
+    && timeLeft > 0,
+  );
+
+  // Tombol WhatsApp mengambang memakai sudut yang sama; beri tahu komponen itu
+  // agar tidak tertutup selama widget ini tampil.
+  useEffect(() => {
+    if (!widgetVisible) return;
+    setPendingPaymentWidgetVisible(true);
+    return () => setPendingPaymentWidgetVisible(false);
+  }, [widgetVisible]);
+
+  if (!widgetVisible) return null;
 
   return (
     <>

@@ -54,7 +54,7 @@ final class WalletLedgerSignature
     }
 
     /**
-     * @param array<string, mixed> $attributes
+     * @param  array<string, mixed>  $attributes
      * @return array{0:string,1:string}
      */
     public function referenceFor(array $attributes): array

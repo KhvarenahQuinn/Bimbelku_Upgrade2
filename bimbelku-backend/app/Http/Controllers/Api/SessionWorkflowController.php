@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Services\CustomerWalletService;
 use App\Services\PartialPackageRefundService;
 use App\Services\RefundSettlementService;
+use App\Services\ScheduleReleaseService;
 use App\Services\XenditMoneyMovementService;
 use App\Support\RefundStatusPresenter;
 use Illuminate\Http\Request;
@@ -626,7 +627,7 @@ class SessionWorkflowController extends Controller
             : null;
 
         try {
-            $dispute = DB::transaction(function () use ($request, $booking, $participant, $validated, $path) {
+            $dispute = DB::transaction(function () use ($request, $booking, $validated, $path) {
                 $locked = Booking::query()->lockForUpdate()->findOrFail($booking->id);
                 abort_unless(
                     $this->canAppealLapsedSession($locked, (int) $request->user()->id),
@@ -1399,7 +1400,7 @@ class SessionWorkflowController extends Controller
                     ], true)) {
                         $package->update(['status' => 'refunded']);
                         $package->subjects()->update(['status' => 'refunded']);
-                        app(\App\Services\ScheduleReleaseService::class)->releasePackage($package, 'refunded');
+                        app(ScheduleReleaseService::class)->releasePackage($package, 'refunded');
                     }
                 } else {
                     $partialPackageRefunds->completeTeacherReplacementRefund($lockedRefund->fresh());

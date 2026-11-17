@@ -15,7 +15,5 @@ class AutoWalletRefundProcessed
     public function __construct(
         public Refund $refund,
         public ?CustomerWalletTransaction $walletTransaction = null
-    ) {
-    }
+    ) {}
 }
-

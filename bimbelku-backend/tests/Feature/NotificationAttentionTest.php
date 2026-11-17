@@ -229,4 +229,217 @@ class NotificationAttentionTest extends TestCase
         $this->assertSame('student_payment_required', $fresh->entity_type);
         $this->assertSame(42, $fresh->entity_id);
     }
+
+    public function test_single_mark_read_updates_own_notification(): void
+    {
+        $student = $this->user();
+        $notification = $this->targeted($student, '/student/packages');
+        Sanctum::actingAs($student);
+
+        $this->postJson("/api/notifications/{$notification->id}/read")
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.is_read', true);
+
+        $fresh = $notification->fresh();
+        $this->assertTrue($fresh->is_read);
+        $this->assertNotNull($fresh->read_at);
+
+        $this->getJson('/api/notifications?per_page=1')
+            ->assertOk()
+            ->assertJsonPath('unread_count', 0)
+            ->assertJsonCount(0, 'attention_notifications');
+    }
+
+    public function test_single_mark_read_cannot_touch_another_users_notification(): void
+    {
+        $owner = $this->user();
+        $other = $this->user();
+        $foreign = $this->targeted($other, '/student/packages');
+        Sanctum::actingAs($owner);
+
+        $this->postJson("/api/notifications/{$foreign->id}/read")->assertNotFound();
+
+        $this->assertFalse($foreign->fresh()->is_read);
+        $this->assertNull($foreign->fresh()->read_at);
+    }
+
+    public function test_read_batch_rejects_empty_oversized_and_duplicate_ids(): void
+    {
+        $student = $this->user();
+        Sanctum::actingAs($student);
+
+        $this->postJson('/api/notifications/read-batch', ['ids' => []])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('ids');
+
+        $this->postJson('/api/notifications/read-batch', ['ids' => range(1, 101)])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('ids');
+
+        $this->postJson('/api/notifications/read-batch', ['ids' => [5, 5]])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('ids.0');
+    }
+
+    public function test_read_batch_ignores_ids_that_do_not_exist(): void
+    {
+        $student = $this->user();
+        $mine = $this->targeted($student, '/student/packages');
+        Sanctum::actingAs($student);
+
+        $this->postJson('/api/notifications/read-batch', [
+            'ids' => [$mine->id, 999999],
+        ])->assertOk()->assertJsonPath('updated', 1);
+
+        $this->assertTrue($mine->fresh()->is_read);
+    }
+
+    public function test_index_rejects_out_of_range_per_page(): void
+    {
+        $student = $this->user();
+        Sanctum::actingAs($student);
+
+        $this->getJson('/api/notifications?per_page=0')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('per_page');
+
+        $this->getJson('/api/notifications?per_page=101')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('per_page');
+    }
+
+    public function test_empty_target_url_is_not_exposed_as_attention(): void
+    {
+        $student = $this->user();
+        Notification::create([
+            'user_id' => $student->id,
+            'title' => 'Info tanpa tujuan',
+            'message' => 'Target kosong tidak boleh muncul sebagai badge.',
+            'type' => 'info',
+            'target_url' => '',
+            'is_read' => false,
+        ]);
+        Sanctum::actingAs($student);
+
+        $this->getJson('/api/notifications?per_page=1')
+            ->assertOk()
+            ->assertJsonPath('unread_count', 1)
+            ->assertJsonCount(0, 'attention_notifications');
+    }
+
+    public function test_legacy_notification_without_target_gets_role_target_fallback(): void
+    {
+        $student = $this->user();
+        Notification::create([
+            'user_id' => $student->id,
+            'title' => 'Pembayaran paket ditolak',
+            'message' => 'Bukti pembayaran lama belum memiliki target_url.',
+            'type' => 'warning',
+            'is_read' => false,
+        ]);
+        Sanctum::actingAs($student);
+
+        $response = $this->getJson('/api/notifications?per_page=1')->assertOk();
+        $this->assertSame('/student/packages', $response->json('notifications.0.target_url'));
+        $response->assertJsonCount(0, 'attention_notifications');
+    }
+
+    public function test_unique_key_without_entity_digits_keeps_identity_null(): void
+    {
+        $student = $this->user();
+        $notification = $this->targeted($student, '/student/packages', [
+            'unique_key' => 'plain-event',
+        ]);
+
+        $fresh = $notification->fresh();
+        $this->assertNull($fresh->entity_type);
+        $this->assertNull($fresh->entity_id);
+    }
+
+    public function test_unique_key_without_user_suffix_extracts_entity_id(): void
+    {
+        $student = $this->user();
+        $notification = $this->targeted($student, '/student/packages', [
+            'unique_key' => 'student-order-status-changed:77',
+        ]);
+
+        $fresh = $notification->fresh();
+        $this->assertSame('student_order_status_changed', $fresh->entity_type);
+        $this->assertSame(77, $fresh->entity_id);
+    }
+
+    public function test_update_or_create_can_change_message_without_reopening_badge(): void
+    {
+        $student = $this->user();
+        $key = "student-payment-required:55:{$student->id}";
+
+        $first = Notification::updateOrCreate(['unique_key' => $key], [
+            'user_id' => $student->id,
+            'title' => 'Pembayaran diperlukan',
+            'message' => 'Pesan pertama.',
+            'type' => 'warning',
+            'target_url' => '/student/packages',
+            'is_read' => false,
+        ]);
+        $first->update(['is_read' => true]);
+        $readAt = $first->fresh()->read_at;
+
+        $second = Notification::updateOrCreate(['unique_key' => $key], [
+            'user_id' => $student->id,
+            'title' => 'Pembayaran diperlukan',
+            'message' => 'Pesan diperbarui.',
+            'type' => 'warning',
+            'target_url' => '/student/packages',
+            'is_read' => false,
+        ]);
+
+        $this->assertSame('Pesan diperbarui.', $second->fresh()->message);
+        $this->assertTrue($second->is_read);
+        $this->assertEquals($readAt, $second->read_at);
+    }
+
+    public function test_invalidated_notification_is_excluded_even_when_unread_rows_exist(): void
+    {
+        $student = $this->user();
+        $valid = $this->targeted($student, '/student/packages');
+        $invalid = $this->targeted($student, '/student/history');
+        $invalid->forceFill(['invalidated_at' => now()])->save();
+        Sanctum::actingAs($student);
+
+        $response = $this->getJson('/api/notifications?per_page=1')->assertOk();
+        $this->assertSame(1, $response->json('unread_count'));
+        $this->assertSame(1, $response->json('attention_notifications')
+            ? count($response->json('attention_notifications'))
+            : 0);
+        $this->assertSame($valid->id, $response->json('attention_notifications.0.id'));
+    }
+
+    public function test_notifications_require_authentication(): void
+    {
+        $this->getJson('/api/notifications')->assertUnauthorized();
+        $this->postJson('/api/notifications/read-all')->assertUnauthorized();
+    }
+
+    public function test_inactive_account_cannot_read_notifications(): void
+    {
+        $student = User::factory()->create(['role' => 'student', 'status' => 'suspended']);
+        Sanctum::actingAs($student);
+
+        $this->getJson('/api/notifications')->assertUnauthorized();
+    }
+
+    public function test_student_cannot_send_admin_notification(): void
+    {
+        $student = $this->user();
+        Sanctum::actingAs($student);
+
+        $this->postJson('/api/admin/notifications/send', [
+            'user_id' => $student->id,
+            'title' => 'Percobaan akses',
+            'message' => 'Murid tidak boleh mengirim notifikasi admin.',
+        ])->assertForbidden();
+
+        $this->assertSame(0, Notification::count());
+    }
 }

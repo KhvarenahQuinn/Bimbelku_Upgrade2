@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 
+import PublicWhatsappButton from "@/components/PublicWhatsappButton";
 import StudentPackageLink from "@/components/StudentPackageLink";
 import { useWebsiteContent } from "@/components/WebsiteContentProvider";
 import { programPath, type CatalogSubject, supportedLevels } from "@/lib/publicPrograms";
@@ -202,6 +203,7 @@ export default function Navbar() {
       {activeMenu === "about" && <AboutMenu consultationUrl={consultationUrl} close={closeMenus} />}
 
       {mobileOpen && <MobileNavigation user={user} dashboardLink={dashboardLink} consultationUrl={consultationUrl} programGroups={programGroups} close={closeMenus} />}
+      <PublicWhatsappButton />
     </header>
   );
 }

@@ -310,7 +310,7 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
     const approved = await confirm({
       title: "Batalkan seluruh paket belajar?",
       description: noTeacher
-        ? "Tutor belum ditemukan. Setelah paket dibatalkan, pilih tujuan refund: Saldo BimbelKu atau metode pembayaran asal. Pembayaran via Xendit (QRIS, e-wallet, VA) dikembalikan otomatis ke metode asal tanpa menunggu bukti transfer admin."
+        ? "Tutor belum ditemukan. Setelah paket dibatalkan, pilih tujuan refund: Saldo BimbelKu atau metode pembayaran asal. Pembayaran via penyedia pembayaran (QRIS, e-wallet, VA) dikembalikan otomatis ke metode asal tanpa menunggu bukti transfer admin."
         : "Pencarian dan penerimaan tutor untuk semua mapel akan dibatalkan. Jika paket sudah dibayar, pengembalian dana penuh akan diproses dan statusnya dapat dipantau di akun.",
       confirmText: "Batalkan seluruh paket",
       tone: "danger",
@@ -349,7 +349,7 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
       title: method === "bimbelku_balance" ? "Refund ke Saldo BimbelKu?" : "Refund ke metode pembayaran asal?",
       description: method === "bimbelku_balance"
         ? "Dana langsung masuk ke Saldo BimbelKu. Saldo dapat dipakai untuk paket les berikutnya atau Kelas Bersama, tetapi tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet."
-        : "Dana dikembalikan otomatis ke metode pembayaran asal melalui Xendit. Tidak perlu menunggu bukti transfer admin.",
+        : "Dana dikembalikan otomatis ke metode pembayaran asal. Tidak perlu menunggu bukti transfer admin.",
       confirmText: "Konfirmasi tujuan",
     });
     if (!approved) return;
@@ -362,7 +362,7 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
       title: toBalance ? "Batalkan paket & refund ke Saldo BimbelKu?" : "Batalkan paket & refund ke metode pembayaran asal?",
       description: toBalance
         ? "Pencarian tutor dihentikan. Dana langsung masuk ke Saldo BimbelKu dan dapat dipakai untuk paket les berikutnya atau Kelas Bersama. Saldo tidak dapat ditarik kembali (non-cashable) ke rekening bank/e-wallet."
-        : "Pencarian tutor dihentikan. Dana dikembalikan otomatis ke metode pembayaran asal melalui Xendit (QRIS, e-wallet, atau VA). Tidak perlu menunggu bukti transfer admin.",
+        : "Pencarian tutor dihentikan. Dana dikembalikan otomatis ke metode pembayaran asal. Tidak perlu menunggu bukti transfer admin.",
       confirmText: toBalance ? "Batalkan & isi saldo" : "Batalkan & refund otomatis",
       tone: "danger",
     });
@@ -637,7 +637,7 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
                         <div className="mt-3 rounded-xl border border-violet-200 bg-white p-3">
                           <p className="font-black text-slate-900">Mau menerima refund ke mana?</p>
                           <p className="mt-1 text-xs leading-5 text-slate-600">
-                            Pilih tujuan pengembalian dana. Pembayaran melalui Xendit (QRIS, e-wallet, atau VA) dapat dikembalikan otomatis ke metode pembayaran asal tanpa menunggu bukti transfer admin.
+                            Pilih tujuan pengembalian dana. Pembayaran melalui penyedia pembayaran dapat dikembalikan otomatis ke metode pembayaran asal tanpa menunggu bukti transfer admin.
                           </p>
                           <div className="mt-3 grid gap-2 sm:grid-cols-2">
                             <div className="min-w-0">
@@ -661,7 +661,7 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
                               className="flex min-h-12 items-center gap-2 rounded-xl border border-violet-200 bg-white px-3 py-2 text-left text-violet-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                             >
                               <Building2 size={17} className="shrink-0" />
-                              <span><span className="block font-black">Metode pembayaran asal</span><span className="block text-[10px] font-medium">{canReturnToOriginal ? `${rupiah(refundExternal)} kembali otomatis via Xendit` : "Tidak tersedia untuk pembayaran ini"}</span></span>
+                              <span><span className="block font-black">Metode pembayaran asal</span><span className="block text-[10px] font-medium">{canReturnToOriginal ? `${rupiah(refundExternal)} kembali otomatis via penyedia pembayaran` : "Tidak tersedia untuk pembayaran ini"}</span></span>
                             </button>
                           </div>
                           {!canReturnToOriginal && <p className="mt-2 text-[11px] font-semibold leading-5 text-slate-500">Pengembalian ke metode asal tidak tersedia. Pilih Saldo BimbelKu agar dana tetap dapat digunakan.</p>}
@@ -717,7 +717,7 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
                   {item.status === "no_teacher" && !refund && item.latest_order?.status === "paid" && !matchingWindowOpen && (
                     <div role="status" className="mx-4 mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 sm:mx-6 sm:p-5">
                       <p className="font-black">Tutor belum ditemukan. Pilih tujuan pengembalian dana.</p>
-                      <p className="mt-1 text-xs leading-5 text-amber-900">Paket akan dibatalkan dan dana dikembalikan sesuai pilihanmu. Pembayaran via Xendit (QRIS, e-wallet, VA) dikembalikan otomatis ke metode pembayaran asal tanpa menunggu bukti transfer admin.</p>
+                      <p className="mt-1 text-xs leading-5 text-amber-900">Paket akan dibatalkan dan dana dikembalikan sesuai pilihanmu. Pembayaran via penyedia pembayaran (QRIS, e-wallet, VA) dikembalikan otomatis ke metode pembayaran asal tanpa menunggu bukti transfer admin.</p>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         <div className="min-w-0">
                           <button
@@ -740,7 +740,7 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
                           className="flex min-h-12 items-center gap-2 rounded-xl border border-amber-300 bg-white px-3 py-2 text-left text-amber-950 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                         >
                           <Building2 size={17} className="shrink-0" />
-                          <span><span className="block font-black">Metode pembayaran asal</span><span className="block text-[10px] font-medium">{item.latest_order?.payment_provider === "xendit" ? "Kembali otomatis via Xendit · tanpa bukti transfer admin" : "Tidak tersedia untuk pembayaran ini"}</span></span>
+                          <span><span className="block font-black">Metode pembayaran asal</span><span className="block text-[10px] font-medium">{item.latest_order?.payment_provider === "xendit" ? "Kembali otomatis via penyedia pembayaran · tanpa bukti transfer admin" : "Tidak tersedia untuk pembayaran ini"}</span></span>
                         </button>
                       </div>
                     </div>
