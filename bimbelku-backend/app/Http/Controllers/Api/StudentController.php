@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Order;
 use App\Models\Rating;
+use App\Models\Setting;
 use App\Support\PackageChapterProgress;
 use App\Support\PublicMedia;
 use App\Support\RefundStatusPresenter;
@@ -117,7 +118,7 @@ class StudentController extends Controller
         if ($booking->end_at === null || $booking->end_at->copy()->addHours(72)->isPast()) {
             return false;
         }
-        $graceMinutes = max(30, (int) (\App\Models\Setting::where('key', 'session_checkin_after_minutes')->value('value') ?? 30));
+        $graceMinutes = max(30, (int) (Setting::where('key', 'session_checkin_after_minutes')->value('value') ?? 30));
 
         return $booking->status === 'admin_review_required'
             || ($booking->status === 'confirmed' && $booking->end_at->copy()->addMinutes($graceMinutes)->isPast());

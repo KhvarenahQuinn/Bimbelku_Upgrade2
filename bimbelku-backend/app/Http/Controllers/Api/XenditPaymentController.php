@@ -15,7 +15,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 class XenditPaymentController extends Controller
@@ -68,7 +70,7 @@ class XenditPaymentController extends Controller
                     'code' => 'wallet_not_supported',
                 ], 422);
             }
-            if (! $reusesExistingHold && $quote['usable_amount'] + 0.009 >= $quote['external_due']) {
+            if (! $reusesExistingHold && $quote['external_due'] <= $quote['usable_amount'] + 0.009) {
                 return response()->json([
                     'message' => 'Saldo BimbelKu menutupi seluruh tagihan. Selesaikan pembayaran memakai saldo tanpa Xendit.',
                     'code' => 'wallet_covers_full_invoice',
@@ -80,12 +82,12 @@ class XenditPaymentController extends Controller
                     ? round((float) $validated['wallet_expected_amount'], 2)
                     : null;
                 $walletAmount = $wallets->reserveForPayment($order, (int) $request->user()->id, $expected, (int) $request->user()->id);
-            } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $exception) {
+            } catch (HttpExceptionInterface $exception) {
                 return response()->json([
                     'message' => $exception->getMessage() ?: 'Saldo BimbelKu belum dapat dialokasikan.',
                     'code' => 'wallet_reservation_failed',
                 ], $exception->getStatusCode() ?: 422);
-            } catch (\Illuminate\Validation\ValidationException $exception) {
+            } catch (ValidationException $exception) {
                 return response()->json([
                     'message' => collect($exception->errors())->flatten()->first() ?: 'Saldo BimbelKu belum dapat dialokasikan.',
                     'code' => 'wallet_reservation_failed',

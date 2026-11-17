@@ -7,8 +7,10 @@ use App\Models\FinancialJournal;
 use App\Models\FinancialLedgerEntry;
 use App\Models\Refund;
 use App\Services\PartialPackageRefundService;
+use App\Services\RefundSettlementService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Support\SessionFinanceFixture;
 use Tests\TestCase;
 
@@ -106,7 +108,7 @@ class RefundAdjustmentLedgerTest extends TestCase
         $fixture = SessionFinanceFixture::make($this, 2, 40000);
         $this->queue($fixture['sessions'][0], 'booking_case', 21, 50000, 'tutor_share');
 
-        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+        $this->expectException(HttpException::class);
         $this->queue($fixture['sessions'][1], 'booking_case', 22, 50000, 'tutor_share');
     }
 
@@ -157,7 +159,7 @@ class RefundAdjustmentLedgerTest extends TestCase
 
     private function settleInWallet(Refund $refund, int $actorId): void
     {
-        app(\App\Services\RefundSettlementService::class)->settle($refund->fresh(), 'bimbelku_balance', $actorId);
+        app(RefundSettlementService::class)->settle($refund->fresh(), 'bimbelku_balance', $actorId);
     }
 
     private function recordSettlement(Booking $booking): FinancialJournal

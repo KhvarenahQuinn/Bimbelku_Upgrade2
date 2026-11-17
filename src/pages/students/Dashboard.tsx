@@ -455,10 +455,10 @@ function AdaptiveCard({ packageData, nextSession, dismissedRefundIds = new Set<n
       return <ActionCard icon={RefreshCw} eyebrow="Perlu keputusan" title="Refund ke Metode Asal Gagal" description="Pilih Saldo BimbelKu agar dana tetap dapat dipakai untuk Paket Belajar atau Kelas Bersama." to="/student/packages" action="Pilih Saldo" />;
     }
     if (refund && !refund.destination_selected_at) {
-      return <ActionCard icon={RefreshCw} eyebrow="Dana aman" title="Pilih Tujuan Refund" description="Pilih Saldo BimbelKu atau metode pembayaran asal. Pembayaran via Xendit (QRIS, e-wallet, VA) dikembalikan otomatis ke metode asal." to="/student/packages" action="Pilih Tujuan" />;
+      return <ActionCard icon={RefreshCw} eyebrow="Dana aman" title="Pilih Tujuan Refund" description="Pilih Saldo BimbelKu atau metode pembayaran asal. Pembayaran melalui penyedia pembayaran (QRIS, e-wallet, VA) dikembalikan otomatis ke metode asal." to="/student/packages" action="Pilih Tujuan" />;
     }
     if (refund?.destination_method === "xendit_original") {
-      return <ActionCard icon={RefreshCw} eyebrow="Diproses otomatis" title="Refund ke Metode Pembayaran Asal" description="Dana dikembalikan otomatis melalui Xendit. Tidak perlu menunggu bukti transfer admin." to="/student/history" action="Lihat Status" />;
+      return <ActionCard icon={RefreshCw} eyebrow="Diproses otomatis" title="Refund ke Metode Pembayaran Asal" description="Dana dikembalikan otomatis ke metode pembayaran asal. Tidak perlu menunggu bukti transfer admin." to="/student/history" action="Lihat Status" />;
     }
     if (refund?.destination_method === "bimbelku_balance") {
       return <ActionCard icon={RefreshCw} eyebrow="Diproses otomatis" title="Refund ke Saldo BimbelKu" description="Dana sedang dikreditkan ke Saldo BimbelKu. Status diperbarui otomatis tanpa persetujuan admin." to="/student/history" action="Lihat Status" />;

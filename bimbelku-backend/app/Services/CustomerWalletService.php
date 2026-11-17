@@ -7,6 +7,7 @@ use App\Models\CustomerWalletTransaction;
 use App\Models\Order;
 use App\Models\Refund;
 use App\Models\User;
+use App\Support\WalletLedgerSignature;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -498,7 +499,7 @@ class CustomerWalletService
 
         // Rows injected outside the service cannot produce a valid APP_KEY
         // signature. Refuse to move money on top of a tampered ledger.
-        $signature = app(\App\Support\WalletLedgerSignature::class);
+        $signature = app(WalletLedgerSignature::class);
         CustomerWalletTransaction::query()
             ->where('customer_wallet_id', $wallet->id)
             ->orderBy('id')

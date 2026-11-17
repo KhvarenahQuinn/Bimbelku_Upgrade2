@@ -34,7 +34,7 @@ class TeacherOfferController extends Controller
                 'expired' => ['expired'],
                 default => ['accepted', 'rejected', 'expired', 'student_rejected', 'cancelled'],
             }
-            : ['pending'];
+        : ['pending'];
 
         $offers = TeacherOffer::query()
             ->where('teacher_id', $request->user()->id)

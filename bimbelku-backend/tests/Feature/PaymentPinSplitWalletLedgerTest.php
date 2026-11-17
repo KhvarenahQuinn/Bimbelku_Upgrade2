@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
@@ -73,7 +74,7 @@ class PaymentPinSplitWalletLedgerTest extends TestCase
         $student = User::factory()->create([
             'role' => 'student',
             'status' => 'active',
-            'password' => Hash::make(\Illuminate\Support\Str::random(32)),
+            'password' => Hash::make(Str::random(32)),
             'has_password' => false,
             'payment_pin_hash' => Hash::make('111111'),
         ]);
