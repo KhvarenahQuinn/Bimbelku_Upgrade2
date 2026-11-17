@@ -112,6 +112,20 @@ return [
             'replace_placeholders' => true,
         ],
 
+        /*
+        | Surat development: saat MAIL_MAILER=log, seluruh isi email (termasuk
+        | kode OTP) ditulis ke kanal ini, bukan ke laravel.log, agar log
+        | aplikasi tetap terbaca. HANYA untuk pengembangan lokal — produksi
+        | wajib MAIL_MAILER=smtp supaya OTP tidak pernah mendarat di disk.
+        */
+        'mail' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/mail.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 7,
+            'replace_placeholders' => true,
+        ],
+
         'domains' => [
             'driver' => 'stack',
             'channels' => ['payments', 'payouts', 'webhooks', 'security'],
