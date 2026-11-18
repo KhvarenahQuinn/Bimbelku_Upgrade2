@@ -192,7 +192,10 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
 
   if (status === "verified") {
     return (
-      <div ref={containerRef} className="cf-turnstile" data-sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY} />
+      <div className="cf-turnstile" data-sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY}>
+        <div ref={containerRef} className="cf-turnstile" data-sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY} />
+        <p className="mt-2 text-xs text-emerald-600 text-center" role="status">Verifikasi keamanan berhasil.</p>
+      </div>
     );
   }
 

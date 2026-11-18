@@ -81,7 +81,7 @@ return [
         */
 
         'payments' => [
-            'driver' => 'daily',
+            'driver' => env('DOMAIN_LOG_DRIVER', 'daily'),
             'path' => storage_path('logs/payments.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DOMAIN_DAYS', 30),
@@ -89,7 +89,7 @@ return [
         ],
 
         'payouts' => [
-            'driver' => 'daily',
+            'driver' => env('DOMAIN_LOG_DRIVER', 'daily'),
             'path' => storage_path('logs/payouts.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DOMAIN_DAYS', 30),
@@ -97,7 +97,7 @@ return [
         ],
 
         'webhooks' => [
-            'driver' => 'daily',
+            'driver' => env('DOMAIN_LOG_DRIVER', 'daily'),
             'path' => storage_path('logs/webhooks.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DOMAIN_DAYS', 30),
@@ -105,7 +105,7 @@ return [
         ],
 
         'security' => [
-            'driver' => 'daily',
+            'driver' => env('DOMAIN_LOG_DRIVER', 'daily'),
             'path' => storage_path('logs/security.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DOMAIN_DAYS', 90),
@@ -119,7 +119,7 @@ return [
         | wajib MAIL_MAILER=smtp supaya OTP tidak pernah mendarat di disk.
         */
         'mail' => [
-            'driver' => 'daily',
+            'driver' => env('DOMAIN_LOG_DRIVER', 'daily'),
             'path' => storage_path('logs/mail.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => 7,
