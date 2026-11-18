@@ -80,7 +80,7 @@ class CheapClassPaymentLifecycleTest extends TestCase
 
         Sanctum::actingAs($student);
         $this->post("/api/orders/{$order->id}/pay", [
-            'file' => UploadedFile::fake()->image('bukti.png'),
+            'file' => UploadedFile::fake()->create('bukti.png', 100, 'image/png'),
             ...$this->paymentDetails(),
         ], [
             'Accept' => 'application/json',

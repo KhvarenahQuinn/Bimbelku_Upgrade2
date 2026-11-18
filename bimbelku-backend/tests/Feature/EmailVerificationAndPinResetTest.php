@@ -209,7 +209,7 @@ class EmailVerificationAndPinResetTest extends TestCase
             'code_hash' => Hash::make($code),
             'attempts' => 0,
             'expires_at' => now()->addMinutes(10),
-            'sent_at' => now(),
+            'sent_at' => now()->subSeconds(61), // Avoid 60-second cooldown in resend test
             'created_at' => now(),
             'updated_at' => now(),
         ]);
