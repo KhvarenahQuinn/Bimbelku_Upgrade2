@@ -96,6 +96,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
     ? `/login?redirect=${encodeURIComponent(safeRedirect)}`
     : "/login";
   const { settings } = useWebsiteContent();
+  const turnstileEnabled = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() !== "";
 
   const [form, setForm] = useState(() => ({ ...initialForm, email: searchParams.get("email") || guestEmail }));
   const [levels, setLevels] = useState<string[]>([]);
@@ -257,6 +258,17 @@ export default function Register({ role = "student" }: { role?: Role }) {
       focusFirstError(nextErrors);
       return;
     }
+
+    // Check Turnstile verification when enabled
+    const turnstileToken = form["cf-turnstile-response"]?.trim();
+    if (turnstileEnabled && !turnstileToken) {
+      const errorMsg = "Selesaikan verifikasi keamanan Cloudflare terlebih dahulu.";
+      setErrors({ turnstile: errorMsg });
+      setSummaryError(errorMsg);
+      focusFirstError({ turnstile: errorMsg });
+      return;
+    }
+
     setErrors({});
     setSummaryError("");
 
@@ -416,12 +428,15 @@ export default function Register({ role = "student" }: { role?: Role }) {
 
           <div className="flex gap-3 border-t border-slate-200 pt-5">
             {step > 1 && <Button type="button" variant="outline" onClick={goToPreviousStep} className="h-12 min-w-0 flex-1 rounded-2xl border-slate-300 font-black"><ArrowLeft className="mr-2" size={18} />Kembali</Button>}
-            {step < totalSteps ? <Button type="button" onClick={goToNextStep} className="h-12 min-w-0 flex-1 rounded-2xl bg-[#14213D] font-black hover:bg-slate-800">Lanjutkan<ArrowRight className="ml-2" size={18} /></Button> : <Button disabled={submitting} className="h-12 min-w-0 flex-1 rounded-2xl bg-[#14213D] font-black hover:bg-slate-800"><span className="inline-flex items-center justify-center">{submitting ? <Loader2 className="mr-2 animate-spin" size={19} /> : <ArrowRight className="mr-2" size={19} />}{submitting ? "Memproses…" : role === "teacher" ? "Simpan & lanjut WhatsApp" : "Buat akun murid"}</span></Button>}
+            {step < totalSteps ? <Button type="button" onClick={goToNextStep} className="h-12 min-w-0 flex-1 rounded-2xl bg-[#14213D] font-black hover:bg-slate-800">Lanjutkan<ArrowRight className="ml-2" size={18} /></Button> : <Button disabled={submitting || (turnstileEnabled && !form["cf-turnstile-response"]?.trim())} className="h-12 min-w-0 flex-1 rounded-2xl bg-[#14213D] font-black hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"><span className="inline-flex items-center justify-center">{submitting ? <Loader2 className="mr-2 animate-spin" size={19} /> : <ArrowRight className="mr-2" size={19} />}{submitting ? "Memproses…" : role === "teacher" ? "Simpan & lanjut WhatsApp" : "Buat akun murid"}</span></Button>}
           </div>
           {/* Turnstile verification for registration submit - only on step 3 */}
           {step === totalSteps && (
             <div className="mt-4">
               <TurnstileWidget onTokenChange={handleTurnstileToken} />
+              {turnstileEnabled && !form["cf-turnstile-response"]?.trim() && (
+                <p className="mt-1 text-xs text-red-600 text-center" role="alert">Selesaikan verifikasi keamanan Cloudflare terlebih dahulu.</p>
+              )}
               <p className="mt-1 text-xs text-slate-500 text-center">Verifikasi keamanan oleh Cloudflare</p>
             </div>
           )}

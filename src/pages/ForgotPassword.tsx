@@ -13,6 +13,7 @@ const ForgotPassword = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const turnstileEnabled = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() !== "";
 
   // Memoize Turnstile token handler to prevent infinite loop
   const handleTurnstileToken = useCallback((token: string) => {
@@ -33,6 +34,10 @@ const ForgotPassword = () => {
     e.preventDefault();
     if (!isValidEmail(email)) {
       notify.error("Masukkan alamat email yang valid.");
+      return;
+    }
+    if (turnstileEnabled && !turnstileToken.trim()) {
+      notify.error("Selesaikan verifikasi keamanan Cloudflare terlebih dahulu.");
       return;
     }
     setIsLoading(true);
@@ -90,12 +95,15 @@ const ForgotPassword = () => {
             </div>
             <div className="mt-4">
               <TurnstileWidget onTokenChange={handleTurnstileToken} />
+              {turnstileEnabled && !turnstileToken.trim() && (
+                <p className="mt-1 text-xs text-red-600 text-center" role="alert">Selesaikan verifikasi keamanan Cloudflare terlebih dahulu.</p>
+              )}
               <p className="mt-1 text-xs text-slate-500 text-center">Verifikasi keamanan oleh Cloudflare</p>
             </div>
             <button
               type="submit"
-              disabled={isLoading}
-              className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all flex justify-center items-center gap-2"
+              disabled={isLoading || (turnstileEnabled && !turnstileToken.trim())}
+              className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? <Loader2 className="animate-spin" /> : "Kirim Link Reset"}
             </button>
