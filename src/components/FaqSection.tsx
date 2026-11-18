@@ -11,7 +11,11 @@ const faqs = [
   ["Apakah harga sama untuk semua mata pelajaran?", "Tidak selalu. Harga final dihitung dari paket, mata pelajaran, jumlah sesi, dan komponen biaya aktif. Seluruh rinciannya tampil sebelum pembayaran."],
   ["Bisakah memilih jadwal sejak awal?", "Bisa. Hari dan jam dipilih ketika menyusun paket dan menjadi salah satu syarat saat sistem mencocokkan tutor."],
   ["Apakah tutor bisa diganti?", "Permintaan penggantian mengikuti status kelas dan kebijakan yang berlaku. Detail kasus diproses melalui alur penggantian tutor di akun."],
-  ["Apa yang dapat dilihat orang tua setelah belajar?", "Progress materi per Bab, jadwal, dan laporan sesi dapat dilihat ketika data tersebut sudah dicatat di sistem."],
+  ["Apa yang dapat dilihat orang tua setelah belajar?", "Progress materi per Bab, jadwal, dan laporan sesi dapat dilihat di akun murid ketika data tersebut sudah dicatat di sistem."],
+  ["Bagaimana jika tutor diganti di tengah paket?", "Penggantian tutor dapat diajukan melalui akun. Jika kelas belum dimulai, penggantian otomatis. Jika sudah berjalan, memerlukan persetujuan admin dan murid."],
+  ["Bagaimana jika terjadi sengketa sesi?", "Sengketa dapat diajukan lewat akun. Admin akan memverifikasi bukti (bukti kehadiran, log sesi) dan memutuskan selanjutnya."],
+  ["Bagaimana refund otomatis jika tutor tidak ditemukan?", "Jika dalam 60 menit tidak ada tutor yang menerima, paket dibatalkan otomatis. Refund ke Saldo BimbelKu instan; ke metode asal via penyedia pembayaran (QRIS, e-wallet, VA) tanpa bukti transfer."],
+  ["Apakah Saldo BimbelKu bisa ditarik tunai?", "Tidak. Saldo BimbelKu hanya untuk pembayaran paket les dan Kelas Bersama (non-cashable). Tidak bisa ditarik ke rekening bank atau e-wallet."],
 ] as const;
 
 export default function FaqSection() {
