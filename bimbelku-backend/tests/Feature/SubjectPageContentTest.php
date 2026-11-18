@@ -52,14 +52,10 @@ class SubjectPageContentTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
         Sanctum::actingAs($admin);
 
+        $minimalJpeg720x480 = pack('H*', 'ffd8ffe000104a46494600010100000100010000ffc000110801e002d003012200021101031101ffda000c03010002110311003f00ffd9');
+
         $this->post('/api/admin/subjects/'.$subject->id.'/page/hero', [
-            'hero_image' => new UploadedFile(
-                '/tmp/test_hero_720x480.jpg',
-                'mapel.jpg',
-                'image/jpeg',
-                null,
-                true
-            ),
+            'hero_image' => UploadedFile::fake()->createWithContent('mapel.jpg', $minimalJpeg720x480),
         ], ['Accept' => 'application/json'])
             ->assertOk()
             ->assertJsonPath('message', 'Foto hero Mapel tersimpan.');
