@@ -52,8 +52,10 @@ class SubjectPageContentTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
         Sanctum::actingAs($admin);
 
+        $minimalJpeg720x480 = pack('H*', 'ffd8ffe000104a46494600010100000100010000ffc000110801e002d003012200021101031101ffda000c03010002110311003f00ffd9');
+
         $this->post('/api/admin/subjects/'.$subject->id.'/page/hero', [
-            'hero_image' => UploadedFile::fake()->image('mapel.jpg', 900, 600),
+            'hero_image' => UploadedFile::fake()->createWithContent('mapel.jpg', $minimalJpeg720x480),
         ], ['Accept' => 'application/json'])
             ->assertOk()
             ->assertJsonPath('message', 'Foto hero Mapel tersimpan.');
@@ -187,7 +189,7 @@ class SubjectPageContentTest extends TestCase
         $this->getJson('/api/subject-pages/'.$subject->id)->assertOk()->assertJsonPath('tutors.0.name', 'Tutor Matematika');
 
         $this->post('/api/admin/public-tutors/'.$profile->id.'/photo', [
-            'photo' => UploadedFile::fake()->image('tutor.jpg', 400, 500),
+            'photo' => UploadedFile::fake()->create('tutor.jpg', 100, 'image/jpeg'),
             'photo_consent_confirmed' => true,
         ], ['Accept' => 'application/json'])->assertOk()
             ->assertJsonPath('photo_url', fn ($url) => str_contains($url, '/api/public-media/photos/public_tutors/'));
@@ -220,7 +222,7 @@ class SubjectPageContentTest extends TestCase
             'identity_confirmed' => true,
         ])->assertStatus(422);
         $this->post('/api/admin/public-tutors/'.$profile->id.'/photo', [
-            'photo' => UploadedFile::fake()->image('another.jpg', 400, 500),
+            'photo' => UploadedFile::fake()->create('another.jpg', 100, 'image/jpeg'),
             'photo_consent_confirmed' => true,
         ], ['Accept' => 'application/json'])->assertStatus(422);
     }

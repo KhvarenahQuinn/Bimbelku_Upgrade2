@@ -19,7 +19,8 @@ export default function VerifyEmail() {
   const loginHref = safeRedirect
     ? `/login?redirect=${encodeURIComponent(safeRedirect)}`
     : '/login';
-  const [email, setEmail] = useState(params.get('email') || state?.email || '');
+  const initialEmail = params.get('email') || state?.email || '';
+  const [email] = useState(initialEmail);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -79,8 +80,11 @@ export default function VerifyEmail() {
           Masukkan kode 6 angka yang dikirim ke email. Kode berlaku selama 10 menit.
         </p>
         <form onSubmit={verify} className={'mt-6 space-y-4'}>
-          <Input type={'email'} required value={email} onChange={(event) => setEmail(event.target.value)}
-            className={'h-12 rounded-xl'} placeholder={'Alamat email'} autoComplete={'email'} />
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-700">Alamat email (tidak dapat diubah)</label>
+            <Input type={'email'} required value={email} readOnly
+              className={'h-12 rounded-xl bg-slate-50 cursor-not-allowed'} placeholder={'Alamat email'} autoComplete={'email'} />
+          </div>
           <Input required inputMode={'numeric'} autoComplete={'one-time-code'} maxLength={6}
             value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
             className={'h-14 rounded-xl text-center text-2xl font-black tracking-[.45em]'}

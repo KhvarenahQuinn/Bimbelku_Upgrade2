@@ -2,15 +2,23 @@ import { notify } from "@/lib/notify";
 import { API_BASE_URL } from "@/lib/apiBase";
 import { getApiErrorDetails } from "@/lib/http";
 import { isValidEmail } from "@/lib/validation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, ArrowLeft, Mail } from "lucide-react";
+import TurnstileWidget from "@/components/TurnstileWidget";
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const turnstileEnabled = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() !== "";
+
+  // Memoize Turnstile token handler to prevent infinite loop
+  const handleTurnstileToken = useCallback((token: string) => {
+    setTurnstileToken(token);
+  }, []);
 
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
@@ -28,11 +36,18 @@ const ForgotPassword = () => {
       notify.error("Masukkan alamat email yang valid.");
       return;
     }
+    if (turnstileEnabled && !turnstileToken.trim()) {
+      notify.error("Selesaikan verifikasi keamanan Cloudflare terlebih dahulu.");
+      return;
+    }
     setIsLoading(true);
 
     try {
       const { default: axios } = await import("axios");
-      await axios.post(`${API_BASE_URL}/forgot-password`, { email });
+      await axios.post(`${API_BASE_URL}/forgot-password`, { 
+        email,
+        'cf-turnstile-response': turnstileToken
+      });
       setCooldownSeconds(60);
       setIsSent(true);
       notify.success("Email terkirim! Cek inbox/spam Anda.");
@@ -78,10 +93,17 @@ const ForgotPassword = () => {
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
               />
             </div>
+            <div className="mt-4">
+              <TurnstileWidget onTokenChange={handleTurnstileToken} />
+              {turnstileEnabled && !turnstileToken.trim() && (
+                <p className="mt-1 text-xs text-red-600 text-center" role="alert">Selesaikan verifikasi keamanan Cloudflare terlebih dahulu.</p>
+              )}
+              <p className="mt-1 text-xs text-slate-500 text-center">Verifikasi keamanan oleh Cloudflare</p>
+            </div>
             <button
               type="submit"
-              disabled={isLoading}
-              className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all flex justify-center items-center gap-2"
+              disabled={isLoading || (turnstileEnabled && !turnstileToken.trim())}
+              className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? <Loader2 className="animate-spin" /> : "Kirim Link Reset"}
             </button>

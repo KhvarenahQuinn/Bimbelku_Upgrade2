@@ -177,7 +177,7 @@ class StageThreeMatchingSimulationTest extends TestCase
         Sanctum::actingAs($admin);
 
         $completeResponse = $this->post("/api/admin/refunds/{$refund->id}/complete", [
-            'proof' => UploadedFile::fake()->image('refund_transfer_proof.jpg'),
+            'proof' => UploadedFile::fake()->create('refund_transfer_proof.jpg', 100, 'image/jpeg'),
             'destination_selection_version' => $refund->destination_selection_version ?: 1,
             'notes' => 'Transfer manual pengembalian dana telah diverifikasi oleh tim finance.',
         ], [

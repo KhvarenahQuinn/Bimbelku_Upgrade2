@@ -156,6 +156,51 @@ class EmailVerificationAndPinResetTest extends TestCase
         ]);
     }
 
+    public function test_resend_otp_invalidates_previous_code(): void
+    {
+        Mail::fake();
+        $user = User::factory()->create([
+            'email' => 'resend@example.com',
+            'email_verified_at' => null,
+            'email_verification_required_at' => now(),
+            'role' => 'student',
+            'status' => 'active',
+        ]);
+
+        // Store initial OTP code
+        $this->storeCode($user, OneTimeCodeService::EMAIL_VERIFICATION, '111111');
+        $firstCodeRecord = DB::table('verification_codes')
+            ->where('user_id', $user->id)
+            ->where('purpose', OneTimeCodeService::EMAIL_VERIFICATION)
+            ->whereNull('used_at')
+            ->latest('id')
+            ->first();
+        $this->assertNotNull($firstCodeRecord);
+        $firstCodeId = $firstCodeRecord->id;
+
+        // Call resend endpoint
+        $this->postJson('/api/email/verification/resend', ['email' => $user->email])
+            ->assertOk()
+            ->assertJsonPath('message', 'Jika email terdaftar dan belum diverifikasi, kode OTP telah dikirim.');
+
+        // Verify old code is invalidated (marked as used)
+        $this->assertDatabaseHas('verification_codes', [
+            'id' => $firstCodeId,
+            'used_at' => now()->toDateTimeString(),
+        ]);
+
+        // Verify new code was created
+        $newCodeRecord = DB::table('verification_codes')
+            ->where('user_id', $user->id)
+            ->where('purpose', OneTimeCodeService::EMAIL_VERIFICATION)
+            ->whereNull('used_at')
+            ->latest('id')
+            ->first();
+        $this->assertNotNull($newCodeRecord);
+        $this->assertNotEquals($firstCodeId, $newCodeRecord->id);
+        $this->assertEquals(0, $newCodeRecord->attempts);
+    }
+
     private function storeCode(User $user, string $purpose, string $code): void
     {
         DB::table('verification_codes')->insert([
@@ -164,7 +209,7 @@ class EmailVerificationAndPinResetTest extends TestCase
             'code_hash' => Hash::make($code),
             'attempts' => 0,
             'expires_at' => now()->addMinutes(10),
-            'sent_at' => now(),
+            'sent_at' => now()->subSeconds(61), // Avoid 60-second cooldown in resend test
             'created_at' => now(),
             'updated_at' => now(),
         ]);

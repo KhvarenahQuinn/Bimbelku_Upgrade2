@@ -222,6 +222,7 @@ TRUSTED_PROXIES=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,14
 
 # Turnstile (diperlukan untuk /register & /forgot-password)
 TURNSTILE_SECRET_KEY=0x4AAAAAAA...
+VITE_TURNSTILE_SITE_KEY=0x4AAAAAAA...
 TURNSTILE_TIMEOUT_SECONDS=5
 
 # Mail: produksi WAJIB smtp, jangan log
@@ -316,7 +317,7 @@ Kode di `revisi/2-badge-admin` dirancang **environment-agnostic**:
 [ ] Rate Limit: /api/login 10/min, /api/register 5/min
 [ ] Cache Rules: 1-4 Bypass, 5-9 Cache (lihat §3.2)
 [ ] Purge Cache /assets/* saat deploy
-[ ] Turnstile: Site Key di frontend, Secret Key di .env produksi
+[ ] Turnstile: Site Key di frontend (VITE_TURNSTILE_SITE_KEY), Secret Key di .env produksi
 [ ] TRUSTED_PROXIES = IP Cloudflare / REMOTE_ADDR
 [ ] MAIL_MAILER=smtp (produksi), MAIL_LOG_CHANNEL=mail (local only)
 [ ] TURNSTILE_SECRET_KEY diisi di produksi
@@ -327,6 +328,104 @@ Kode di `revisi/2-badge-admin` dirancang **environment-agnostic**:
 
 ---
 
+## 6. Monitoring & Turnstile Analytics
+
+### 6.1 Mengapa Monitoring Turnstile Penting
+
+Monitoring analitik Turnstile memastikan:
+- Widget tidak memicu **duplikasi challenge** yang memanjatkan metrik *Challenges Issued* secara tidak perlu.
+- *Solve Rate* dan *Verification Rate* sehat, mengindikasikan pengunjung asli tidak terhalang.
+- Kode `error-codes` dari Siteverify dikategorikan dan di-log ke channel `security` tanpa menyalahkan token.
+
+### 6.2 Metrik Kunci yang Harus Dipantau
+
+| Metrik | Sumber | Target Sehat | Aksi Jika Anomali |
+|--------|--------|--------------|-------------------|
+| **Challenges Issued** | Dashboard Turnstile → Analytics | Stabil, tidak lonjak tiba-tiba | Periksa duplikasi render widget (lihat §6.3) |
+| **Challenges Solved** | Dashboard Turnstile → Analytics | > 90% dari *Issued* untuk trafik asli | Solusi: cek network/latency ke `challenges.cloudflare.com` |
+| **Solve Rate (Non-interactive)** | Dashboard Turnstile → Analytics > Solve Rate | ≥ 70% (managed mode) | Tinggi = bot terblokir; rendah = tantangan terlalu agresif |
+| **Solve Rate (Interactive)** | Dashboard Turnstile → Analytics > Solve Rate | ≥ 95% | Rendah = UX buruk, periksa `theme`, `language` |
+| **Verification Rate (Siteverify)** | Dashboard Turnstile → Token Validation | ≥ 98% token valid | Jika < 95%, lihat `error-codes` di log `security` |
+| **Invalid Tokens** | Dashboard Turnstile → Token Validation | < 2% | Logging `turnstile_verify_rejected` di channel `security` |
+
+### 6.3 Mencegah Duplikasi Challenge (Frontend & Backend)
+
+**Frontend (`TurnstileWidget.tsx`):**
+- Script Turnstile di-inject **sekali per mount** (guard `scriptLoadedRef` + `renderAttemptedRef`).
+- `window.turnstile.render()` hanya dipanggil sekali; `resetTrigger` memakai `window.turnstile.reset()` bukan re-render.
+- Timeout load script **8 detik** → status `error` → tombol *Muat ulang verifikasi* yang bersih.
+- `expired-callback` & `error-callback` mengubah status ke `expired`/`error` tanpa re-inject script.
+
+**Backend (`VerifyTurnstile.php`):**
+- Token divalidasi sekali per request via `cf-turnstile-response` atau header `X-Turnstile-Token`.
+- Kegagalan Siteverify di-log ke channel `security` dengan field `codes` (array `error-codes`) — **tanpa menyalahkan token**.
+- Fail-closed: jaringan ke Cloudflare down → reject request, log `turnstile_verify_unreachable`.
+
+### 6.4 Kode `error-codes` Umum & Artinya
+
+| `error-code` | Artinya | Tindakan |
+|--------------|---------|----------|
+| `timeout-or-duplicate` | Token kedaluwarsa (5 menit) atau sudah dipakai | Frontend: tampilkan status `expired`, suruh user klik *Muat ulang verifikasi* |
+| `bad-request` | Payload Siteverify malformed (secret/response hilang) | Periksa middleware `VerifyTurnstile` & env `TURNSTILE_SECRET_KEY` |
+| `invalid-input-response` | Token tidak valid / dimodifikasi / bukan dari sitekey ini | Bot/otomatisasi; log di `security`, opsional blokir IP |
+| `sitekey-secret-mismatch` | Secret key tidak cocok sitekey widget | Periksa pasangan `VITE_TURNSTILE_SITE_KEY` ↔ `TURNSTILE_SECRET_KEY` di `.env` |
+
+### 6.5 Logging & Alerting Disarankan
+
+Domain logs sekarang terorganisir di subfolder `storage/logs/<domain>/` dengan retention per domain:
+
+| Channel | Path | Driver | Retention |
+|---------|------|--------|-----------|
+| `payments` | `storage/logs/payments/payments-YYYY-MM-DD.log` | daily | 365 hari (`LOG_PAYMENTS_DAYS`) |
+| `payouts` | `storage/logs/payouts/payouts-YYYY-MM-DD.log` | daily | 365 hari (`LOG_PAYOUTS_DAYS`) |
+| `webhooks` | `storage/logs/webhooks/webhooks-YYYY-MM-DD.log` | daily | 365 hari (`LOG_WEBHOOKS_DAYS`) |
+| `security` | `storage/logs/security/security-YYYY-MM-DD.log` | daily | 180 hari (`LOG_SECURITY_DAYS`) |
+| `mail` | `storage/logs/mail/mail-YYYY-MM-DD.log` | daily | 14 hari (`LOG_MAIL_DAYS`) |
+
+Semua channel memakai driver `daily` (bukan `single`) dan rotasi otomatis harian dengan sufiks tanggal. File `.gitignore` di `storage/logs/` mengabaikan semua subfolder dan file (`*` + `!.gitignore`).
+
+Konfigurasi `.env` opsional (default di atas):
+```dotenv
+LOG_PAYMENTS_DAYS=365
+LOG_PAYOUTS_DAYS=365
+LOG_WEBHOOKS_DAYS=365
+LOG_SECURITY_DAYS=180
+LOG_MAIL_DAYS=14
+```
+
+Lama `DOMAIN_LOG_DRIVER` dihapus — semua domain channel sekarang hardcoded ke `daily` di `config/logging.php`.
+
+```php
+// config/logging.php — channel security sudah terpasang di Phase 3
+'channels' => [
+    'security' => [
+        'driver' => 'daily',
+        'path' => storage_path('logs/security/security.log'),
+        'level' => 'notice',
+        'days' => 180,
+    ],
+],
+```
+
+**Log yang dihasilkan:**
+- `turnstile_verify_rejected` (notice) — `codes` array berisi `error-codes` dari Cloudflare.
+- `turnstile_verify_unreachable` (warning) — Cloudflare tidak bisa dihubungi.
+
+**Alert sederhana (contoh Logtail/Papertrail/Datadog):**
+- `turnstile_verify_rejected` dengan `codes` berisi `invalid-input-response` > 10/menit → investigasi bot.
+- `turnstile_verify_unreachable` > 0 → gangguan jaringan Cloudflare.
+
+### 6.6 Checklist Verifikasi Monitoring
+
+| Pemeriksaan | Cara | Harapan |
+|-------------|------|---------|
+| Dashboard Turnstile → Analytics | Buka *Challenges Issued vs Solved* | Grafik seimbang, tidak ada spike aneh |
+| Dashboard Turnstile → Token Validation | Buka *Valid vs Invalid Tokens* | Invalid < 2% |
+| Log channel `security` | `tail -f storage/logs/security.log` | Hanya `turnstile_verify_rejected` wajar (user salah klik / expired) |
+| Frontend console `/register` | DevTools Console | **Tidak ada** `window.turnstile.render` berulang, tidak ada warning CSP `frame-ancestors` |
+
+---
+
 ## Referensi
 
 - [Cloudflare DNS Records](https://developers.cloudflare.com/dns/manage-dns-records/)
@@ -334,6 +433,9 @@ Kode di `revisi/2-badge-admin` dirancang **environment-agnostic**:
 - [Cloudflare WAF](https://developers.cloudflare.com/waf/)
 - [Cloudflare Cache Rules](https://developers.cloudflare.com/cache/how-to/cache-rules/)
 - [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/)
+- [Cloudflare Turnstile Analytics](https://developers.cloudflare.com/turnstile/turnstile-analytics/)
+- [Cloudflare Turnstile Challenge Outcomes](https://developers.cloudflare.com/turnstile/turnstile-analytics/challenge-outcomes/)
+- [Cloudflare Turnstile Token Validation](https://developers.cloudflare.com/turnstile/turnstile-analytics/token-validation/)
 - [Cloudflare Rate Limiting](https://developers.cloudflare.com/waf/tools/rate-limiting-rules/)
 - [Laravel Trusted Proxies](https://laravel.com/docs/12.x/requests#configuring-trusted-proxies)
 - [Laravel Sanctum](https://laravel.com/docs/12.x/sanctum)

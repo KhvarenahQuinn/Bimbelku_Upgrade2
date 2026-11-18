@@ -1,16 +1,29 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Reset Password</title>
-</head>
-<body style="font-family: Arial, sans-serif; padding: 20px;">
-    <h2>Halo{{ filled($name ?? null) ? " ".$name : "" }}!</h2>
-    <p>Anda menerima email ini karena kami menerima permintaan reset password untuk akun Anda.</p>
-    <p>Silakan klik tombol di bawah ini untuk mereset password Anda:</p>
-    <br>
-    <a href="{{ $url }}" style="background-color: #4F46E5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a>
-    <br><br>
-    <p>Link ini akan kadaluarsa dalam 60 menit.</p>
-    <p>Jika Anda tidak meminta reset password, abaikan email ini.</p>
-</body>
-</html>
+@extends('emails.layouts.base')
+
+@section('title', 'Reset Password BimbelKu')
+
+@section('preheader')
+    <meta name="preheader" content="Tautan reset password untuk akun BimbelKu Anda. Berlaku 60 menit.">
+@endsection
+
+@section('content')
+    <p style="margin:0 0 16px; font-size:16px; color:#0f172a">Halo{{ filled($name ?? null) ? " " . $name : "" }}!</p>
+
+    <p style="margin:0 0 24px; font-size:16px; color:#334155">Anda menerima email ini karena kami menerima permintaan reset password untuk akun Anda.</p>
+
+    <p style="margin:0 0 24px; font-size:16px; color:#334155">Silakan klik tombol di bawah ini untuk mereset password Anda:</p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0">
+        <tr>
+            <td style="text-align:center">
+                <a href="{{ $url }}" style="display:inline-block; background:#ea580c; color:#ffffff; font-weight:600; font-size:16px; text-decoration:none; padding:14px 28px; border-radius:8px; border:0">Reset Password</a>
+            </td>
+        </tr>
+    </table>
+
+    <p style="margin:0 0 16px; font-size:14px; color:#475569">Atau salin tautan ini ke browser Anda:<br><a href="{{ $url }}" style="color:#ea580c; word-break:break-all">{{ $url }}</a></p>
+
+    <p style="margin:0 0 16px; font-size:14px; color:#475569">Link ini akan kedaluwarsa dalam 60 menit.</p>
+
+    <p style="margin:0; font-size:13px; color:#64748b">Jika Anda tidak meminta reset password, abaikan email ini.</p>
+@endsection

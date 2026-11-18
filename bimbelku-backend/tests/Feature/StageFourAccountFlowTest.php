@@ -181,8 +181,8 @@ class StageFourAccountFlowTest extends TestCase
             'public_degree' => 'S.Pd.',
             'levels' => ['SD', 'SMP'],
             'teaching_method' => 'hybrid',
-            'identity_document' => UploadedFile::fake()->image('identitas.jpg'),
-            'live_selfie' => UploadedFile::fake()->image('selfie.jpg'),
+            'identity_document' => UploadedFile::fake()->create('identitas.jpg', 100, 'image/jpeg'),
+            'live_selfie' => UploadedFile::fake()->create('selfie.jpg', 100, 'image/jpeg'),
             'qualification_document' => UploadedFile::fake()->create(
                 'ijazah.pdf',
                 100,
@@ -249,7 +249,7 @@ class StageFourAccountFlowTest extends TestCase
             'role' => 'teacher',
             'status' => 'pending',
         ]);
-        $path = UploadedFile::fake()->image('identitas.jpg')->store(
+        $path = UploadedFile::fake()->create('identitas.jpg', 100, 'image/jpeg')->store(
             'teacher_identity',
             'local'
         );
@@ -345,7 +345,7 @@ class StageFourAccountFlowTest extends TestCase
             '_method' => 'PUT',
             'name' => 'Murid Bersampul',
             'phone' => '081234567890',
-            'profile_cover' => UploadedFile::fake()->image('sampul.jpg', 1200, 400),
+            'profile_cover' => UploadedFile::fake()->create('sampul.jpg', 100, 'image/jpeg'),
         ])
             ->assertOk()
             ->assertJsonPath('data.name', 'Murid Bersampul');
@@ -554,7 +554,7 @@ class StageFourAccountFlowTest extends TestCase
         $this->post('/api/teacher/profile', [
             'name' => $teacher->name,
             'whatsapp_number' => '081234567890',
-            'profile_cover' => UploadedFile::fake()->image('sampul-tutor.jpg', 1200, 400),
+            'profile_cover' => UploadedFile::fake()->create('sampul-tutor.jpg', 100, 'image/jpeg'),
         ])
             ->assertOk()
             ->assertJsonPath('reverification_required', false);

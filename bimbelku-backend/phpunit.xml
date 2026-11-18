@@ -36,5 +36,7 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="TURNSTILE_SECRET_KEY" value=""/>
+        <env name="TURNSTILE_ENABLED" value="false"/>
     </php>
 </phpunit>

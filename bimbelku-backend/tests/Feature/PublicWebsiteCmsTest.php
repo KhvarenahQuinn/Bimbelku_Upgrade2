@@ -72,9 +72,9 @@ class PublicWebsiteCmsTest extends TestCase
 
         $payload = $this->validPayload();
         $payload['brand_name'] = 'Bimbelku Yogyakarta';
-        $payload['logo'] = UploadedFile::fake()->image('logo.png', 500, 180);
-        $payload['trust_image_1'] = UploadedFile::fake()->image('tutor-consented.jpg', 800, 1000);
-        $payload['trust_image_6'] = UploadedFile::fake()->image('tutor-consented-six.jpg', 800, 1000);
+        $payload['logo'] = UploadedFile::fake()->create('logo.png', 100, 'image/png');
+        $payload['trust_image_1'] = UploadedFile::fake()->create('tutor-consented.jpg', 100, 'image/jpeg');
+        $payload['trust_image_6'] = UploadedFile::fake()->create('tutor-consented-six.jpg', 100, 'image/jpeg');
 
         $response = $this->post('/api/admin/website-settings', $payload, ['Accept' => 'application/json'])
             ->assertOk()
@@ -102,7 +102,7 @@ class PublicWebsiteCmsTest extends TestCase
 
         $this->getJson('/api/admin/website-media')->assertOk()->assertJsonStructure(['media']);
         $response = $this->post('/api/admin/website-media', [
-            'hero_desktop_image' => UploadedFile::fake()->image('hero.jpg', 1200, 800),
+            'hero_desktop_image' => UploadedFile::fake()->create('hero.jpg', 100, 'image/jpeg'),
         ], ['Accept' => 'application/json'])->assertOk();
 
         $this->assertStringContainsString('/api/public-media/website/hero_desktop_image_',
@@ -153,7 +153,7 @@ class PublicWebsiteCmsTest extends TestCase
             'is_featured' => true,
             'is_visible' => true,
             'sort_order' => 0,
-            'photo' => UploadedFile::fake()->image('nadia.jpg', 800, 1000),
+            'photo' => UploadedFile::fake()->create('nadia.jpg', 100, 'image/jpeg'),
             'proof' => UploadedFile::fake()->create('bukti.pdf', 300, 'application/pdf'),
         ]];
 
@@ -213,7 +213,7 @@ class PublicWebsiteCmsTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonPath('message', 'Foto asli wajib diunggah untuk testimoni publik ke-1.');
 
-        $payload['testimonials'][0]['photo'] = UploadedFile::fake()->image('siswa.jpg');
+        $payload['testimonials'][0]['photo'] = UploadedFile::fake()->create('siswa.jpg', 100, 'image/jpeg');
         $this->post('/api/admin/website-settings', $payload, ['Accept' => 'application/json'])
             ->assertUnprocessable()
             ->assertJsonPath('message', 'Bukti privat wajib diunggah sebelum testimoni ke-1 ditampilkan.');

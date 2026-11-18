@@ -20,13 +20,13 @@ class TeacherCoverSettingsTest extends TestCase
         Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'status' => 'active']));
 
         $first = $this->postJson('/api/admin/settings/teacher-cover', [
-            'image' => UploadedFile::fake()->image('sampul-pertama.jpg', 1200, 675),
+            'image' => UploadedFile::fake()->create('sampul-pertama.jpg', 100, 'image/jpeg'),
         ])->assertOk()->json('url');
         $firstPath = Setting::where('key', 'teacher_cover_path')->value('value');
         Storage::disk('public')->assertExists($firstPath);
 
         $second = $this->postJson('/api/admin/settings/teacher-cover', [
-            'image' => UploadedFile::fake()->image('sampul-kedua.jpg', 1200, 675),
+            'image' => UploadedFile::fake()->create('sampul-kedua.jpg', 100, 'image/jpeg'),
         ])->assertOk()->json('url');
         $secondPath = Setting::where('key', 'teacher_cover_path')->value('value');
 
@@ -48,13 +48,13 @@ class TeacherCoverSettingsTest extends TestCase
         Sanctum::actingAs($teacher);
 
         $first = $this->postJson('/api/teacher/profile/cover', [
-            'profile_cover' => UploadedFile::fake()->image('sampul-profil-1.jpg', 1200, 675),
+            'profile_cover' => UploadedFile::fake()->create('sampul-profil-1.jpg', 100, 'image/jpeg'),
         ])->assertOk()->json('profile_cover_url');
         $firstPath = $teacher->fresh()->profile_cover;
         Storage::disk('public')->assertExists($firstPath);
 
         $second = $this->postJson('/api/teacher/profile/cover', [
-            'profile_cover' => UploadedFile::fake()->image('sampul-profil-2.jpg', 1200, 675),
+            'profile_cover' => UploadedFile::fake()->create('sampul-profil-2.jpg', 100, 'image/jpeg'),
         ])->assertOk()->json('profile_cover_url');
 
         $this->assertNotSame($first, $second);
@@ -72,7 +72,7 @@ class TeacherCoverSettingsTest extends TestCase
         Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'status' => 'active']));
 
         $url = $this->postJson("/api/admin/users/{$teacher->id}/profile-cover", [
-            'profile_cover' => UploadedFile::fake()->image('sampul-khusus.jpg', 1200, 675),
+            'profile_cover' => UploadedFile::fake()->create('sampul-khusus.jpg', 100, 'image/jpeg'),
         ])->assertOk()->json('profile_cover_url');
 
         $path = $teacher->fresh()->profile_cover;
@@ -82,7 +82,7 @@ class TeacherCoverSettingsTest extends TestCase
             ->assertJsonPath('data.0.profile_cover_url', $url);
 
         $this->postJson("/api/admin/users/{$student->id}/profile-cover", [
-            'profile_cover' => UploadedFile::fake()->image('salah-akun.jpg', 1200, 675),
+            'profile_cover' => UploadedFile::fake()->create('salah-akun.jpg', 100, 'image/jpeg'),
         ])->assertNotFound();
 
         $this->deleteJson("/api/admin/users/{$teacher->id}/profile-cover")
@@ -104,13 +104,13 @@ class TeacherCoverSettingsTest extends TestCase
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active']);
         Sanctum::actingAs($teacher);
         $this->postJson('/api/teacher/profile/cover', [
-            'profile_cover' => UploadedFile::fake()->image('pribadi.jpg', 1200, 675),
+            'profile_cover' => UploadedFile::fake()->create('pribadi.jpg', 100, 'image/jpeg'),
         ])->assertOk();
         $personalPath = $teacher->fresh()->profile_cover;
 
         Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'status' => 'active']));
         $this->postJson('/api/admin/settings/teacher-cover', [
-            'image' => UploadedFile::fake()->image('default.jpg', 1200, 675),
+            'image' => UploadedFile::fake()->create('default.jpg', 100, 'image/jpeg'),
         ])->assertOk();
         $this->getJson('/api/admin/settings/teacher-cover/status')
             ->assertOk()
