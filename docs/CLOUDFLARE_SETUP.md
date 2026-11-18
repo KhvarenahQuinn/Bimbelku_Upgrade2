@@ -222,6 +222,7 @@ TRUSTED_PROXIES=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,14
 
 # Turnstile (diperlukan untuk /register & /forgot-password)
 TURNSTILE_SECRET_KEY=0x4AAAAAAA...
+VITE_TURNSTILE_SITE_KEY=0x4AAAAAAA...
 TURNSTILE_TIMEOUT_SECONDS=5
 
 # Mail: produksi WAJIB smtp, jangan log
@@ -316,7 +317,7 @@ Kode di `revisi/2-badge-admin` dirancang **environment-agnostic**:
 [ ] Rate Limit: /api/login 10/min, /api/register 5/min
 [ ] Cache Rules: 1-4 Bypass, 5-9 Cache (lihat §3.2)
 [ ] Purge Cache /assets/* saat deploy
-[ ] Turnstile: Site Key di frontend, Secret Key di .env produksi
+[ ] Turnstile: Site Key di frontend (VITE_TURNSTILE_SITE_KEY), Secret Key di .env produksi
 [ ] TRUSTED_PROXIES = IP Cloudflare / REMOTE_ADDR
 [ ] MAIL_MAILER=smtp (produksi), MAIL_LOG_CHANNEL=mail (local only)
 [ ] TURNSTILE_SECRET_KEY diisi di produksi

@@ -21,6 +21,7 @@ import {
   Upload,
   User,
   UserRoundCheck,
+  HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,7 +33,8 @@ import DateOfBirthInput from "@/components/DateOfBirthInput";
 import { useWebsiteContent } from "@/components/WebsiteContentProvider";
 import { whatsappHref } from "@/lib/websiteContent";
 import GoogleAuthButton from "@/components/GoogleAuthButton";
-import AuthExperience from "@/components/AuthExperience";
+import TurnstileWidget from "@/components/TurnstileWidget";
+import TurnstileWidget from "@/components/TurnstileWidget";
 
 
 const CameraCapture = lazy(() => import("@/components/CameraCapture"));
@@ -410,6 +412,11 @@ export default function Register({ role = "student" }: { role?: Role }) {
           <div className="flex gap-3 border-t border-slate-200 pt-5">
             {step > 1 && <Button type="button" variant="outline" onClick={goToPreviousStep} className="h-12 min-w-0 flex-1 rounded-2xl border-slate-300 font-black"><ArrowLeft className="mr-2" size={18} />Kembali</Button>}
             {step < totalSteps ? <Button type="button" onClick={goToNextStep} className="h-12 min-w-0 flex-1 rounded-2xl bg-[#14213D] font-black hover:bg-slate-800">Lanjutkan<ArrowRight className="ml-2" size={18} /></Button> : <Button disabled={submitting} className="h-12 min-w-0 flex-1 rounded-2xl bg-[#14213D] font-black hover:bg-slate-800"><span className="inline-flex items-center justify-center">{submitting ? <Loader2 className="mr-2 animate-spin" size={19} /> : <ArrowRight className="mr-2" size={19} />}{submitting ? "Memproses…" : role === "teacher" ? "Simpan & lanjut WhatsApp" : "Buat akun murid"}</span></Button>}
+          </div>
+          {/* Turnstile verification for registration submit */}
+          <div className="mt-4">
+            <TurnstileWidget onTokenChange={(token) => setForm(prev => ({ ...prev, 'cf-turnstile-response': token }))} />
+            <p className="mt-1 text-xs text-slate-500 text-center">Verifikasi keamanan oleh Cloudflare Turnstile</p>
           </div>
         </form>
         {role === "student" && <p className="mt-6 text-center text-sm text-slate-500">Ingin menjadi tutor? <Link to="/jadi-tutor" className="font-bold text-indigo-700 hover:underline">Lihat pendaftaran tutor</Link></p>}
