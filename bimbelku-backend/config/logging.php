@@ -78,37 +78,38 @@ return [
         | keamanan dari log aplikasi umum. Nilainya hanya metadata operasional
         | (id, status, kode kegagalan) — tidak pernah token, kunci, PIN, nomor
         | rekening penuh, atau data pribadi.
+        | Disimpan di subfolder storage/logs/<domain>/ dengan retention per domain.
         */
 
         'payments' => [
-            'driver' => env('DOMAIN_LOG_DRIVER', 'daily'),
-            'path' => storage_path('logs/payments.log'),
+            'driver' => 'daily',
+            'path' => storage_path('logs/payments/payments.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'days' => env('LOG_DOMAIN_DAYS', 30),
+            'days' => (int) env('LOG_PAYMENTS_DAYS', 365),
             'replace_placeholders' => true,
         ],
 
         'payouts' => [
-            'driver' => env('DOMAIN_LOG_DRIVER', 'daily'),
-            'path' => storage_path('logs/payouts.log'),
+            'driver' => 'daily',
+            'path' => storage_path('logs/payouts/payouts.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'days' => env('LOG_DOMAIN_DAYS', 30),
+            'days' => (int) env('LOG_PAYOUTS_DAYS', 365),
             'replace_placeholders' => true,
         ],
 
         'webhooks' => [
-            'driver' => env('DOMAIN_LOG_DRIVER', 'daily'),
-            'path' => storage_path('logs/webhooks.log'),
+            'driver' => 'daily',
+            'path' => storage_path('logs/webhooks/webhooks.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'days' => env('LOG_DOMAIN_DAYS', 30),
+            'days' => (int) env('LOG_WEBHOOKS_DAYS', 365),
             'replace_placeholders' => true,
         ],
 
         'security' => [
-            'driver' => env('DOMAIN_LOG_DRIVER', 'daily'),
-            'path' => storage_path('logs/security.log'),
+            'driver' => 'daily',
+            'path' => storage_path('logs/security/security.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'days' => env('LOG_DOMAIN_DAYS', 90),
+            'days' => (int) env('LOG_SECURITY_DAYS', 180),
             'replace_placeholders' => true,
         ],
 
@@ -119,10 +120,10 @@ return [
         | wajib MAIL_MAILER=smtp supaya OTP tidak pernah mendarat di disk.
         */
         'mail' => [
-            'driver' => env('DOMAIN_LOG_DRIVER', 'daily'),
-            'path' => storage_path('logs/mail.log'),
+            'driver' => 'daily',
+            'path' => storage_path('logs/mail/mail.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'days' => 7,
+            'days' => (int) env('LOG_MAIL_DAYS', 14),
             'replace_placeholders' => true,
         ],
 

@@ -372,14 +372,37 @@ Monitoring analitik Turnstile memastikan:
 
 ### 6.5 Logging & Alerting Disarankan
 
+Domain logs sekarang terorganisir di subfolder `storage/logs/<domain>/` dengan retention per domain:
+
+| Channel | Path | Driver | Retention |
+|---------|------|--------|-----------|
+| `payments` | `storage/logs/payments/payments-YYYY-MM-DD.log` | daily | 365 hari (`LOG_PAYMENTS_DAYS`) |
+| `payouts` | `storage/logs/payouts/payouts-YYYY-MM-DD.log` | daily | 365 hari (`LOG_PAYOUTS_DAYS`) |
+| `webhooks` | `storage/logs/webhooks/webhooks-YYYY-MM-DD.log` | daily | 365 hari (`LOG_WEBHOOKS_DAYS`) |
+| `security` | `storage/logs/security/security-YYYY-MM-DD.log` | daily | 180 hari (`LOG_SECURITY_DAYS`) |
+| `mail` | `storage/logs/mail/mail-YYYY-MM-DD.log` | daily | 14 hari (`LOG_MAIL_DAYS`) |
+
+Semua channel memakai driver `daily` (bukan `single`) dan rotasi otomatis harian dengan sufiks tanggal. File `.gitignore` di `storage/logs/` mengabaikan semua subfolder dan file (`*` + `!.gitignore`).
+
+Konfigurasi `.env` opsional (default di atas):
+```dotenv
+LOG_PAYMENTS_DAYS=365
+LOG_PAYOUTS_DAYS=365
+LOG_WEBHOOKS_DAYS=365
+LOG_SECURITY_DAYS=180
+LOG_MAIL_DAYS=14
+```
+
+Lama `DOMAIN_LOG_DRIVER` dihapus — semua domain channel sekarang hardcoded ke `daily` di `config/logging.php`.
+
 ```php
 // config/logging.php — channel security sudah terpasang di Phase 3
 'channels' => [
     'security' => [
         'driver' => 'daily',
-        'path' => storage_path('logs/security.log'),
+        'path' => storage_path('logs/security/security.log'),
         'level' => 'notice',
-        'days' => 30,
+        'days' => 180,
     ],
 ],
 ```
