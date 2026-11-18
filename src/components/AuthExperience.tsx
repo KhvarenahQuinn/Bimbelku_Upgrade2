@@ -212,7 +212,7 @@ function AuthPanelDecor({ mode }: { mode: "login" | "register" }) {
         <path d="M70 57c29-9 52-4 72 10v79c-23-13-47-17-72-9V57Zm72 10c20-14 43-19 72-10v80c-25-8-49-4-72 9V67Z" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
         <path d="M142 67v79M84 77c18-3 31 0 44 7M84 94c18-2 31 1 44 8M156 84c14-7 27-9 43-6M156 102c14-6 27-8 43-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
         <path d="m46 42 4 10 10 4-10 4-4 10-4-10-10-4 10-4 4-10Zm151 116 3 8 8 3-8 3-3 8-3-8-8-3 8-3 3-8Z" fill="currentColor" />
-        <text x="20" y="190" fill="currentColor" fontSize="18" fontWeight="700">{mode === "login" ? "a² + b²" : "A · B · C"}</text>
+        <text x="20" y="190" fill="currentColor" fontSize="18" fontWeight="700">{mode === "login" ? "a² + b²" : "Belajar"}</text>
       </svg>
       <svg className="auth-decor-notes" viewBox="0 0 210 190" fill="none">
         <path d="M24 132c24-9 37-26 41-51M139 38c23 7 37 22 43 44" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="7 9" />

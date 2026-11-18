@@ -2,7 +2,7 @@ import { notify } from "@/lib/notify";
 import { API_BASE_URL } from "@/lib/apiBase";
 import { getApiErrorDetails } from "@/lib/http";
 import { isValidEmail } from "@/lib/validation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, ArrowLeft, Mail } from "lucide-react";
 import TurnstileWidget from "@/components/TurnstileWidget";
@@ -13,6 +13,11 @@ const ForgotPassword = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+  // Memoize Turnstile token handler to prevent infinite loop
+  const handleTurnstileToken = useCallback((token: string) => {
+    setTurnstileToken(token);
+  }, []);
 
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
@@ -36,7 +41,7 @@ const ForgotPassword = () => {
       const { default: axios } = await import("axios");
       await axios.post(`${API_BASE_URL}/forgot-password`, { 
         email,
-        'cf-turnstile-response': ''
+        'cf-turnstile-response': turnstileToken
       });
       setCooldownSeconds(60);
       setIsSent(true);
@@ -84,8 +89,8 @@ const ForgotPassword = () => {
               />
             </div>
             <div className="mt-4">
-              <TurnstileWidget onTokenChange={(token) => {}} />
-              <p className="mt-1 text-xs text-slate-500 text-center">Verifikasi keamanan oleh Cloudflare Turnstile</p>
+              <TurnstileWidget onTokenChange={handleTurnstileToken} />
+              <p className="mt-1 text-xs text-slate-500 text-center">Verifikasi keamanan oleh Cloudflare</p>
             </div>
             <button
               type="submit"
