@@ -24,7 +24,7 @@ class PublicMediaController extends Controller
         $disk = Storage::disk('public');
         abort_unless($disk->exists($path), 404, 'File gambar tidak ditemukan.');
 
-        $mime = $disk->mimeType($path) ?: 'application/octet-stream';
+        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($disk->path($path)) ?: 'application/octet-stream';
         abort_unless(in_array($mime, [
             'image/jpeg',
             'image/png',

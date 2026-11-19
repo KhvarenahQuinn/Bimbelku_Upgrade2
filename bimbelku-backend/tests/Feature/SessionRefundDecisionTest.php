@@ -41,7 +41,7 @@ class SessionRefundDecisionTest extends TestCase
             'incident_at' => now()->subMinutes(30)->toDateTimeString(),
             'incident_location' => 'Yogyakarta',
             'impact' => 'Sesi tidak dapat dilaksanakan oleh tutor.',
-            'evidence' => UploadedFile::fake()->create('bukti.jpg', 100, 'image/jpeg'),
+            'evidence' => UploadedFile::fake()->image('bukti.jpg', 8, 8),
         ])->assertCreated();
 
         $booking->refresh();

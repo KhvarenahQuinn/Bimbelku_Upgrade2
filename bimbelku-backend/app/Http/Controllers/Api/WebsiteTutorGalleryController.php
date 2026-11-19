@@ -7,10 +7,10 @@ use App\Models\TeacherProfile;
 use App\Models\WebsiteSection;
 use App\Models\WebsiteSetting;
 use App\Models\WebsiteTutorGallery;
+use App\Services\UploadSecurityService;
 use App\Support\PublicMedia;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class WebsiteTutorGalleryController extends Controller
@@ -188,7 +188,7 @@ class WebsiteTutorGalleryController extends Controller
         if ($request->hasFile('photo')) {
             $file = $request->file('photo');
             $extension = strtolower($file->extension());
-            $path = $file->storeAs('photos/website_tutors', 'gallery_'.Str::uuid().'.'.$extension, 'public');
+            $path = app(UploadSecurityService::class)->store($file, 'photos/website_tutors', 'public');
             $entry->photo_path = $path;
         }
     }

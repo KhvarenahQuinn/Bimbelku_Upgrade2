@@ -18,6 +18,7 @@ use App\Services\PackageCheckoutService;
 use App\Services\PaymentReconciliationService;
 use App\Services\RefundSettlementService;
 use App\Services\ScheduleReleaseService;
+use App\Services\UploadSecurityService;
 use App\Services\XenditPaymentService;
 use App\Support\RefundStatusPresenter;
 use Illuminate\Http\Request;
@@ -35,7 +36,8 @@ class OrderController extends Controller
         CheapClassService $cheapClassService,
         PackageCheckoutService $packageCheckoutService,
         CustomerWalletService $wallets,
-        PaymentReconciliationService $reconciliation
+        PaymentReconciliationService $reconciliation,
+        UploadSecurityService $uploads
     ) {
         $walletInput = $request->validate([
             'use_wallet' => ['sometimes', 'boolean'],
@@ -149,10 +151,10 @@ class OrderController extends Controller
         $validated['external_due'] = $externalDue;
 
         if ($order->learning_package_id) {
-            return $this->payPackage($request, $order, $validated, $packageCheckoutService, $wallets, $reconciliation);
+            return $this->payPackage($request, $order, $validated, $packageCheckoutService, $wallets, $reconciliation, $uploads);
         }
         if ($order->cheap_class_enrollment_id) {
-            return $this->payCheapClass($request, $order, $validated, $cheapClassService, $reconciliation);
+            return $this->payCheapClass($request, $order, $validated, $cheapClassService, $reconciliation, $uploads);
         }
 
         return $this->paymentError('Tagihan arsip pemesanan langsung sudah dipensiunkan.', 410, 'legacy_order_retired');
@@ -404,10 +406,10 @@ class OrderController extends Controller
         return response()->json($orders);
     }
 
-    private function payCheapClass(Request $request, Order $order, array $validated, CheapClassService $cheapClassService, PaymentReconciliationService $reconciliation)
+    private function payCheapClass(Request $request, Order $order, array $validated, CheapClassService $cheapClassService, PaymentReconciliationService $reconciliation, UploadSecurityService $uploads)
     {
         $path = $validated['external_due'] > 0
-            ? $request->file('file')->store('payment_proofs', 'local')
+            ? $uploads->store($request->file('file'), 'payment_proofs', 'local')
             : null;
         $previousProof = $order->payment_proof;
         $autoVerifyResult = null;
@@ -500,7 +502,8 @@ class OrderController extends Controller
         array $validated,
         PackageCheckoutService $packageCheckoutService,
         CustomerWalletService $wallets,
-        PaymentReconciliationService $reconciliation
+        PaymentReconciliationService $reconciliation,
+        UploadSecurityService $uploads
     ) {
         $package = $order->learningPackage;
         if (! $package || ! in_array($package->status, ['awaiting_payment', 'payment_rejected', 'partially_paid'], true)) {
@@ -516,7 +519,7 @@ class OrderController extends Controller
         }
 
         $path = $validated['external_due'] > 0
-            ? $request->file('file')->store('payment_proofs', 'local')
+            ? $uploads->store($request->file('file'), 'payment_proofs', 'local')
             : null;
         $previousProof = null;
         $activationResult = null;

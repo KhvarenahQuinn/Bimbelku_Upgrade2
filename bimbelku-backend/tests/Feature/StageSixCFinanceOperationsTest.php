@@ -191,7 +191,7 @@ class StageSixCFinanceOperationsTest extends TestCase
             ->assertJsonValidationErrors('proof');
 
         $this->post("/api/admin/refunds/{$refund->id}/complete", [
-            'proof' => UploadedFile::fake()->create('refund.jpg', 100, 'image/jpeg'),
+            'proof' => UploadedFile::fake()->image('refund.jpg', 8, 8),
             'destination_selection_version' => $destinationVersion,
         ], [
             'Accept' => 'application/json',

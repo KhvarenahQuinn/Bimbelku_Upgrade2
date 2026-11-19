@@ -19,6 +19,7 @@ use App\Models\SessionAttendance;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\ClassroomSystemMessageService;
+use App\Services\UploadSecurityService;
 use App\Support\PackageChapterProgress;
 use App\Support\PublicMedia;
 use Illuminate\Http\Request;
@@ -540,7 +541,7 @@ class LearningSessionController extends Controller
         ]);
     }
 
-    public function storeMessage(Request $request, Booking $booking)
+    public function storeMessage(Request $request, Booking $booking, UploadSecurityService $uploads)
     {
         $role = $this->sessionRole($request->user(), $booking);
         $this->ensurePaidAccess($request->user(), $booking, $role);
@@ -580,7 +581,7 @@ class LearningSessionController extends Controller
         }
 
         $path = $request->hasFile('attachment')
-            ? $request->file('attachment')->store('classroom_attachments', 'local')
+            ? $uploads->store($request->file('attachment'), 'classroom_attachments', 'local')
             : null;
         try {
             $message = DB::transaction(function () use (

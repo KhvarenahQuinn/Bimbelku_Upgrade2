@@ -9,6 +9,7 @@ use App\Models\PackagePlan;
 use App\Models\Promotion;
 use App\Models\Tutorial;
 use App\Models\TutorialStep;
+use App\Services\UploadSecurityService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -499,7 +500,7 @@ class AdminStageFiveController extends Controller
 
     private function storePublicImage(Request $request, string $directory): string
     {
-        $path = $request->file('image')?->store($directory, 'public');
+        $path = $request->file('image') ? app(UploadSecurityService::class)->store($request->file('image'), $directory, 'public') : null;
         abort_unless(
             is_string($path) && $path !== '' && Storage::disk('public')->exists($path),
             500,

@@ -24,6 +24,7 @@ use App\Services\PackageCheckoutService;
 use App\Services\PaymentReconciliationService;
 use App\Services\TeacherMatchingService;
 use App\Services\TeacherOfferReleaseService;
+use App\Services\UploadSecurityService;
 use App\Services\XenditMoneyMovementService;
 use App\Support\AdminPermissionCatalog;
 use App\Support\PublicMedia;
@@ -355,13 +356,13 @@ class AdminController extends Controller
         ]);
     }
 
-    public function updateTeacherProfileCover(Request $request, int $id)
+    public function updateTeacherProfileCover(Request $request, int $id, UploadSecurityService $uploads)
     {
         $request->validate([
             'profile_cover' => ['required', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ]);
         $teacher = User::query()->where('role', 'teacher')->findOrFail($id);
-        $path = $request->file('profile_cover')->store('profile_covers', 'public');
+        $path = $uploads->store($request->file('profile_cover'), 'profile_covers', 'public');
         try {
             $oldPath = DB::transaction(function () use ($teacher, $path) {
                 $lockedTeacher = User::query()->where('role', 'teacher')->lockForUpdate()->findOrFail($teacher->id);
@@ -719,7 +720,7 @@ class AdminController extends Controller
         ]);
     }
 
-    public function updatePaymentSettings(Request $request)
+    public function updatePaymentSettings(Request $request, UploadSecurityService $uploads)
     {
         $request->validate([
             'merchant_name' => ['required', 'string', 'max:100', 'regex:/\pL/u'],
@@ -742,7 +743,7 @@ class AdminController extends Controller
             'account_name' => '',
         ]);
         $newQrisImage = $request->hasFile('qris_image')
-            ? $request->file('qris_image')->store('payment_settings', 'public')
+            ? $uploads->store($request->file('qris_image'), 'payment_settings', 'public')
             : null;
         $oldQrisImage = null;
 
@@ -1477,7 +1478,7 @@ class AdminController extends Controller
             return trim((string) $request->input('icon_url'));
         }
         if ($request->hasFile('icon')) {
-            return $request->file('icon')->store('social_icons', 'public');
+            return app(UploadSecurityService::class)->store($request->file('icon'), 'social_icons', 'public');
         }
 
         return $required ? null : null;

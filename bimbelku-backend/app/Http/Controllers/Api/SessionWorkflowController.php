@@ -21,6 +21,7 @@ use App\Services\CustomerWalletService;
 use App\Services\PartialPackageRefundService;
 use App\Services\RefundSettlementService;
 use App\Services\ScheduleReleaseService;
+use App\Services\UploadSecurityService;
 use App\Services\XenditMoneyMovementService;
 use App\Support\RefundStatusPresenter;
 use Illuminate\Http\Request;
@@ -30,7 +31,7 @@ use Illuminate\Validation\Rule;
 
 class SessionWorkflowController extends Controller
 {
-    public function reportStudentAbsence(Request $request, Booking $booking)
+    public function reportStudentAbsence(Request $request, Booking $booking, UploadSecurityService $uploads)
     {
         $this->authorizeTeacher($request, $booking);
         $validated = $request->validate([
@@ -52,7 +53,7 @@ class SessionWorkflowController extends Controller
         }
 
         $participant = $this->reportedParticipant($booking, $validated['student_id'] ?? null);
-        $path = $request->file('evidence')->store('absence_evidence', 'local');
+        $path = $uploads->store($request->file('evidence'), 'absence_evidence', 'local');
 
         try {
             $report = DB::transaction(function () use ($request, $booking, $participant, $validated, $path) {
@@ -123,7 +124,7 @@ class SessionWorkflowController extends Controller
         ], 201);
     }
 
-    public function reportEmergency(Request $request, Booking $booking)
+    public function reportEmergency(Request $request, Booking $booking, UploadSecurityService $uploads)
     {
         $this->authorizeTeacher($request, $booking);
         $validated = $request->validate([
@@ -145,7 +146,7 @@ class SessionWorkflowController extends Controller
             return response()->json(['message' => 'Laporan keadaan darurat sesi ini sedang diperiksa.'], 422);
         }
 
-        $path = $request->file('evidence')->store('emergency_evidence', 'local');
+        $path = $uploads->store($request->file('evidence'), 'emergency_evidence', 'local');
 
         try {
             $report = DB::transaction(function () use ($request, $booking, $validated, $path) {
@@ -275,7 +276,7 @@ class SessionWorkflowController extends Controller
         ]);
     }
 
-    public function studentDispute(Request $request, Booking $booking)
+    public function studentDispute(Request $request, Booking $booking, UploadSecurityService $uploads)
     {
         $participant = $this->studentParticipant($request, $booking);
         $validated = $request->validate([
@@ -299,7 +300,7 @@ class SessionWorkflowController extends Controller
         }
 
         $path = $request->hasFile('evidence')
-            ? $request->file('evidence')->store('dispute_evidence', 'local')
+            ? app(UploadSecurityService::class)->store($request->file('evidence'), 'dispute_evidence', 'local')
             : null;
 
         try {
@@ -365,7 +366,7 @@ class SessionWorkflowController extends Controller
         ], 201);
     }
 
-    public function reportTeacherAbsence(Request $request, Booking $booking)
+    public function reportTeacherAbsence(Request $request, Booking $booking, UploadSecurityService $uploads)
     {
         $participant = $this->studentParticipant($request, $booking);
         $validated = $request->validate([
@@ -388,7 +389,7 @@ class SessionWorkflowController extends Controller
             return response()->json(['message' => 'Laporan Anda sedang diperiksa admin.'], 422);
         }
 
-        $path = $request->file('evidence')->store('teacher_absence_evidence', 'local');
+        $path = $uploads->store($request->file('evidence'), 'teacher_absence_evidence', 'local');
         try {
             $report = DB::transaction(function () use ($request, $booking, $participant, $validated, $path) {
                 $lockedBooking = Booking::query()->lockForUpdate()->findOrFail($booking->id);
@@ -623,7 +624,7 @@ class SessionWorkflowController extends Controller
         abort_unless($this->canAppealLapsedSession($booking, (int) $request->user()->id), 422, 'Sesi ini tidak dapat dibandingkan lagi.');
 
         $path = $request->hasFile('evidence')
-            ? $request->file('evidence')->store('dispute_evidence', 'local')
+            ? app(UploadSecurityService::class)->store($request->file('evidence'), 'dispute_evidence', 'local')
             : null;
 
         try {
@@ -1295,7 +1296,7 @@ class SessionWorkflowController extends Controller
         }
 
         $path = $isBankTransfer
-            ? $request->file('proof')->store('refund_proofs', 'local')
+            ? app(UploadSecurityService::class)->store($request->file('proof'), 'refund_proofs', 'local')
             : null;
         $walletTransaction = null;
         $completedBreakdown = $requestedBreakdown;

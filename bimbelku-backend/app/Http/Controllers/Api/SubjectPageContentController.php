@@ -7,10 +7,10 @@ use App\Models\CurriculumSubject;
 use App\Models\SubjectPageContent;
 use App\Models\TeacherSubject;
 use App\Models\WebsiteTestimonial;
+use App\Services\UploadSecurityService;
 use App\Support\PublicMedia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class SubjectPageContentController extends Controller
 {
@@ -72,7 +72,7 @@ class SubjectPageContentController extends Controller
         ]);
     }
 
-    public function updateHero(Request $request, CurriculumSubject $curriculumSubject)
+    public function updateHero(Request $request, CurriculumSubject $curriculumSubject, UploadSecurityService $uploads)
     {
         $data = $request->validate([
             'hero_image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:6144', 'dimensions:min_width=720,min_height=480'],
@@ -80,9 +80,7 @@ class SubjectPageContentController extends Controller
         $content = SubjectPageContent::query()->firstOrCreate([
             'curriculum_subject_id' => $curriculumSubject->id,
         ]);
-        $file = $data['hero_image'];
-        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'jpg');
-        $newPath = $file->storeAs('website/subjects', 'hero_'.Str::uuid().'.'.$extension, 'public');
+        $newPath = $uploads->store($data['hero_image'], 'website/subjects', 'public');
         $oldPath = $content->hero_image_path;
         $content->update(['hero_image_path' => $newPath]);
         if ($oldPath && $oldPath !== $newPath) {

@@ -443,7 +443,7 @@ class StageTwoCustomerWalletPaymentTest extends TestCase
         Sanctum::actingAs($admin);
         $this->post("/api/admin/refunds/{$refund->id}/complete", [
             'destination_selection_version' => $version,
-            'proof' => UploadedFile::fake()->create('refund-split.jpg', 100, 'image/jpeg'),
+            'proof' => UploadedFile::fake()->image('refund-split.jpg', 8, 8),
             'notes' => 'Transfer eksternal Rp50.000 sudah dilakukan.',
         ], [
             'Idempotency-Key' => 'wallet-split-admin-complete-st2',

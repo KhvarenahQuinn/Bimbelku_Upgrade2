@@ -130,11 +130,14 @@ class ProtectedFileController extends Controller
         $headers = [
             'Cache-Control' => 'private, no-store, max-age=0',
             'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'; sandbox",
             'Content-Disposition' => 'inline; filename="'.$filename.'"',
         ];
 
         if (Storage::disk('local')->exists($path)) {
-            return Storage::disk('local')->response($path, null, $headers);
+            $mime = (new \finfo(FILEINFO_MIME_TYPE))->file(Storage::disk('local')->path($path)) ?: 'application/octet-stream';
+
+            return Storage::disk('local')->response($path, $mime, $headers);
         }
 
         abort(404);
