@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 interface TurnstileWidgetProps {
   onTokenChange: (token: string) => void;
   resetTrigger?: number;
+  action?: string;
 }
 
 type TurnstileStatus = "idle" | "loading" | "ready" | "verified" | "expired" | "error" | "bypassed";
@@ -16,7 +17,7 @@ declare global {
         theme: string;
         callback: (token: string) => void;
         "expired-callback": () => void;
-        "error-callback": () => void;
+        "error-callback": (errorCode: string) => void;
       }) => number;
       reset: (widgetId: number) => void;
       remove: (widgetId: number) => void;
@@ -24,7 +25,7 @@ declare global {
   }
 }
 
-export default function TurnstileWidget({ onTokenChange, resetTrigger }: TurnstileWidgetProps) {
+export default function TurnstileWidget({ onTokenChange, resetTrigger, action = "register" }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<number | null>(null);
   const scriptLoadedRef = useRef(false);
@@ -40,7 +41,7 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
   const onTokenChangeRef = useRef(onTokenChange);
   const onVerifyRef = useRef<(token: string) => void>(() => {});
   const onExpireRef = useRef<() => void>(() => {});
-  const onErrorRef = useRef<() => void>(() => {});
+  const onErrorRef = useRef<(errorCode: string) => void>(() => {});
   onTokenChangeRef.current = onTokenChange;
   onVerifyRef.current = (verifiedToken) => {
     setToken(verifiedToken);
@@ -52,10 +53,11 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
     setStatus("expired");
     setErrorMessage("Verifikasi keamanan Cloudflare gagal atau kedaluwarsa. Silakan coba lagi.");
   };
-  onErrorRef.current = () => {
+  onErrorRef.current = (errorCode) => {
     setToken("");
+    onTokenChangeRef.current("");
     setStatus("error");
-    setErrorMessage("Verifikasi keamanan Cloudflare gagal atau kedaluwarsa. Silakan coba lagi.");
+    setErrorMessage(`Verifikasi keamanan gagal (kode: ${errorCode}). Pastikan hostname terdaftar di Cloudflare Turnstile atau muat ulang.`);
   };
 
   // Reset widget when resetTrigger changes (e.g., after form submission error)
@@ -180,11 +182,17 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
   }, []);
 
   const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim();
-  const action = "register";
   const theme = "light";
 
   renderWidgetRef.current = () => {
     if (!scriptReadyRef.current || !containerRef.current || !window.turnstile || !siteKey) return;
+    // Prevent "Turnstile has already been rendered in this container"
+    if (widgetIdRef.current !== null) {
+      if (window.turnstile) {
+        window.turnstile.reset(widgetIdRef.current);
+      }
+      return;
+    }
     if (renderAttemptedRef.current) return;
 
     renderAttemptedRef.current = true;
@@ -194,7 +202,7 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
       theme,
       callback: (verifiedToken: string) => onVerifyRef.current(verifiedToken),
       "expired-callback": () => onExpireRef.current(),
-      "error-callback": () => onErrorRef.current(),
+      "error-callback": (errorCode: string) => onErrorRef.current(errorCode),
     });
   };
 
