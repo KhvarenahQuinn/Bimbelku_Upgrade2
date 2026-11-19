@@ -1,6 +1,6 @@
 # Panduan testing perjalanan belajar BimbelKu
 
-Persiapan pengujian menyeluruh terbaru ada di [testing-stage1.md](testing-stage1.md), dengan daftar 190 skenario dan statusnya di [testing-matrix.md](testing-matrix.md). Baca prasyarat di sana sebelum memakai demo lama: fixture otomatis tidak sama dengan akun browser, dan pencairan nyata masih terhalang implementasi verifikasi nama bank.
+Baca [hasil persiapan tahap 1](testing-stage1.md) dan [matriks skenario](testing-matrix.md) sebelum menjalankan fixture demo. Tes otomatis dan uji browser berjalan pada environment berbeda. Pencairan nyata memerlukan verifikasi rekening yang sesuai.
 
 Panduan ini untuk menguji **dari pemesanan sampai kelas selesai** di komputer lokal. Gunakan Xendit **development/test mode**, bukan uang sungguhan. Uji satu skenario sampai selesai sebelum membuat skenario berikutnya supaya kode tagihan dan akun tidak tertukar.
 
@@ -146,4 +146,4 @@ php artisan demo:journey-time KODE_TAGIHAN end
 | Sudah `end`, paket belum selesai | Tutor masih perlu mengirim laporan; murid menyetujui sesi privat atau admin memverifikasi laporan Kelas Bersama. Ulangi untuk seluruh sesi. |
 | Refund atau pencairan masih diproses | Periksa status gateway dan event/rekonsiliasi; jangan membuat permintaan baru dengan nominal sama hanya karena layar belum berubah. |
 
-Untuk tes otomatis tanpa mengubah database lokal, dari akar proyek jalankan `npm run demo:payment-journey`. Tes ini memakai respons gateway tiruan; **bukan** pengganti uji browser dengan Xendit sandbox. Rincian teknis pembeda kedua jenis tes tersedia di [DEMO-PEMBAYARAN-SANDBOX.md](DEMO-PEMBAYARAN-SANDBOX.md).
+Untuk tes otomatis yang tidak mengubah database lokal, jalankan `npm run demo:payment-journey` dari root proyek. Tes ini memakai respons gateway tiruan dan tidak menggantikan uji browser dengan Xendit sandbox. Langkah checkout tersedia di [panduan demo pembayaran](DEMO-PEMBAYARAN-SANDBOX.md).
