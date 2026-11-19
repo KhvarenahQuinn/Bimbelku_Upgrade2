@@ -84,7 +84,7 @@ class StageFivePackageExperienceTest extends TestCase
             'title' => 'Banner uji',
             'description' => 'Banner aman untuk murid.',
             'button_text' => 'Buka',
-            'image' => UploadedFile::fake()->create('banner.jpg', 100, 'image/jpeg'),
+            'image' => UploadedFile::fake()->image('banner.jpg', 100, 100),
             'audience' => 'student',
             'destination_kind' => 'internal',
             'destination_url' => '/admin/users/delete-all',
@@ -96,7 +96,7 @@ class StageFivePackageExperienceTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonPath('message', 'Tujuan internal tidak diizinkan.');
 
-        $payload['image'] = UploadedFile::fake()->create('banner-aman.jpg', 100, 'image/jpeg');
+        $payload['image'] = UploadedFile::fake()->image('banner-aman.jpg', 100, 100);
         $payload['destination_url'] = '/student/packages/new';
         $this->post('/api/admin/stage-five/banners', $payload)
             ->assertCreated()
