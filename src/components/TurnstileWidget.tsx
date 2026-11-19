@@ -96,6 +96,7 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
         clearTimeout(scriptLoadTimeoutRef.current);
         scriptLoadTimeoutRef.current = null;
       }
+      script.removeEventListener("load", handleLoad);
       scriptLoadedRef.current = true;
       scriptReadyRef.current = true;
       renderWidget();
@@ -107,12 +108,13 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
         clearTimeout(scriptLoadTimeoutRef.current);
         scriptLoadTimeoutRef.current = null;
       }
+      script.removeEventListener("error", handleError);
       setStatus("error");
       setErrorMessage("Gagal memuat skrip verifikasi. Periksa koneksi internet Anda.");
     };
 
-    script.onload = handleLoad;
-    script.onerror = handleError;
+    script.addEventListener("load", handleLoad);
+    script.addEventListener("error", handleError);
 
     // Timeout fallback (8 seconds)
     scriptLoadTimeoutRef.current = setTimeout(() => {
@@ -128,6 +130,8 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
         clearTimeout(scriptLoadTimeoutRef.current);
         scriptLoadTimeoutRef.current = null;
       }
+      script.removeEventListener("load", handleLoad);
+      script.removeEventListener("error", handleError);
       if (document.head.contains(script)) {
         document.head.removeChild(script);
       }
@@ -189,16 +193,24 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
       script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
       script.async = true;
       script.defer = true;
-      script.onload = () => {
+
+      const handleRetryLoad = () => {
+        script.removeEventListener("load", handleRetryLoad);
         scriptLoadedRef.current = true;
         scriptReadyRef.current = true;
         renderWidgetRef.current();
         setStatus("ready");
       };
-      script.onerror = () => {
+
+      const handleRetryError = () => {
+        script.removeEventListener("error", handleRetryError);
         setStatus("error");
         setErrorMessage("Gagal memuat skrip verifikasi. Periksa koneksi internet Anda.");
       };
+
+      script.addEventListener("load", handleRetryLoad);
+      script.addEventListener("error", handleRetryError);
+
       document.head.appendChild(script);
     }, 0);
   };
