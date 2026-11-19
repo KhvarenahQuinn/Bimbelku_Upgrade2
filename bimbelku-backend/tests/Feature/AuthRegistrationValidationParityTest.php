@@ -81,7 +81,7 @@ class AuthRegistrationValidationParityTest extends TestCase
 
     public function test_registration_rejects_untrusted_email_domains_with_guidance(): void
     {
-        $guidance = 'Gunakan alamat email dari provider terpercaya (Gmail, Yahoo, Outlook, iCloud) atau email institusi pendidikan (.ac.id, .sch.id, belajar.id).';
+        $guidance = 'Gunakan email aktif yang umum (Gmail, Yahoo, Outlook, iCloud, dll.) atau email institusi pendidikan (.ac.id, .sch.id, .edu, belajar.id, dll.).';
         foreach (['murid@example.test', 'murid@mailinator.com', 'murid@asalasal.xyz'] as $email) {
             $this->postJson('/api/register', $this->baseStudentPayload(['email' => $email]))
                 ->assertStatus(422)

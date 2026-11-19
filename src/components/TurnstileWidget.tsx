@@ -71,9 +71,11 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
 
   // Load Turnstile script with timeout fallback
   useEffect(() => {
-    if (scriptLoadedRef.current) {
+    // If script already loaded and widget rendered, ensure ready state
+    if (scriptLoadedRef.current && window.turnstile) {
       scriptReadyRef.current = true;
       setStatus("ready");
+      renderWidgetRef.current?.();
       return;
     }
 
@@ -82,6 +84,40 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
       scriptReadyRef.current = false;
       setStatus("bypassed");
       return; // Bypass mode for local dev
+    }
+
+    // Check if turnstile is already available globally (e.g., from another tab switch)
+    if (window.turnstile) {
+      scriptLoadedRef.current = true;
+      scriptReadyRef.current = true;
+      setStatus("ready");
+      renderWidgetRef.current?.();
+      return;
+    }
+
+    // Check if script tag already exists in document.head
+    const existingScript = document.querySelector<HTMLScriptElement>('script[src*="challenges.cloudflare.com/turnstile"]');
+    if (existingScript) {
+      scriptLoadedRef.current = true;
+      scriptReadyRef.current = true;
+      setStatus("loading");
+
+      const handleExistingLoad = () => {
+        existingScript.removeEventListener("load", handleExistingLoad);
+        existingScript.removeEventListener("error", handleExistingError);
+        scriptReadyRef.current = true;
+        renderWidgetRef.current?.();
+        setStatus("ready");
+      };
+      const handleExistingError = () => {
+        existingScript.removeEventListener("load", handleExistingLoad);
+        existingScript.removeEventListener("error", handleExistingError);
+        setStatus("error");
+        setErrorMessage("Gagal memuat skrip verifikasi. Periksa koneksi internet Anda.");
+      };
+      existingScript.addEventListener("load", handleExistingLoad);
+      existingScript.addEventListener("error", handleExistingError);
+      return;
     }
 
     setStatus("loading");
@@ -97,9 +133,15 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
         scriptLoadTimeoutRef.current = null;
       }
       script.removeEventListener("load", handleLoad);
+      script.removeEventListener("error", handleError);
       scriptLoadedRef.current = true;
       scriptReadyRef.current = true;
-      renderWidget();
+      try {
+        renderWidgetRef.current?.();
+      } catch {
+        setStatus("error");
+        setErrorMessage("Gagal memuat verifikasi keamanan. Silakan coba lagi.");
+      }
       setStatus("ready");
     };
 
@@ -108,6 +150,7 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
         clearTimeout(scriptLoadTimeoutRef.current);
         scriptLoadTimeoutRef.current = null;
       }
+      script.removeEventListener("load", handleLoad);
       script.removeEventListener("error", handleError);
       setStatus("error");
       setErrorMessage("Gagal memuat skrip verifikasi. Periksa koneksi internet Anda.");
@@ -132,9 +175,7 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
       }
       script.removeEventListener("load", handleLoad);
       script.removeEventListener("error", handleError);
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
-      }
+      // Do NOT remove the global script tag from document.head to avoid "Turnstile already has been loaded"
     };
   }, []);
 
@@ -183,35 +224,45 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
     renderAttemptedRef.current = false;
     scriptLoadedRef.current = false;
     scriptReadyRef.current = false;
-    if (document.querySelector('script[src*="turnstile"]')) {
-      document.querySelector('script[src*="turnstile"]')?.remove();
-    }
+    // Do NOT remove the global script tag
     setStatus("idle");
     setErrorMessage("");
     setTimeout(() => {
-      const script = document.createElement("script");
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-      script.async = true;
-      script.defer = true;
+      const siteKeyRetry = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim();
+      if (!siteKeyRetry || !window.turnstile) {
+        // If no site key or turnstile not loaded, reload script
+        const script = document.createElement("script");
+        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        script.async = true;
+        script.defer = true;
 
-      const handleRetryLoad = () => {
-        script.removeEventListener("load", handleRetryLoad);
+        const handleRetryLoad = () => {
+          script.removeEventListener("load", handleRetryLoad);
+          script.removeEventListener("error", handleRetryError);
+          scriptLoadedRef.current = true;
+          scriptReadyRef.current = true;
+          renderWidgetRef.current();
+          setStatus("ready");
+        };
+
+        const handleRetryError = () => {
+          script.removeEventListener("load", handleRetryLoad);
+          script.removeEventListener("error", handleRetryError);
+          setStatus("error");
+          setErrorMessage("Gagal memuat skrip verifikasi. Periksa koneksi internet Anda.");
+        };
+
+        script.addEventListener("load", handleRetryLoad);
+        script.addEventListener("error", handleRetryError);
+
+        document.head.appendChild(script);
+      } else {
+        // Turnstile already loaded, just re-render
         scriptLoadedRef.current = true;
         scriptReadyRef.current = true;
         renderWidgetRef.current();
         setStatus("ready");
-      };
-
-      const handleRetryError = () => {
-        script.removeEventListener("error", handleRetryError);
-        setStatus("error");
-        setErrorMessage("Gagal memuat skrip verifikasi. Periksa koneksi internet Anda.");
-      };
-
-      script.addEventListener("load", handleRetryLoad);
-      script.addEventListener("error", handleRetryError);
-
-      document.head.appendChild(script);
+      }
     }, 0);
   };
 
@@ -223,7 +274,7 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
       )}
       <div
         ref={containerRef}
-        className="cf-turnstile"
+        className={`cf-turnstile ${status === "ready" || status === "verified" ? "" : "hidden"}`}
         data-sitekey={siteKey}
       />
       {status === "loading" && (
