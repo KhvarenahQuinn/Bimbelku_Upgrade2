@@ -19,7 +19,7 @@ class TurnstileRegistrationTest extends TestCase
     {
         return [
             'name' => 'Murid Turnstile',
-            'email' => 'murid.turnstile@example.test',
+            'email' => 'murid.turnstile@gmail.com',
             'phone' => '081234567890',
             'password' => 'password123',
             'password_confirmation' => 'password123',
@@ -39,7 +39,7 @@ class TurnstileRegistrationTest extends TestCase
         $this->postJson('/api/register', $this->payload())->assertCreated();
 
         Http::assertNothingSent();
-        $this->assertDatabaseHas('users', ['email' => 'murid.turnstile@example.test']);
+        $this->assertDatabaseHas('users', ['email' => 'murid.turnstile@gmail.com']);
     }
 
     public function test_registration_is_rejected_without_token_when_turnstile_enabled(): void
@@ -55,7 +55,7 @@ class TurnstileRegistrationTest extends TestCase
             ->assertJsonValidationErrors('cf-turnstile-response');
 
         Http::assertNothingSent();
-        $this->assertDatabaseMissing('users', ['email' => 'murid.turnstile@example.test']);
+        $this->assertDatabaseMissing('users', ['email' => 'murid.turnstile@gmail.com']);
     }
 
     public function test_registration_succeeds_with_a_valid_token(): void
@@ -70,7 +70,7 @@ class TurnstileRegistrationTest extends TestCase
             'cf-turnstile-response' => 'valid-token',
         ]))->assertCreated();
 
-        $this->assertDatabaseHas('users', ['email' => 'murid.turnstile@example.test']);
+        $this->assertDatabaseHas('users', ['email' => 'murid.turnstile@gmail.com']);
     }
 
     public function test_registration_is_rejected_when_turnstile_returns_failure(): void
@@ -112,7 +112,7 @@ class TurnstileRegistrationTest extends TestCase
         config()->set('turnstile.enabled', true);
         Http::fake();
 
-        $this->postJson('/api/forgot-password', ['email' => 'murid.turnstile@example.test'])
+        $this->postJson('/api/forgot-password', ['email' => 'murid.turnstile@gmail.com'])
             ->assertStatus(422)
             ->assertJsonPath('error_code', 'turnstile_failed');
     }

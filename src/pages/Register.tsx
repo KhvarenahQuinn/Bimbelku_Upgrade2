@@ -43,7 +43,8 @@ import type { SubjectOption } from "@/components/SubjectCombobox";
 import { EDUCATION_LEVELS, GRADES_BY_EDUCATION_LEVEL } from "@/lib/educationCatalog";
 import http, { getApiError, getApiValidationErrors, getCached } from "@/lib/http";
 import {
-  isValidEmail,
+  isValidRegistrationEmail,
+  registrationEmailGuidance,
   isValidHttpUrl,
   isValidPersonName,
   isValidPhone,
@@ -172,7 +173,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
   const accountErrors = () => {
     const nextErrors: Record<string, string> = {};
     if (!isValidPersonName(form.name)) nextErrors.name = "Nama lengkap harus berisi huruf dan tidak boleh memuat angka.";
-    if (!isValidEmail(form.email)) nextErrors.email = "Masukkan alamat email yang valid.";
+    if (!isValidRegistrationEmail(form.email)) nextErrors.email = registrationEmailGuidance;
     if (!isValidPhone(form.phone)) nextErrors.phone = "Nomor WhatsApp/telepon harus berisi 8–15 angka.";
     if (form.password.length < 8) nextErrors.password = "Kata sandi minimal 8 karakter.";
     if (form.password !== form.password_confirmation) nextErrors.password_confirmation = "Konfirmasi kata sandi belum sama.";

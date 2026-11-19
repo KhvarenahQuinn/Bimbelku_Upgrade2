@@ -20,7 +20,7 @@ class EmailVerificationAndPinResetTest extends TestCase
         Mail::fake();
         $payload = [
             'name' => 'Murid Verifikasi',
-            'email' => 'verifikasi@example.com',
+            'email' => 'verifikasi@gmail.com',
             'phone' => '081234567890',
             'password' => 'password123',
             'password_confirmation' => 'password123',
@@ -48,7 +48,7 @@ class EmailVerificationAndPinResetTest extends TestCase
     public function test_valid_email_code_verifies_account_and_allows_login(): void
     {
         $user = User::factory()->create([
-            'email' => 'kode@example.com',
+            'email' => 'kode@gmail.com',
             'email_verified_at' => null,
             'email_verification_required_at' => now(),
             'role' => 'student',
@@ -160,7 +160,7 @@ class EmailVerificationAndPinResetTest extends TestCase
     {
         Mail::fake();
         $user = User::factory()->create([
-            'email' => 'resend@example.com',
+            'email' => 'resend@gmail.com',
             'email_verified_at' => null,
             'email_verification_required_at' => now(),
             'role' => 'student',

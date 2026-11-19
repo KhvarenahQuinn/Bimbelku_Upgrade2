@@ -14,6 +14,13 @@ class PasswordResetEmailTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('turnstile.enabled', false);
+        config()->set('turnstile.secret_key', null);
+    }
+
     public function test_reset_email_contains_canonical_frontend_link_and_both_bodies(): void
     {
         Mail::fake();

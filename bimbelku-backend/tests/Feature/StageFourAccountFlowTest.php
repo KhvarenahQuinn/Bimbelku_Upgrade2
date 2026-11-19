@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\TeacherProfile;
 use App\Models\TeacherSubject;
 use App\Models\User;
+use App\Services\UploadSecurityService;
 use Database\Seeders\CurriculumCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -18,12 +19,19 @@ class StageFourAccountFlowTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('turnstile.enabled', false);
+        config()->set('turnstile.secret_key', null);
+    }
+
     public function test_duplicate_registration_email_explains_how_to_continue(): void
     {
-        User::factory()->create(['email' => 'sudah.ada@example.com']);
+        User::factory()->create(['email' => 'sudah.ada@gmail.com']);
 
         $this->postJson('/api/register', [
-            'name' => 'Murid Baru', 'email' => 'sudah.ada@example.com',
+            'name' => 'Murid Baru', 'email' => 'sudah.ada@gmail.com',
             'phone' => '081234567891', 'password' => 'password123',
             'password_confirmation' => 'password123', 'role' => 'student',
             'date_of_birth' => now()->subYears(20)->toDateString(),
@@ -37,7 +45,7 @@ class StageFourAccountFlowTest extends TestCase
         $birthDate = now()->subYears(12)->toDateString();
         $payload = [
             'name' => 'Murid Anak',
-            'email' => 'murid.anak@example.com',
+            'email' => 'murid.anak@gmail.com',
             'phone' => '081234567891',
             'password' => 'password123',
             'password_confirmation' => 'password123',
@@ -68,14 +76,14 @@ class StageFourAccountFlowTest extends TestCase
             ->assertJsonMissing(['guardian_phone' => '081234567892']);
 
         $this->assertDatabaseHas('users', [
-            'email' => 'murid.anak@example.com',
+            'email' => 'murid.anak@gmail.com',
             'date_of_birth' => $birthDate,
             'guardian_name' => 'Wali Murid',
             'guardian_phone' => '081234567892',
             'guardian_relationship' => 'orang_tua',
         ]);
         $this->assertNotNull(
-            User::query()->where('email', 'murid.anak@example.com')->value('guardian_consent_at')
+            User::query()->where('email', 'murid.anak@gmail.com')->value('guardian_consent_at')
         );
     }
 
@@ -83,7 +91,7 @@ class StageFourAccountFlowTest extends TestCase
     {
         $response = $this->postJson('/api/register', [
             'name' => 'Murid Dewasa',
-            'email' => 'murid.dewasa@example.com',
+            'email' => 'murid.dewasa@gmail.com',
             'phone' => '081234567893',
             'password' => 'password123',
             'password_confirmation' => 'password123',
@@ -95,7 +103,7 @@ class StageFourAccountFlowTest extends TestCase
 
         $response->assertCreated();
         $this->assertDatabaseHas('users', [
-            'email' => 'murid.dewasa@example.com',
+            'email' => 'murid.dewasa@gmail.com',
             'guardian_name' => null,
             'guardian_consent_at' => null,
         ]);
@@ -105,7 +113,7 @@ class StageFourAccountFlowTest extends TestCase
     {
         $response = $this->postJson('/api/register', [
             'name' => 'Murid Tahap Empat',
-            'email' => 'murid.tahap4@example.com',
+            'email' => 'murid.tahap4@gmail.com',
             'phone' => '0000000000',
             'password' => 'password123',
             'password_confirmation' => 'password123',
@@ -121,7 +129,7 @@ class StageFourAccountFlowTest extends TestCase
             ->assertJsonPath('user.status', 'active');
 
         $this->assertDatabaseHas('users', [
-            'email' => 'murid.tahap4@example.com',
+            'email' => 'murid.tahap4@gmail.com',
             'role' => 'student',
             'status' => 'active',
         ]);
@@ -131,7 +139,7 @@ class StageFourAccountFlowTest extends TestCase
     {
         $response = $this->postJson('/api/register', [
             'name' => 'Murid Profil Lengkap',
-            'email' => 'murid.profil@example.com',
+            'email' => 'murid.profil@gmail.com',
             'phone' => '081234567894',
             'password' => 'password123',
             'password_confirmation' => 'password123',
@@ -147,7 +155,7 @@ class StageFourAccountFlowTest extends TestCase
 
         $response->assertCreated();
 
-        $student = User::query()->where('email', 'murid.profil@example.com')->firstOrFail();
+        $student = User::query()->where('email', 'murid.profil@gmail.com')->firstOrFail();
         $this->assertSame('SMP', $student->student_education_level);
         $this->assertSame('Kelas 7', $student->grade);
         $this->assertSame('SMP Contoh', $student->school_name);
@@ -170,7 +178,7 @@ class StageFourAccountFlowTest extends TestCase
 
         $response = $this->post('/api/register', [
             'name' => 'Tutor Tahap Empat',
-            'email' => 'tutor.tahap4@example.com',
+            'email' => 'tutor.tahap4@gmail.com',
             'phone' => '081234567899',
             'password' => 'password123',
             'password_confirmation' => 'password123',
@@ -181,13 +189,9 @@ class StageFourAccountFlowTest extends TestCase
             'public_degree' => 'S.Pd.',
             'levels' => ['SD', 'SMP'],
             'teaching_method' => 'hybrid',
-            'identity_document' => UploadedFile::fake()->create('identitas.jpg', 100, 'image/jpeg'),
-            'live_selfie' => UploadedFile::fake()->create('selfie.jpg', 100, 'image/jpeg'),
-            'qualification_document' => UploadedFile::fake()->create(
-                'ijazah.pdf',
-                100,
-                'application/pdf'
-            ),
+            'identity_document' => UploadedFile::fake()->image('identitas.jpg', 8, 8),
+            'live_selfie' => UploadedFile::fake()->image('selfie.jpg', 8, 8),
+            'qualification_document' => UploadedFile::fake()->createWithContent('ijazah.pdf', "%PDF-1.4\n1 0 obj << /Type /Catalog >>\n%%EOF"),
         ]);
 
         $response
@@ -195,7 +199,7 @@ class StageFourAccountFlowTest extends TestCase
             ->assertJsonPath('user.role', 'teacher')
             ->assertJsonPath('user.status', 'pending');
 
-        $teacher = User::query()->where('email', 'tutor.tahap4@example.com')->firstOrFail();
+        $teacher = User::query()->where('email', 'tutor.tahap4@gmail.com')->firstOrFail();
         $profile = $teacher->teacherProfile()->firstOrFail();
         $this->assertSame('S.Pd.', $profile->public_degree);
 
@@ -227,7 +231,7 @@ class StageFourAccountFlowTest extends TestCase
     {
         $this->postJson('/api/register', [
             'name' => 'Calon Tutor',
-            'email' => 'calon-tutor@example.com',
+            'email' => 'calon-tutor@gmail.com',
             'phone' => '081234567899',
             'password' => 'password123',
             'password_confirmation' => 'password123',
@@ -249,7 +253,8 @@ class StageFourAccountFlowTest extends TestCase
             'role' => 'teacher',
             'status' => 'pending',
         ]);
-        $path = UploadedFile::fake()->create('identitas.jpg', 100, 'image/jpeg')->store(
+        $path = app(UploadSecurityService::class)->store(
+            UploadedFile::fake()->image('identitas.jpg', 8, 8),
             'teacher_identity',
             'local'
         );
@@ -345,7 +350,7 @@ class StageFourAccountFlowTest extends TestCase
             '_method' => 'PUT',
             'name' => 'Murid Bersampul',
             'phone' => '081234567890',
-            'profile_cover' => UploadedFile::fake()->create('sampul.jpg', 100, 'image/jpeg'),
+            'profile_cover' => UploadedFile::fake()->image('sampul.jpg', 8, 8),
         ])
             ->assertOk()
             ->assertJsonPath('data.name', 'Murid Bersampul');
@@ -554,7 +559,7 @@ class StageFourAccountFlowTest extends TestCase
         $this->post('/api/teacher/profile', [
             'name' => $teacher->name,
             'whatsapp_number' => '081234567890',
-            'profile_cover' => UploadedFile::fake()->create('sampul-tutor.jpg', 100, 'image/jpeg'),
+            'profile_cover' => UploadedFile::fake()->image('sampul-tutor.jpg', 8, 8),
         ])
             ->assertOk()
             ->assertJsonPath('reverification_required', false);

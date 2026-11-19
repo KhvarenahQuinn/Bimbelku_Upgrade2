@@ -92,6 +92,25 @@ export function isValidHttpUrl(value: string): boolean {
  * tanda hubung. Tanda `+` pada nama lokal tetap diperbolehkan.
  */
 const emailPattern = /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+const consumerEmailDomains = new Set([
+  "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.id", "ymail.com",
+  "outlook.com", "hotmail.com", "live.com", "msn.com", "icloud.com",
+  "me.com", "mac.com", "proton.me", "protonmail.com", "zoho.com", "aol.com",
+]);
+export const registrationEmailGuidance = "Gunakan alamat email dari provider terpercaya (Gmail, Yahoo, Outlook, iCloud) atau email institusi pendidikan (.ac.id, .sch.id, belajar.id).";
+
+export function isTrustedRegistrationEmailDomain(domain: string): boolean {
+  const normalized = domain.toLowerCase().replace(/\\.$/, "");
+  return consumerEmailDomains.has(normalized)
+    || normalized === "belajar.id"
+    || [".ac.id", ".sch.id", ".edu", ".belajar.id"].some((suffix) => normalized.endsWith(suffix));
+}
+
+export function isValidRegistrationEmail(value: string): boolean {
+  const normalized = value.trim();
+  if (!isValidEmail(normalized)) return false;
+  return isTrustedRegistrationEmailDomain(normalized.slice(normalized.lastIndexOf("@") + 1));
+}
 
 export function isValidEmail(value: string): boolean {
   const normalized = value.trim();

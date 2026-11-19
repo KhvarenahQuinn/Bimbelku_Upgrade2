@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\GuestPackageLinkService;
 use App\Services\OneTimeCodeService;
 use App\Services\PersistentLoginService;
+use App\Services\UploadSecurityService;
 use App\Support\AdminPermissionCatalog;
 use App\Support\EducationCatalog;
 use Carbon\Carbon;
@@ -32,7 +33,7 @@ class AuthController extends Controller
     private const GENERIC_ADMIN_LOGIN_ERROR = 'Email atau kata sandi salah.';
 
     // --- FITUR REGISTER ---
-    public function register(Request $request, OneTimeCodeService $codes)
+    public function register(Request $request, OneTimeCodeService $codes, UploadSecurityService $uploads)
     {
         $request->merge([
             'name' => trim((string) $request->input('name')),
@@ -44,7 +45,21 @@ class AuthController extends Controller
         ]);
         $validator = Validator::make($request->all(), [
             'name' => ['required', 'string', 'max:255', 'regex:/\pL/u', 'not_regex:/\d/u'],
-            'email' => 'required|string|email|max:255|unique:users',
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users', function (string $attribute, mixed $value, \Closure $fail): void {
+                $domain = mb_strtolower(substr((string) $value, strrpos((string) $value, '@') + 1));
+                $consumerDomains = [
+                    'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.id', 'ymail.com',
+                    'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'icloud.com',
+                    'me.com', 'mac.com', 'proton.me', 'protonmail.com', 'zoho.com', 'aol.com',
+                ];
+                $academicDomain = $domain === 'belajar.id'
+                    || collect(['.ac.id', '.sch.id', '.edu', '.belajar.id'])
+                        ->contains(fn (string $suffix): bool => str_ends_with($domain, $suffix));
+
+                if (! in_array($domain, $consumerDomains, true) && ! $academicDomain) {
+                    $fail('Gunakan alamat email dari provider terpercaya (Gmail, Yahoo, Outlook, iCloud) atau email institusi pendidikan (.ac.id, .sch.id, belajar.id).');
+                }
+            }],
             'phone' => ['required', 'string', 'max:16', 'regex:/^\+?[0-9]{8,15}$/'],
             'password' => 'required|string|min:8|confirmed',
             'role' => 'required|in:student,teacher',
@@ -163,7 +178,7 @@ class AuthController extends Controller
                     'certification_document' => 'teacher_certifications',
                 ] as $field => $directory) {
                     if ($request->hasFile($field)) {
-                        $storedFiles[$field] = $request->file($field)->store($directory, 'local');
+                        $storedFiles[$field] = $uploads->store($request->file($field), $directory, 'local');
                     }
                 }
             }
