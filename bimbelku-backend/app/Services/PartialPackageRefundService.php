@@ -130,10 +130,20 @@ class PartialPackageRefundService
             $existing = Refund::query()
                 ->where('source_type', $sourceType)
                 ->where('source_id', $sourceId)
+                ->where('user_id', $lockedParticipant->student_id)
                 ->first();
             if ($existing) {
                 return $existing;
             }
+
+            // Satu sesi hanya boleh direfund sekali per peserta, termasuk bila
+            // jalurnya berbeda (mis. penanggung platform lalu banding murid).
+            $alreadyRefunded = Refund::query()
+                ->where('booking_id', $lockedBooking->id)
+                ->where('user_id', $lockedParticipant->student_id)
+                ->whereIn('status', ['pending', 'paid'])
+                ->exists();
+            abort_if($alreadyRefunded, 422, 'Peserta ini sudah memiliki refund aktif untuk sesi tersebut.');
 
             $order = Order::query()->lockForUpdate()->findOrFail($lockedBooking->order_id);
 

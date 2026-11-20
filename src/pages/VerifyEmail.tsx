@@ -20,6 +20,7 @@ export default function VerifyEmail() {
     ? `/login?redirect=${encodeURIComponent(safeRedirect)}`
     : '/login';
   const initialEmail = params.get('email') || state?.email || '';
+  const verifyReason = params.get('reason') || null;
   const [email] = useState(initialEmail);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -79,6 +80,11 @@ export default function VerifyEmail() {
         <p className={'mt-2 text-sm leading-6 text-slate-600'}>
           Masukkan kode 6 angka yang dikirim ke email. Kode berlaku selama 10 menit.
         </p>
+        {verifyReason === 'email_changed' && (
+          <p role={'status'} className={'mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-900'}>
+            Email akun ini baru diubah oleh admin dan semua sesi lama sudah dihentikan. Verifikasi email baru dengan kode OTP di bawah; login Google tidak melewati langkah ini.
+          </p>
+        )}
         <form onSubmit={verify} className={'mt-6 space-y-4'}>
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-700">Alamat email (tidak dapat diubah)</label>

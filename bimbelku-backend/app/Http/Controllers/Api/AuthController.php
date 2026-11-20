@@ -349,6 +349,7 @@ class AuthController extends Controller
                 'message' => 'Email belum diverifikasi. Masukkan kode OTP yang telah dikirim.',
                 'error_code' => 'email_not_verified',
                 'email' => $user->email,
+                'resend_after_seconds' => $this->emailVerificationRetryAfter($user),
             ], 403);
         }
 
@@ -399,6 +400,29 @@ class AuthController extends Controller
             'pending_guest_order' => $guestOrders->pendingCodeFor($user),
             'user' => [...$user->toArray(), 'is_primary_admin' => $user->role === 'admin' && $user->isPrimaryAdmin()],
         ])->withCookie($session['cookie']);
+    }
+
+    /**
+     * Sisa waktu tunggu sebelum kode verifikasi email boleh dikirim ulang.
+     * Dipakai halaman verifikasi agar tombol "Kirim ulang kode" tidak langsung
+     * ditolak ketika OTP baru saja dikirim setelah admin mengubah email.
+     */
+    private function emailVerificationRetryAfter(User $user): int
+    {
+        $lastSent = DB::table('verification_codes')
+            ->where('user_id', $user->id)
+            ->where('purpose', OneTimeCodeService::EMAIL_VERIFICATION)
+            ->max('sent_at');
+        if (! $lastSent) {
+            return 0;
+        }
+
+        $available = Carbon::parse($lastSent)->addSeconds(OneTimeCodeService::RESEND_SECONDS);
+        if (! $available->isFuture()) {
+            return 0;
+        }
+
+        return max(1, (int) ceil(now()->diffInSeconds($available)));
     }
 
     /**

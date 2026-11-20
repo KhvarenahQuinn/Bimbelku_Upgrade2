@@ -55,7 +55,16 @@ class GoogleAuthController extends Controller
                 return $this->frontendError('Google tidak memberikan email yang sudah terverifikasi.', $frontendOrigin);
             }
 
+            $googleId = (string) $googleUser->getId();
             $user = User::query()->whereRaw('LOWER(email) = ?', [$email])->first();
+            $linkedByGoogleId = false;
+            if (! $user) {
+                // Email akun bisa berubah lewat admin. Google ID tetap identitas
+                // yang sama, jadi jangan buat akun duplikat (dan jangan gagal
+                // karena unique google_id) saat email Google masih yang lama.
+                $user = User::query()->where('google_id', $googleId)->first();
+                $linkedByGoogleId = $user !== null;
+            }
             if ($user && ! in_array($user->role, ['student', 'teacher'], true)) {
                 return $this->frontendError('Gunakan email dan kata sandi untuk masuk dengan akun ini.', $frontendOrigin);
             }
@@ -72,7 +81,7 @@ class GoogleAuthController extends Controller
                     'has_password' => false,
                     'role' => 'student',
                     'status' => 'pending',
-                    'google_id' => (string) $googleUser->getId(),
+                    'google_id' => $googleId,
                     'google_avatar_url' => $googleUser->getAvatar(),
                     'google_onboarding_required_at' => now(),
                 ]);
@@ -82,14 +91,14 @@ class GoogleAuthController extends Controller
                 }
 
                 $user->forceFill([
-                    'email_verified_at' => $user->email_verified_at ?: now(),
-                    'google_id' => (string) $googleUser->getId(),
+                    'email_verified_at' => $this->verifiedAtFromGoogle($user, $linkedByGoogleId),
+                    'google_id' => $googleId,
                     'google_avatar_url' => $googleUser->getAvatar(),
                 ])->save();
             } else {
                 $updates = [
-                    'email_verified_at' => $user->email_verified_at ?: now(),
-                    'google_id' => (string) $googleUser->getId(),
+                    'email_verified_at' => $this->verifiedAtFromGoogle($user, $linkedByGoogleId),
+                    'google_id' => $googleId,
                     'google_avatar_url' => $googleUser->getAvatar(),
                 ];
 
@@ -102,6 +111,12 @@ class GoogleAuthController extends Controller
                 }
 
                 $user->forceFill($updates)->save();
+            }
+
+            // Google hanya membuktikan alamat email Google. Setelah admin
+            // mengganti email akun, verifikasi baru tetap wajib lewat OTP.
+            if ($user->email_verification_required_at && ! $user->email_verified_at) {
+                return $this->frontendVerifyEmail($user, $frontendOrigin);
             }
 
             $code = Str::random(72);
@@ -239,6 +254,30 @@ class GoogleAuthController extends Controller
     private function frontendError(string $message, ?string $frontendOrigin = null): RedirectResponse
     {
         return redirect()->away($this->frontendUrl('/login?google_error='.urlencode($message), $frontendOrigin));
+    }
+
+    /**
+     * Google hanya membuktikan alamat email Google. Bila akun ditemukan lewat
+     * google_id sementara email akun sudah diubah admin, `email_verified_at`
+     * tidak boleh diisi dari Google: verifikasi email baru tetap lewat OTP.
+     */
+    private function verifiedAtFromGoogle(User $user, bool $linkedByGoogleId): ?Carbon
+    {
+        if ($linkedByGoogleId) {
+            return $user->email_verified_at;
+        }
+
+        return $user->email_verified_at ?: now();
+    }
+
+    private function frontendVerifyEmail(User $user, ?string $frontendOrigin): RedirectResponse
+    {
+        $query = http_build_query([
+            'email' => $user->email,
+            'reason' => 'email_changed',
+        ]);
+
+        return redirect()->away($this->frontendUrl('/verify-email?'.$query, $frontendOrigin));
     }
 
     private function frontendUrl(string $path, ?string $frontendOrigin = null): string

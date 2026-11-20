@@ -441,6 +441,7 @@ class AdminController extends Controller
                 'guardian_phone' => $user->role === 'student' ? $normalizedGuardianPhone : null,
                 'guardian_relationship' => $user->role === 'student' ? ($validated['guardian_relationship'] ?? null) : null,
                 'email_verification_required' => $emailChanged,
+                'email_verification_otp_sent' => $emailChanged && ! $verificationDeliveryFailed,
             ],
         ]);
     }

@@ -184,6 +184,41 @@ class GoogleAuthenticationTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'admin@example.test', 'google_id' => 'google-admin-123']);
     }
 
+    public function test_google_callback_after_admin_email_change_redirects_to_otp_verification(): void
+    {
+        config()->set('services.google.client_id', 'test-client');
+        config()->set('services.google.client_secret', 'test-secret');
+        $student = User::factory()->create([
+            'email' => 'murid.baru@outlook.com',
+            'role' => 'student',
+            'status' => 'active',
+            'google_id' => 'google-changed-email-123',
+            'email_verified_at' => null,
+            'email_verification_required_at' => now(),
+        ]);
+
+        $state = 'state-for-changed-email-google-test';
+        Cache::put('google_oauth_state:'.hash('sha256', $state), ['redirect' => null], now()->addMinutes(10));
+        Socialite::fake('google', SocialiteUser::fake([
+            'id' => 'google-changed-email-123',
+            'name' => 'Murid Ganti Email',
+            // Email Google masih alamat lama; akun sudah memakai email baru.
+            'email' => 'murid.lama@example.test',
+            'verified_email' => true,
+        ]));
+
+        $response = $this->get('/api/auth/google/callback?state='.$state);
+        $response->assertRedirect();
+        $location = (string) $response->headers->get('Location');
+        $this->assertStringContainsString('/verify-email?', $location);
+        $this->assertStringContainsString('reason=email_changed', $location);
+
+        // Tidak ada akun duplikat dan email baru belum dianggap terverifikasi.
+        $this->assertSame(1, User::query()->count());
+        $this->assertNull($student->fresh()->email_verified_at);
+        $this->assertSame('murid.baru@outlook.com', $student->fresh()->email);
+    }
+
     public function test_google_redirect_rejects_protocol_relative_and_external_target(): void
     {
         config()->set('services.google.client_id', 'test-client');
