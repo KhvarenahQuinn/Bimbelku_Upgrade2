@@ -276,6 +276,27 @@ class AdminFinanceReportController extends Controller
                 ->when(filled($filters['date_to'] ?? null), fn ($q) => $q->where('financial_journals.occurred_at', '<=', $filters['date_to'].' 23:59:59'))
                 ->sum('financial_ledger_entries.amount'), 2);
         };
+        $netAccount = function (array $events, string $account) use ($filters): float {
+            $credit = round((float) FinancialLedgerEntry::query()
+                ->join('financial_journals', 'financial_journals.id', '=', 'financial_ledger_entries.financial_journal_id')
+                ->whereIn('financial_journals.event_type', $events)
+                ->where('financial_ledger_entries.account_code', $account)
+                ->where('financial_ledger_entries.side', 'credit')
+                ->when(filled($filters['date_from'] ?? null), fn ($q) => $q->where('financial_journals.occurred_at', '>=', $filters['date_from'].' 00:00:00'))
+                ->when(filled($filters['date_to'] ?? null), fn ($q) => $q->where('financial_journals.occurred_at', '<=', $filters['date_to'].' 23:59:59'))
+                ->sum('financial_ledger_entries.amount'), 2);
+
+            $debit = round((float) FinancialLedgerEntry::query()
+                ->join('financial_journals', 'financial_journals.id', '=', 'financial_ledger_entries.financial_journal_id')
+                ->whereIn('financial_journals.event_type', $events)
+                ->where('financial_ledger_entries.account_code', $account)
+                ->where('financial_ledger_entries.side', 'debit')
+                ->when(filled($filters['date_from'] ?? null), fn ($q) => $q->where('financial_journals.occurred_at', '>=', $filters['date_from'].' 00:00:00'))
+                ->when(filled($filters['date_to'] ?? null), fn ($q) => $q->where('financial_journals.occurred_at', '<=', $filters['date_to'].' 23:59:59'))
+                ->sum('financial_ledger_entries.amount'), 2);
+
+            return round($credit - $debit, 2);
+        };
         $allAccount = function (string $account, string $side) use ($filters): float {
             return round((float) FinancialLedgerEntry::query()
                 ->join('financial_journals', 'financial_journals.id', '=', 'financial_ledger_entries.financial_journal_id')
@@ -296,7 +317,7 @@ class AdminFinanceReportController extends Controller
 
         return [
             'payments_received' => $sum(['payment_received'], 'customer_funds', 'credit'),
-            'platform_revenue' => $sum(['booking_settled'], 'platform_revenue', 'credit'),
+            'platform_revenue' => $netAccount(['booking_settled', 'refund_session_adjusted'], 'platform_revenue'),
             'refunds_completed' => $sum(['refund_paid', 'refund_wallet_credited'], 'refunds_payable', 'debit'),
             'payouts_completed' => $sum(['payout_completed'], 'tutor_payable', 'debit'),
             'tutor_payable_balance' => round($tutorCredits - $tutorDebits, 2),
