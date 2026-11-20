@@ -79,11 +79,11 @@ export default function Login() {
     } catch (error: unknown) {
       const axios = axiosModule?.default;
       const isAxiosError = axios ? axios.isAxiosError(error) : false;
-      const data = isAxiosError ? (error as { response?: { data?: { error_code?: string; email?: string; message?: string; errors?: Record<string, string[]> } } }).response?.data : undefined;
+      const data = isAxiosError ? (error as { response?: { data?: { error_code?: string; email?: string; message?: string; resend_after_seconds?: number; errors?: Record<string, string[]> } } }).response?.data : undefined;
       if (data?.error_code === "email_not_verified" && data.email) {
         const params = new URLSearchParams({ email: data.email });
         if (requestedRedirect) params.set("redirect", requestedRedirect);
-        navigate(`/verify-email?${params}`, { state: { email: data.email, redirect: requestedRedirect } });
+        navigate(`/verify-email?${params}`, { state: { email: data.email, redirect: requestedRedirect, resendAfterSeconds: Number(data.resend_after_seconds || 0) } });
         return;
       }
       if (data?.error_code === "admin_portal_required") {

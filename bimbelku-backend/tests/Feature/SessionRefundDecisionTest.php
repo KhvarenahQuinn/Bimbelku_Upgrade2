@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\BookingDispute;
+use App\Models\BookingParticipant;
 use App\Models\Refund;
 use App\Models\SessionReport;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -71,19 +73,37 @@ class SessionRefundDecisionTest extends TestCase
         $this->assertSame(0, Refund::query()->where('source_type', 'teacher_emergency')->count());
     }
 
-    public function test_emergency_session_refund_requires_amount_within_paid_session_value(): void
+    public function test_emergency_session_refund_uses_the_paid_session_value_not_a_client_amount(): void
     {
         $fixture = $this->emergencyFixture();
         $report = SessionReport::query()->firstOrFail();
         Sanctum::actingAs($fixture['admin']);
 
-        $payload = [
+        // Nominal dari klien tidak lagi dipakai: backend menghitung sendiri.
+        $this->postJson("/api/admin/session-reports/{$report->id}/resolve", [
             'decision' => 'accepted',
             'refund_scope' => 'session',
-            'notes' => 'Bukti kehadiran kosong di kedua sisi, dana sesi perlu ditinjau.',
-        ];
-        $this->postJson("/api/admin/session-reports/{$report->id}/resolve", $payload)->assertUnprocessable();
-        $this->postJson("/api/admin/session-reports/{$report->id}/resolve", $payload + ['refund_amount' => 50001])->assertUnprocessable();
+            'refund_amount' => 1,
+            'notes' => 'Bukti kehadiran kosong di kedua sisi, dana sesi dikembalikan penuh.',
+        ])->assertOk();
+
+        $refund = Refund::query()->where('source_type', 'teacher_emergency')->firstOrFail();
+        $this->assertSame(50000.0, (float) $refund->amount);
+        $this->assertSame('accepted', $report->fresh()->status);
+    }
+
+    public function test_emergency_decision_without_any_paid_participant_is_rejected(): void
+    {
+        $fixture = $this->emergencyFixture();
+        $report = SessionReport::query()->firstOrFail();
+        $fixture['order']->update(['status' => 'cancelled']);
+        Sanctum::actingAs($fixture['admin']);
+
+        $this->postJson("/api/admin/session-reports/{$report->id}/resolve", [
+            'decision' => 'accepted',
+            'refund_scope' => 'session',
+            'notes' => 'Tidak ada dana murid yang dapat dikembalikan pada sesi ini.',
+        ])->assertUnprocessable();
 
         $this->assertSame('pending', $report->fresh()->status);
         $this->assertSame(0, Refund::query()->count());
@@ -98,7 +118,6 @@ class SessionRefundDecisionTest extends TestCase
         $this->postJson("/api/admin/session-reports/{$report->id}/resolve", [
             'decision' => 'accepted',
             'refund_scope' => 'session',
-            'refund_amount' => 50000,
             'cost_bearer' => 'tutor_share',
             'notes' => 'Bukti kehadiran kosong di kedua sisi, dana sesi dikembalikan penuh.',
         ])->assertOk();
@@ -112,6 +131,69 @@ class SessionRefundDecisionTest extends TestCase
             'event_key' => "refund:{$refund->id}:adjust:{$fixture['first']['booking']->id}",
         ]);
         $this->artisan('finance:verify-ledger')->assertSuccessful();
+    }
+
+    public function test_emergency_session_refund_uses_each_participant_paid_amount(): void
+    {
+        $fixture = $this->groupEmergencyFixture();
+        $report = SessionReport::query()->firstOrFail();
+        Sanctum::actingAs($fixture['admin']);
+
+        $this->postJson("/api/admin/session-reports/{$report->id}/resolve", [
+            'decision' => 'accepted',
+            'refund_scope' => 'session',
+            'cost_bearer' => 'tutor_share',
+            'notes' => 'Sesi kelompok tidak terlaksana, tiap murid direfund sesuai nominalnya.',
+        ])->assertOk();
+
+        $refunds = Refund::query()
+            ->where('source_type', 'teacher_emergency')
+            ->orderBy('user_id')
+            ->get();
+        $this->assertCount(2, $refunds);
+        $byStudent = $refunds->keyBy('user_id');
+        $this->assertSame(50000.0, (float) $byStudent[$fixture['student']->id]->amount);
+        $this->assertSame(40000.0, (float) $byStudent[$fixture['secondStudent']->id]->amount);
+        $this->assertSame(90000.0, (float) $refunds->sum('amount'));
+        $this->artisan('finance:verify-ledger')->assertSuccessful();
+    }
+
+    public function test_platform_refund_cannot_be_repeated_through_another_report_path(): void
+    {
+        $fixture = $this->emergencyFixture();
+        $booking = $fixture['first']['booking'];
+        $report = SessionReport::query()->firstOrFail();
+        Sanctum::actingAs($fixture['admin']);
+
+        $this->postJson("/api/admin/session-reports/{$report->id}/resolve", [
+            'decision' => 'accepted',
+            'refund_scope' => 'session',
+            'cost_bearer' => 'platform',
+            'notes' => 'Sesi batal karena keadaan darurat tutor, biaya ditanggung platform.',
+        ])->assertOk();
+
+        $first = Refund::query()->where('source_type', 'teacher_emergency')->firstOrFail();
+        $this->assertSame('platform', $first->cost_bearer);
+
+        // Jalur lain pada sesi yang sama harus ditolak, bukan menambah refund kedua.
+        SessionReport::create([
+            'booking_id' => $booking->id,
+            'teacher_id' => $fixture['teacher']->id,
+            'reported_by' => $fixture['student']->id,
+            'reported_student_id' => $fixture['student']->id,
+            'type' => 'teacher_absence',
+            'chronology' => 'Tutor tidak hadir pada sesi yang sudah diputuskan lewat laporan darurat.',
+            'status' => 'pending',
+        ]);
+        $second = SessionReport::query()->where('type', 'teacher_absence')->firstOrFail();
+
+        $this->postJson("/api/admin/session-reports/{$second->id}/resolve", [
+            'decision' => 'accepted',
+            'notes' => 'Laporan susulan tidak boleh menggandakan refund sesi yang sama.',
+        ])->assertUnprocessable();
+
+        $this->assertSame(1, Refund::query()->count());
+        $this->assertSame(50000.0, (float) Refund::query()->sum('amount'));
     }
 
     public function test_student_can_appeal_a_lapsed_session_only_once(): void
@@ -213,6 +295,48 @@ class SessionRefundDecisionTest extends TestCase
         $booking->update(['status' => 'admin_review_required', 'admin_review_required_at' => now(), 'payout_status' => 'locked']);
 
         return $fixture;
+    }
+
+    /**
+     * Sesi kelompok dengan dua murid yang membayar nominal berbeda. Order
+     * menampung total yang benar-benar dibayar supaya split tender tetap sah.
+     */
+    private function groupEmergencyFixture(): array
+    {
+        $fixture = SessionFinanceFixture::make($this, 1);
+        $booking = $fixture['first']['booking'];
+        $booking->update(['start_at' => now()->subMinutes(90), 'end_at' => now()->subMinutes(30)]);
+
+        $secondStudent = User::factory()->create(['role' => 'student', 'status' => 'active', 'name' => 'Murid Kelompok']);
+        BookingParticipant::create([
+            'booking_id' => $booking->id,
+            'student_id' => $secondStudent->id,
+            'order_id' => $fixture['order']->id,
+            'amount' => 40000,
+            'status' => 'paid',
+        ]);
+        $fixture['order']->update([
+            'amount' => 90000,
+            'subtotal_amount' => 90000,
+            'external_received_amount' => 90000,
+        ]);
+
+        SessionReport::create([
+            'booking_id' => $booking->id,
+            'teacher_id' => $fixture['teacher']->id,
+            'reported_by' => $fixture['teacher']->id,
+            'type' => 'teacher_emergency',
+            'incident_type' => 'keluarga',
+            'chronology' => 'Tutor mengalami musibah keluarga mendadak dan tidak dapat mengajar kelas kelompok.',
+            'incident_at' => now()->subHour(),
+            'incident_location' => 'Yogyakarta',
+            'impact' => 'Sesi kelompok tidak dapat dilaksanakan.',
+            'evidence' => 'emergency_evidence/bukti.jpg',
+            'status' => 'pending',
+        ]);
+        $booking->update(['status' => 'admin_review_required', 'admin_review_required_at' => now(), 'payout_status' => 'locked']);
+
+        return $fixture + ['secondStudent' => $secondStudent];
     }
 
     private function lapsedAppealFixture(): array

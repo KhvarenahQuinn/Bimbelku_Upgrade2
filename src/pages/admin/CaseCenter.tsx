@@ -99,8 +99,7 @@ export default function CaseCenter() {
 
   const isLapsedAppeal = selected?.type === "dispute" && selected.item?.kind === "lapsed_session";
   const isEmergencyReport = selected?.type === "report" && selected.item?.type === "teacher_emergency";
-  const needsRefundAmount = (isLapsedAppeal && decision === "partial_refund")
-    || (isEmergencyReport && decision === "accepted" && itemRefundScope(selected?.item) === "session");
+  const needsRefundAmount = isLapsedAppeal && decision === "partial_refund";
   const needsCostBearer = (isLapsedAppeal && (decision === "full_refund" || decision === "partial_refund"))
     || (isEmergencyReport && decision === "accepted" && itemRefundScope(selected?.item) !== "none");
 
@@ -125,9 +124,6 @@ export default function CaseCenter() {
           ? {
               refund_scope: decision === "rejected" ? "none" : itemRefundScope(item),
               cost_bearer: costBearer,
-              refund_amount: decision === "accepted" && itemRefundScope(item) === "session"
-                ? Number(refundAmount.replace(/[^0-9]/g, "")) || undefined
-                : undefined,
             }
           : {};
         response = await http.post(`/admin/session-reports/${item.id}/resolve`, { decision, notes, ...emergencyPayload });
@@ -197,6 +193,7 @@ export default function CaseCenter() {
             <fieldset disabled={scope === "history"} className={scope === "history" ? "hidden" : "space-y-5"}>
             <div><Label>Keputusan</Label><Select value={decision} onValueChange={setDecision}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{selected.type === "report" ? (isEmergencyReport ? <><SelectItem value="accepted">Laporan valid · refund sesi</SelectItem><SelectItem value="rejected">Laporan ditolak · sesi tetap berjalan</SelectItem></> : <><SelectItem value="accepted">Laporan valid</SelectItem><SelectItem value="rejected">Laporan ditolak</SelectItem></>) : selected.type === "dispute" ? (isLapsedAppeal ? <><SelectItem value="full_refund">Refund penuh nilai sesi</SelectItem><SelectItem value="partial_refund">Refund sebagian</SelectItem><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem></> : <><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem><SelectItem value="student_refund">Refund penuh murid</SelectItem></>) : selected.type === "replacement" ? <><SelectItem value="approve">Setujui dan mulai pencarian</SelectItem><SelectItem value="reject">Tolak pengajuan</SelectItem></> : <><SelectItem value="approve">Sahkan sesi</SelectItem><SelectItem value="refund">Refund penuh</SelectItem></>}</SelectContent></Select></div>
             {needsRefundAmount && <div><Label>Nominal Refund (Rp)</Label><Input inputMode="numeric" type="number" min={1} max={itemRefundCap(selected?.item)} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value.replace(/[^0-9]/g, ""))} className="mt-2 h-11 rounded-xl" placeholder="1" required /><p className="mt-1 text-xs text-slate-500">Maksimal {new Intl.NumberFormat("id-ID").format(itemRefundCap(selected?.item))} sesuai nilai sesi. Nominal harus lebih dari Rp0.</p></div>}
+            {isEmergencyReport && decision === "accepted" && selected && <SessionRefundSummary item={selected.item} />}
             {needsCostBearer && <div><Label>Penanggung biaya</Label><Select value={costBearer} onValueChange={setCostBearer}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="tutor_share">Potong hak tutor</SelectItem><SelectItem value="platform">Ditanggung platform</SelectItem></SelectContent></Select></div>}
             {(isLapsedAppeal || isEmergencyReport) && selected && <AttendanceEvidence bookingId={isLapsedAppeal ? selected.item.booking_id ?? selected.item.booking?.id : selected.item.booking_id ?? selected.item.booking?.id} />}
             <div><Label>Catatan keputusan</Label><Textarea required minLength={20} className="mt-2 min-h-32 rounded-xl" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Dasar pemeriksaan dan keputusan admin" /></div>
@@ -213,15 +210,40 @@ function itemRefundScope(item: any): "session" | "none" {
   return item?.type === "teacher_emergency" ? "session" : "none";
 }
 
-function itemRefundCap(item: any): number {
+function paidParticipantAmounts(item: any): number[] {
   const booking = item?.booking;
-  const paidParticipants = (booking?.participants || [])
+  return (booking?.participants || [])
     .filter((participant: any) => participant.order?.status === "paid")
     .map((participant: any) => Number(participant.amount || 0))
     .filter((amount: number) => Number.isFinite(amount) && amount > 0);
+}
+
+function rupiah(amount: number): string {
+  return `Rp${new Intl.NumberFormat("id-ID").format(amount)}`;
+}
+
+function itemRefundCap(item: any): number {
+  const paidParticipants = paidParticipantAmounts(item);
   if (paidParticipants.length) return Math.floor(Math.min(...paidParticipants));
-  const bookingCap = Number(booking?.gross_amount || booking?.total_amount || 0);
+  const bookingCap = Number(item?.booking?.gross_amount || item?.booking?.total_amount || 0);
   return Number.isFinite(bookingCap) && bookingCap > 0 ? Math.floor(bookingCap) : 0;
+}
+
+/**
+ * Laporan keadaan darurat selalu merefund nilai sesi penuh. Backend memakai
+ * nominal yang benar-benar dibayar tiap murid, jadi admin hanya melihat
+ * ringkasannya dan tidak lagi mengetik angka.
+ */
+function SessionRefundSummary({ item }: { item: any }) {
+  const amounts = paidParticipantAmounts(item);
+  const total = amounts.reduce((sum, amount) => sum + amount, 0);
+  return <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900">
+    <p className="font-black">Refund otomatis sesuai nilai sesi</p>
+    <p className="mt-1 text-xs font-semibold leading-5 text-emerald-800">Nominal tidak dapat diubah. Setiap murid yang sudah membayar menerima refund penuh sebesar nominal yang dibayarkannya.</p>
+    {amounts.length === 1 && <p className="mt-2 text-xs font-black">Refund penuh: {rupiah(amounts[0])}</p>}
+    {amounts.length > 1 && <><p className="mt-2 text-xs font-black">Refund per murid: {amounts.map(rupiah).join(" · ")}</p><p className="mt-1 text-xs font-bold text-emerald-700">Total {rupiah(total)} untuk {amounts.length} murid</p></>}
+    {amounts.length === 0 && <p className="mt-2 text-xs font-bold text-amber-700">Belum ada peserta berbayar. Keputusan refund akan ditolak sampai ada pembayaran.</p>}
+  </div>;
 }
 
 function TabCard({ active, attention, tone, onClick, icon: Icon, label, count }: { active: boolean; attention: boolean; tone: "urgent" | "warning"; onClick: () => void; icon: typeof Gavel; label: string; count: number }) {

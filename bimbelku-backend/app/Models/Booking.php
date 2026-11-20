@@ -147,24 +147,29 @@ class Booking extends Model
     }
 
     /**
-     * Nilai sesi yang masih boleh dikembalikan ke murid. Refund yang sudah
-     * diputuskan (pending/paid) mengurangi gross supaya satu sesi tidak bisa
-     * dikembalikan dua kali oleh jalur yang berbeda.
+     * Nilai sesi yang masih boleh dikembalikan ke murid. Nilainya diambil dari
+     * jumlah yang benar-benar dibayar peserta sehingga sesi kelompok dengan
+     * nominal berbeda tetap akurat. Refund apa pun penanggungnya mengurangi
+     * nilai ini supaya satu sesi tidak bisa dikembalikan dua kali.
      */
     public function refundableRemaining(): float
     {
-        $gross = round((float) $this->gross_amount, 2);
-        if ($gross <= 0) {
+        $paid = round((float) $this->participants()
+            ->whereHas('order', fn ($query) => $query->where('status', 'paid'))
+            ->sum('amount'), 2);
+        if ($paid <= 0) {
+            $paid = round((float) $this->gross_amount, 2);
+        }
+        if ($paid <= 0) {
             return 0.0;
         }
 
         $refunded = round((float) Refund::query()
             ->where('booking_id', $this->id)
-            ->where('cost_bearer', 'tutor_share')
             ->whereIn('status', ['pending', 'paid'])
             ->sum('amount'), 2);
 
-        return round(max(0, $gross - $refunded), 2);
+        return round(max(0, $paid - $refunded), 2);
     }
 
     public function assertRefundable(float $amount): void

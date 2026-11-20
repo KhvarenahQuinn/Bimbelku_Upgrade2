@@ -249,6 +249,18 @@ export default function UserManagement() {
                   </div>
                </div>
 
+               {(selectedUser.email_verification_required || (selectedUser.email_verification_required_at && !selectedUser.email_verified_at)) && (
+                 <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                   <p className="font-black">Email baru menunggu verifikasi</p>
+                   <p className="mt-1 text-xs leading-5">
+                     {selectedUser.email_verification_otp_sent === false
+                       ? `Pengiriman OTP ke ${selectedUser.email} gagal. Pengguna dapat meminta kirim ulang kode dari halaman verifikasi saat mencoba masuk.`
+                       : `OTP dikirim ke ${selectedUser.email}. Pengguna harus memverifikasi email baru sebelum bisa masuk; jika kode tidak sampai, pengguna dapat meminta kirim ulang dari halaman verifikasi.`}
+                   </p>
+                   <p className="mt-1 text-xs font-semibold">Semua sesi lama sudah dihentikan.</p>
+                 </div>
+               )}
+
                <div className="border-t border-gray-100 pt-4 space-y-4">
                   
                   {/* --- TAMPILAN KHUSUS MURID (LENGKAP) --- */}

@@ -863,21 +863,15 @@ class SessionWorkflowController extends Controller
         SessionReport $sessionReport
     ) {
         $reportType = (string) $sessionReport->type;
-        $sessionRefundCap = (float) ($sessionReport->booking?->participants()
-            ->whereHas('order', fn ($query) => $query->where('status', 'paid'))
-            ->min('amount') ?? 0);
+        // Nilai refund sesi tidak diterima dari klien: backend memakai
+        // `booking_participant.amount` tiap murid supaya sesi kelompok dengan
+        // nominal berbeda tetap terbayar sesuai yang benar-benar dibayar.
         $validated = $request->validate([
             'decision' => ['required', Rule::in(['accepted', 'rejected'])],
             'notes' => ['required', 'string', 'min:20', 'max:2000'],
             'refund_scope' => $reportType === 'teacher_emergency'
                 ? ['nullable', Rule::in(['none', 'session', 'remaining_package'])]
                 : ['nullable'],
-            'refund_amount' => [
-                $reportType === 'teacher_emergency' ? 'required_if:refund_scope,session' : 'nullable',
-                'numeric',
-                'min:1',
-                'max:'.$sessionRefundCap,
-            ],
             'cost_bearer' => ['nullable', Rule::in(['tutor_share', 'platform'])],
         ]);
 
@@ -1092,25 +1086,30 @@ class SessionWorkflowController extends Controller
             }
             $this->notifyEmergencyDecision($booking, $report, false, 'Sesi tetap berjalan dan hak tutor dihitung normal.');
         } elseif ($scope === 'session') {
-            $amount = $validated['refund_amount'] ?? null;
-            abort_if($amount === null, 422, 'Nominal refund wajib diisi untuk refund satu sesi.');
             $bearer = $validated['cost_bearer'] ?? 'tutor_share';
+            $queued = 0;
             foreach ($participants as $participant) {
                 if ($participant->order?->status !== 'paid') {
                     continue;
                 }
-                $this->queueRefund(
+                // Nominal per murid diambil dari nilai yang benar-benar dibayar,
+                // bukan satu angka dari form admin.
+                $refund = $this->queueRefund(
                     $participant,
                     $booking,
                     'Keadaan darurat tutor',
                     'teacher_emergency',
                     $report->id,
                     $bearer,
-                    (float) $amount,
+                    null,
                     $request->user()->id,
                     $validated['notes'],
                 );
+                if ($refund !== null) {
+                    $queued++;
+                }
             }
+            abort_if($queued === 0, 422, 'Tidak ada peserta berbayar yang dapat direfund pada sesi ini.');
             $booking->update(['status' => 'refund_pending', 'payout_status' => 'locked']);
             $this->notifyEmergencyDecision($booking, $report, true, 'Refund satu sesi diputuskan admin.');
         } else {
