@@ -11,8 +11,10 @@ use App\Models\User;
 use App\Services\GuestPackageLinkService;
 use App\Services\OneTimeCodeService;
 use App\Services\PersistentLoginService;
+use App\Services\UploadSecurityService;
 use App\Support\AdminPermissionCatalog;
 use App\Support\EducationCatalog;
+use App\Support\RegistrationEmailDomain;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -32,7 +34,7 @@ class AuthController extends Controller
     private const GENERIC_ADMIN_LOGIN_ERROR = 'Email atau kata sandi salah.';
 
     // --- FITUR REGISTER ---
-    public function register(Request $request, OneTimeCodeService $codes)
+    public function register(Request $request, OneTimeCodeService $codes, UploadSecurityService $uploads)
     {
         $request->merge([
             'name' => trim((string) $request->input('name')),
@@ -44,7 +46,11 @@ class AuthController extends Controller
         ]);
         $validator = Validator::make($request->all(), [
             'name' => ['required', 'string', 'max:255', 'regex:/\pL/u', 'not_regex:/\d/u'],
-            'email' => 'required|string|email|max:255|unique:users',
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users', function (string $attribute, mixed $value, \Closure $fail): void {
+                if (! RegistrationEmailDomain::allows((string) $value)) {
+                    $fail('Gunakan email aktif yang umum (Gmail, Yahoo, Outlook, iCloud, dll.) atau email institusi pendidikan (.ac.id, .sch.id, .edu, belajar.id, dll.).');
+                }
+            }],
             'phone' => ['required', 'string', 'max:16', 'regex:/^\+?[0-9]{8,15}$/'],
             'password' => 'required|string|min:8|confirmed',
             'role' => 'required|in:student,teacher',
@@ -163,7 +169,7 @@ class AuthController extends Controller
                     'certification_document' => 'teacher_certifications',
                 ] as $field => $directory) {
                     if ($request->hasFile($field)) {
-                        $storedFiles[$field] = $request->file($field)->store($directory, 'local');
+                        $storedFiles[$field] = $uploads->store($request->file($field), $directory, 'local');
                     }
                 }
             }

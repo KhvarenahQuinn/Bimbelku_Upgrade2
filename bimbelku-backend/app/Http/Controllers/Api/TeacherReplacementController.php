@@ -10,6 +10,7 @@ use App\Services\PartialPackageRefundService;
 use App\Services\RefundSettlementService;
 use App\Services\TeacherMatchingService;
 use App\Services\TeacherReplacementService;
+use App\Services\UploadSecurityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
@@ -17,7 +18,7 @@ use Illuminate\Validation\Rule;
 
 class TeacherReplacementController extends Controller
 {
-    public function store(Request $request, LearningPackage $learningPackage, PackageSubject $packageSubject, TeacherReplacementService $service)
+    public function store(Request $request, LearningPackage $learningPackage, PackageSubject $packageSubject, TeacherReplacementService $service, UploadSecurityService $uploads)
     {
         Gate::authorize('create', [TeacherReplacementRequest::class, $learningPackage, $packageSubject]);
         $validated = $request->validate([
@@ -25,7 +26,7 @@ class TeacherReplacementController extends Controller
             'reason_detail' => ['required', 'string', 'min:20', 'max:2000'],
             'evidence' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
         ]);
-        $path = $request->hasFile('evidence') ? $request->file('evidence')->store('teacher_replacement_evidence', 'local') : null;
+        $path = $request->hasFile('evidence') ? $uploads->store($request->file('evidence'), 'teacher_replacement_evidence', 'local') : null;
         try {
             $replacement = $service->submit($request->user(), $learningPackage, $packageSubject, [...$validated, 'evidence_path' => $path]);
         } catch (\Throwable $exception) {

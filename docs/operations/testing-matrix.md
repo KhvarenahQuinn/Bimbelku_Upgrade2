@@ -1,16 +1,16 @@
 # Matriks pengujian menyeluruh BimbelKu
 
-Disiapkan 3 Oktober 2026. Ini rencana eksekusi sembilan tahap, bukan pernyataan bahwa aplikasi sudah bebas bug. Kondisi awal dan bukti tahap 1 ada di `testing-stage1.md`; tutorial perjalanan manual tetap di `testing.md`.
+Disiapkan 3 Oktober 2026. Dokumen ini memuat rencana pengujian dalam sembilan tahap. Kondisi awal dan hasil tahap 1 ada di [testing-stage1.md](testing-stage1.md); panduan alur manual ada di [testing.md](testing.md).
 
 ## Aturan pencatatan
 
-Status: `BELUM` = belum dieksekusi pada putaran ini; `LULUS` = seluruh hasil wajib dan bukti terpenuhi; `GAGAL` = hasil aktual berbeda; `TERHALANG` = prasyarat belum tersedia; `ULANG` = harus diuji ulang setelah perubahan. Keberadaan tes lama tidak membuat skenario otomatis LULUS.
+Status: `BELUM` berarti belum dijalankan pada putaran ini; `LULUS` berarti seluruh hasil dan bukti wajib tersedia; `GAGAL` berarti hasil aktual berbeda; `TERHALANG` berarti prasyarat belum tersedia; `ULANG` berarti skenario perlu dijalankan lagi setelah perubahan. Tes yang sudah ada tidak otomatis meluluskan skenario.
 
-Metode: READ (inspeksi tanpa perubahan), API (otomatis/SQLite terisolasi), UI (browser nyata), SANDBOX (penyedia pembayaran development), CLOCK (percepatan waktu terisolasi). Jika metode API+UI+SANDBOX, semuanya wajib dibuktikan; hasil mock API saja belum cukup. Bukti minimal: nama tes dan hasilnya, atau run ID/tanggal, akun alias, kode paket/tagihan uji, hasil aktual dan screenshot tanpa rahasia. Catat per-metode dalam catatan eksekusi.
+Metode: READ (inspeksi tanpa perubahan), API (tes otomatis dengan SQLite terisolasi), UI (browser), SANDBOX (payment provider development), CLOCK (percepatan waktu terisolasi). Jika skenario mencantumkan API+UI+SANDBOX, lampirkan bukti untuk setiap metode; hasil mock API saja tidak cukup. Bukti minimal mencakup nama tes dan hasilnya, atau run ID/tanggal, alias akun, kode paket/tagihan uji, hasil aktual, serta screenshot tanpa data rahasia. Catat hasil tiap metode.
 
-Role: TAMU, MURID, PEMILIK, TEMAN, TUTOR, ADMIN, UTAMA (admin utama), SISTEM, HARNESS. Semua identitas tambahan harus sintetis; jangan menyamar sebagai tutor sungguhan pada direktori publik.
+Role yang dipakai: TAMU, MURID, PEMILIK, TEMAN, TUTOR, ADMIN, UTAMA (admin utama), SISTEM, dan HARNESS. Gunakan identitas sintetis. Jangan tampilkan akun uji sebagai tutor nyata di direktori publik.
 
-Prioritas: semua pembayaran, harga, matching, akses data, refund, penyelesaian sesi dan pencairan adalah kritis. Visual/performa tidak boleh menutupi kegagalan proses bisnis. Tahap 1 hanya menguji kesiapan; tahap 2–9 belum dijalankan di putaran ini.
+Prioritas utama adalah pembayaran, harga, matching, akses data, refund, penyelesaian sesi, dan pencairan. Catat temuan proses bisnis terpisah dari temuan visual atau performa. Tahap 1 memeriksa kesiapan; tahap 2–9 belum dijalankan pada putaran ini.
 
 ## Jejak kode dan tes per alur
 

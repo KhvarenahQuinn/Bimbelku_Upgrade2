@@ -343,6 +343,7 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
         Route::post('/verify-teacher', [AdminController::class, 'verifyTeacher']);
         Route::patch('/teachers/{teacher}/verification-stage', [AdminController::class, 'updateTeacherVerificationStage']);
         Route::get('/users', [AdminController::class, 'getUsers']);
+        Route::patch('/users/{user}/details', [AdminController::class, 'updateUserDetails'])->whereNumber('user');
         Route::post('/users/{id}/profile-cover', [AdminController::class, 'updateTeacherProfileCover'])->whereNumber('id');
         Route::delete('/users/{id}/profile-cover', [AdminController::class, 'resetTeacherProfileCover'])->whereNumber('id');
         Route::post('/users/{id}/profile-cover/restore', [AdminController::class, 'restoreTeacherProfileCover'])->whereNumber('id');

@@ -4,7 +4,7 @@ BimbelKu adalah aplikasi pencocokan murid dan tutor berbasis jadwal, materi, mod
 
 Versi ini memuat Fondasi Tahap 1, Tampilan Mobile Tahap 2, Keamanan Keuangan
 Tahap 3, Pencocokan dan Sesi Tahap 4, serta Paket, Promo, Konten, dan Dashboard
-Tahap 5, alur murid Tahap 6A, operasional tutor Tahap 6B, admin operasional Tahap 6C, serta finalisasi alur dan cleanup Tahap 6D per 15 September 2026. Tidak ada marketplace tutor bebas, payment gateway, cashback, referral, atau pencairan otomatis.
+Tahap 5, alur murid Tahap 6A, operasional tutor Tahap 6B, admin operasional Tahap 6C, serta finalisasi alur dan cleanup Tahap 6D per 15 September 2026. Tidak ada marketplace tutor bebas, cashback, referral, atau pencairan otomatis. Pembayaran memakai alur transfer manual dan checkout Xendit yang diaktifkan lewat konfigurasi backend.
 
 ## Fitur utama
 
@@ -59,6 +59,13 @@ Tahap 5, alur murid Tahap 6A, operasional tutor Tahap 6B, admin operasional Taha
 - Dokumen dan bukti sensitif disimpan privat serta hanya dibuka melalui API terautentikasi.
 - Email, nomor pribadi, dan data wali tidak diberikan kepada pengguna lain.
 - Lazy loading halaman dan bundle produksi terpisah agar frontend tetap ringan.
+
+## Integrasi dan keamanan
+
+- Email akun harus memakai provider konsumen yang diizinkan atau domain institusi pendidikan. Daftar domain diterapkan di backend dan pemeriksaan frontend, bukan dikonfigurasi melalui `.env`.
+- Turnstile memakai site key frontend `VITE_TURNSTILE_SITE_KEY` saat build dan secret `TURNSTILE_SECRET_KEY` hanya di backend. Panduan [Cloudflare](docs/CLOUDFLARE_SETUP.md) mencakup widget, hostname, TLS, WAF, dan pengujian.
+- Xendit hanya diaktifkan dengan kredensial backend. Jangan pernah menaruh secret API key atau token webhook pada variabel `VITE_*`. Gunakan [panduan demo sandbox](docs/operations/DEMO-PEMBAYARAN-SANDBOX.md) untuk uji perjalanan dan konektivitas; panduan tersebut membedakan tes tiruan, test mode, dan pembayaran nyata.
+- Validasi berkas upload menggunakan pemeriksaan konten backend. Dokumen identitas, bukti, dan berkas privat disimpan di disk privat; tinjau [keamanan deployment](docs/security/DEPLOYMENT_SECURITY.md) sebelum membuka hosting.
 
 ## Kebutuhan sistem
 

@@ -7,12 +7,12 @@ import TeacherScheduleAdminPanel from "@/components/TeacherScheduleAdminPanel";
 import { 
   Users, Search, Ban, Unlock, GraduationCap, School, 
   Eye, X, Mail, Calendar, Building2, BookOpen, Linkedin, FileText, CheckCircle, Loader2, ExternalLink, Wifi, MapPin,
-  Phone, UserRoundCheck,
+  Phone, UserRoundCheck, Pencil, Save,
 } from "lucide-react";
 import axios from "axios";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { openProtectedFile } from "@/components/ProtectedImage";
-import { validateUpload } from "@/lib/validation";
+import { isValidRegistrationEmail, validateUpload } from "@/lib/validation";
 
 export default function UserManagement() {
   const confirmDialog = useConfirmDialog();
@@ -38,6 +38,9 @@ export default function UserManagement() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [savingTeacherCover, setSavingTeacherCover] = useState(false);
+  const [editingUser, setEditingUser] = useState(false);
+  const [savingUserDetails, setSavingUserDetails] = useState(false);
+  const [userDraft, setUserDraft] = useState({ name: "", email: "", phone: "", guardian_name: "", guardian_phone: "", guardian_relationship: "" });
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -100,7 +103,38 @@ export default function UserManagement() {
 
   const openModal = (user: any) => {
     setSelectedUser(user);
+    setUserDraft({
+      name: user.name || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      guardian_name: user.guardian?.name || "",
+      guardian_phone: user.guardian?.phone || "",
+      guardian_relationship: user.guardian?.relationship || "",
+    });
+    setEditingUser(false);
     setModalOpen(true);
+  };
+
+  const saveUserDetails = async () => {
+    if (!selectedUser) return;
+    if (!isValidRegistrationEmail(userDraft.email)) {
+      notify.error("Gunakan email aktif yang umum atau email institusi pendidikan.");
+      return;
+    }
+    setSavingUserDetails(true);
+    try {
+      const response = await http.patch<{ message: string; data: any }>(`/admin/users/${selectedUser.id}/details`, userDraft);
+      const updated = { ...selectedUser, ...response.data.data };
+      setSelectedUser(updated);
+      setUsers((current) => current.map((user) => user.id === updated.id ? { ...user, ...updated } : user));
+      setEditingUser(false);
+      notify.success(response.data.message);
+      await fetchUsers();
+    } catch (error) {
+      notify.error(getApiError(error, "Data pengguna gagal diperbarui."));
+    } finally {
+      setSavingUserDetails(false);
+    }
   };
 
   const updateTeacherCover = async (file?: File) => {
@@ -178,14 +212,27 @@ export default function UserManagement() {
           <div className="relative flex max-h-[calc(100dvh-1.5rem)] w-full min-w-0 max-w-lg flex-col overflow-hidden rounded-[1.5rem] bg-white shadow-2xl animate-in slide-in-from-bottom-4 sm:rounded-2xl sm:zoom-in-95">
             
             <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-gray-100 bg-gray-50 px-4 py-4 sm:px-6">
-              <h3 className="flex min-w-0 items-center gap-2 break-words text-base font-bold text-gray-900 sm:text-lg">
-                {selectedUser.role === "student" ? <School size={20} className="text-blue-500"/> : <GraduationCap size={20} className="text-orange-500"/>}
-                Detail {selectedUser.role === 'student' ? 'Murid' : 'Tutor'}
-              </h3>
+              <div className="flex min-w-0 items-center gap-2">
+                <h3 className="flex min-w-0 items-center gap-2 break-words text-base font-bold text-gray-900 sm:text-lg">
+                  {selectedUser.role === "student" ? <School size={20} className="text-blue-500"/> : <GraduationCap size={20} className="text-orange-500"/>}
+                  {editingUser ? "Edit Data Pengguna" : `Detail ${selectedUser.role === 'student' ? 'Murid' : 'Tutor'}`}
+                </h3>
+              </div>
               <button onClick={() => setModalOpen(false)}><X size={24} className="text-gray-400 hover:text-gray-600" /></button>
             </div>
 
             <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+              {editingUser ? <div className="space-y-4">
+                <label className="block text-sm font-bold text-slate-700">Nama<input value={userDraft.name} onChange={(event) => setUserDraft((current) => ({ ...current, name: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 px-3" /></label>
+                <label className="block text-sm font-bold text-slate-700">Email<input type="email" value={userDraft.email} onChange={(event) => setUserDraft((current) => ({ ...current, email: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 px-3" /><span className="mt-1 block text-xs font-normal text-slate-500">Email baru harus mengikuti allowlist registrasi dan perlu diverifikasi ulang.</span></label>
+                <label className="block text-sm font-bold text-slate-700">Nomor telepon<input value={userDraft.phone} onChange={(event) => setUserDraft((current) => ({ ...current, phone: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 px-3" /></label>
+                {selectedUser.role === "student" && <>
+                  <label className="block text-sm font-bold text-slate-700">Nama orang tua/wali<input value={userDraft.guardian_name} onChange={(event) => setUserDraft((current) => ({ ...current, guardian_name: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 px-3" /></label>
+                  <label className="block text-sm font-bold text-slate-700">Nomor telepon wali<input value={userDraft.guardian_phone} onChange={(event) => setUserDraft((current) => ({ ...current, guardian_phone: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 px-3" /></label>
+                  <label className="block text-sm font-bold text-slate-700">Hubungan wali<select value={userDraft.guardian_relationship} onChange={(event) => setUserDraft((current) => ({ ...current, guardian_relationship: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 px-3"><option value="">Tidak diubah / kosong</option><option value="orang_tua">Orang tua</option><option value="wali_keluarga">Wali keluarga</option><option value="wali_resmi">Wali resmi</option></select></label>
+                </>}
+                <div className="flex gap-2"><button type="button" disabled={savingUserDetails} onClick={() => setEditingUser(false)} className="min-h-11 flex-1 rounded-xl border border-slate-200 font-bold">Batal</button><button type="button" disabled={savingUserDetails} onClick={() => void saveUserDetails()} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 font-bold text-white disabled:opacity-50">{savingUserDetails ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}Simpan</button></div>
+              </div> : <>
                {/* HEADER PROFIL */}
                <div className="mb-6 flex min-w-0 items-center gap-3 sm:gap-4">
                   <div className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold border-2 border-white shadow-sm ${selectedUser.role === 'teacher' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
@@ -317,10 +364,10 @@ export default function UserManagement() {
                </div>
 
                <div className="pt-4 mt-4 border-t border-gray-100">
-                 <button onClick={() => setModalOpen(false)} className="w-full py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors">
-                   Tutup
-                 </button>
+                 <button type="button" onClick={() => { setUserDraft({ name: selectedUser.name || "", email: selectedUser.email || "", phone: selectedUser.phone || "", guardian_name: selectedUser.guardian?.name || "", guardian_phone: selectedUser.guardian?.phone || "", guardian_relationship: selectedUser.guardian?.relationship || "" }); setEditingUser(true); }} className="mb-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 font-bold text-white"><Pencil size={16} />Edit Data User</button>
+                 <button type="button" onClick={() => setModalOpen(false)} className="w-full py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors">Tutup</button>
                </div>
+               </>}
             </div>
           </div>
         </div>

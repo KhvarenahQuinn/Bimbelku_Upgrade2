@@ -436,7 +436,7 @@ export default function MarketplaceMessages({ role }: { role: "student" | "teach
               <header className="flex min-w-0 items-center gap-3 border-b border-slate-200 px-3 py-3 sm:px-5 sm:py-4">
                 <Button type="button" variant="ghost" size="icon" onClick={closeMobileConversation} className="shrink-0 rounded-xl xl:hidden" aria-label="Kembali ke daftar percakapan"><ArrowLeft size={20} /></Button>
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-indigo-100 text-indigo-600"><UserRound size={18} /></span>
-                <div className="min-w-0 flex-1"><h2 className="break-words text-sm font-black text-slate-900 sm:text-base">{chat.booking.subject}</h2><p className="mt-0.5 truncate text-[11px] font-bold text-slate-400">{dateTime(chat.booking.start_at)} · Chat BimbelKu</p></div>
+                <div className="min-w-0 flex-1"><h2 className="break-words text-sm font-black text-slate-900 sm:text-base">{conversations.find((item) => item.booking_id === selectedId)?.counterpart_name || "Teman belajar"}</h2><p className="mt-0.5 truncate text-[11px] font-bold text-slate-400">{chat.booking.subject} · {dateTime(chat.booking.start_at)}</p></div>
                 <Button type="button" variant="ghost" size="icon" onClick={() => void loadChat(selectedId)} className="shrink-0 rounded-xl" aria-label="Muat ulang pesan"><RefreshCw size={17} /></Button>
               </header>
 

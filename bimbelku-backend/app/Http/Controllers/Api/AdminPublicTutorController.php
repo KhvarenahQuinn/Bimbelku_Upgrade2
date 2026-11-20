@@ -5,12 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CurriculumSubject;
 use App\Models\TeacherProfile;
+use App\Services\UploadSecurityService;
 use App\Support\PublicMedia;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class AdminPublicTutorController extends Controller
@@ -122,7 +122,7 @@ class AdminPublicTutorController extends Controller
         ]);
     }
 
-    public function updatePhoto(Request $request, TeacherProfile $teacherProfile): JsonResponse
+    public function updatePhoto(Request $request, TeacherProfile $teacherProfile, UploadSecurityService $uploads): JsonResponse
     {
         $request->validate([
             'photo' => ['required', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
@@ -136,7 +136,7 @@ class AdminPublicTutorController extends Controller
 
         $file = $request->file('photo');
         $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-        $newPath = $file->storeAs('photos/public_tutors', 'photo_'.Str::uuid().'.'.$extension, 'public');
+        $newPath = $uploads->store($file, 'photos/public_tutors', 'public');
         $oldPath = null;
         try {
             DB::transaction(function () use ($teacherProfile, $newPath, &$oldPath): void {

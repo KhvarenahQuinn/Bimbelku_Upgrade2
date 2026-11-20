@@ -41,7 +41,7 @@ class SessionRefundDecisionTest extends TestCase
             'incident_at' => now()->subMinutes(30)->toDateTimeString(),
             'incident_location' => 'Yogyakarta',
             'impact' => 'Sesi tidak dapat dilaksanakan oleh tutor.',
-            'evidence' => UploadedFile::fake()->create('bukti.jpg', 100, 'image/jpeg'),
+            'evidence' => UploadedFile::fake()->image('bukti.jpg', 8, 8),
         ])->assertCreated();
 
         $booking->refresh();
@@ -69,6 +69,24 @@ class SessionRefundDecisionTest extends TestCase
         $this->assertSame('completed', $booking->status);
         $this->assertSame('ready', $booking->payout_status);
         $this->assertSame(0, Refund::query()->where('source_type', 'teacher_emergency')->count());
+    }
+
+    public function test_emergency_session_refund_requires_amount_within_paid_session_value(): void
+    {
+        $fixture = $this->emergencyFixture();
+        $report = SessionReport::query()->firstOrFail();
+        Sanctum::actingAs($fixture['admin']);
+
+        $payload = [
+            'decision' => 'accepted',
+            'refund_scope' => 'session',
+            'notes' => 'Bukti kehadiran kosong di kedua sisi, dana sesi perlu ditinjau.',
+        ];
+        $this->postJson("/api/admin/session-reports/{$report->id}/resolve", $payload)->assertUnprocessable();
+        $this->postJson("/api/admin/session-reports/{$report->id}/resolve", $payload + ['refund_amount' => 50001])->assertUnprocessable();
+
+        $this->assertSame('pending', $report->fresh()->status);
+        $this->assertSame(0, Refund::query()->count());
     }
 
     public function test_emergency_decision_with_session_refund_queues_one_adjustment(): void

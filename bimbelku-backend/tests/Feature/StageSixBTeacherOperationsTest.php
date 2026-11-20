@@ -42,12 +42,16 @@ class StageSixBTeacherOperationsTest extends TestCase
         Sanctum::actingAs($student);
         $this->post("/api/bookings/{$booking->id}/messages", [
             'body' => 'Berikut latihan yang ingin dibahas.',
-            'attachment' => UploadedFile::fake()->create('latihan.pdf', 40, 'application/pdf'),
+            'attachment' => UploadedFile::fake()->createWithContent('latihan.pdf', '%PDF-1.4
+1 0 obj << /Type /Catalog >>
+%%EOF'),
             'client_token' => $clientToken,
         ])->assertCreated();
         $this->post("/api/bookings/{$booking->id}/messages", [
             'body' => 'Berikut latihan yang ingin dibahas.',
-            'attachment' => UploadedFile::fake()->create('latihan.pdf', 40, 'application/pdf'),
+            'attachment' => UploadedFile::fake()->createWithContent('latihan.pdf', '%PDF-1.4
+1 0 obj << /Type /Catalog >>
+%%EOF'),
             'client_token' => $clientToken,
         ])->assertOk();
         $this->assertDatabaseCount('classroom_messages', 1);

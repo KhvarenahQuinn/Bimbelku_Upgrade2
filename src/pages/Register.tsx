@@ -43,7 +43,8 @@ import type { SubjectOption } from "@/components/SubjectCombobox";
 import { EDUCATION_LEVELS, GRADES_BY_EDUCATION_LEVEL } from "@/lib/educationCatalog";
 import http, { getApiError, getApiValidationErrors, getCached } from "@/lib/http";
 import {
-  isValidEmail,
+  isValidRegistrationEmail,
+  registrationEmailGuidance,
   isValidHttpUrl,
   isValidPersonName,
   isValidPhone,
@@ -172,7 +173,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
   const accountErrors = () => {
     const nextErrors: Record<string, string> = {};
     if (!isValidPersonName(form.name)) nextErrors.name = "Nama lengkap harus berisi huruf dan tidak boleh memuat angka.";
-    if (!isValidEmail(form.email)) nextErrors.email = "Masukkan alamat email yang valid.";
+    if (!isValidRegistrationEmail(form.email)) nextErrors.email = registrationEmailGuidance;
     if (!isValidPhone(form.phone)) nextErrors.phone = "Nomor WhatsApp/telepon harus berisi 8–15 angka.";
     if (form.password.length < 8) nextErrors.password = "Kata sandi minimal 8 karakter.";
     if (form.password !== form.password_confirmation) nextErrors.password_confirmation = "Konfirmasi kata sandi belum sama.";
@@ -428,12 +429,15 @@ export default function Register({ role = "student" }: { role?: Role }) {
 
           <div className="flex gap-3 border-t border-slate-200 pt-5">
             {step > 1 && <Button type="button" variant="outline" onClick={goToPreviousStep} className="h-12 min-w-0 flex-1 rounded-2xl border-slate-300 font-black"><ArrowLeft className="mr-2" size={18} />Kembali</Button>}
-            {step < totalSteps ? <Button type="button" onClick={goToNextStep} className="h-12 min-w-0 flex-1 rounded-2xl bg-[#14213D] font-black hover:bg-slate-800">Lanjutkan<ArrowRight className="ml-2" size={18} /></Button> : <Button disabled={submitting || (turnstileEnabled && !form["cf-turnstile-response"]?.trim())} className="h-12 min-w-0 flex-1 rounded-2xl bg-[#14213D] font-black hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"><span className="inline-flex items-center justify-center">{submitting ? <Loader2 className="mr-2 animate-spin" size={19} /> : <ArrowRight className="mr-2" size={19} />}{submitting ? "Memproses…" : role === "teacher" ? "Simpan & lanjut WhatsApp" : "Buat akun murid"}</span></Button>}
+            {step < totalSteps ? <Button type="button" onClick={goToNextStep} className="h-12 min-w-0 flex-1 rounded-2xl bg-[#14213D] font-black hover:bg-slate-800">Lanjutkan<ArrowRight className="ml-2" size={18} /></Button> : <Button disabled={submitting || (turnstileEnabled && !form["cf-turnstile-response"]?.trim())} className="h-12 min-w-0 flex-1 inline-flex items-center justify-center gap-2 text-center leading-snug rounded-2xl bg-[#14213D] font-black hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"><span className="inline-flex items-center justify-center gap-2">{submitting ? <Loader2 className="shrink-0 animate-spin" size={19} /> : <ArrowRight className="shrink-0" size={19} />}{submitting ? "Memproses…" : role === "teacher" ? "Simpan & lanjut WhatsApp" : "Buat akun murid"}</span></Button>}
           </div>
           {/* Turnstile verification for registration submit - only on step 3 */}
           {step === totalSteps && (
             <div className="mt-4">
-              <TurnstileWidget onTokenChange={handleTurnstileToken} />
+              <TurnstileWidget
+                onTokenChange={handleTurnstileToken}
+                action={role === "teacher" ? "register_teacher" : "register_student"}
+              />
               {turnstileEnabled && !form["cf-turnstile-response"]?.trim() && (
                 <p className="mt-1 text-xs text-red-600 text-center" role="alert">Selesaikan verifikasi keamanan Cloudflare terlebih dahulu.</p>
               )}

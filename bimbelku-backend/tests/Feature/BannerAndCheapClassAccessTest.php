@@ -49,7 +49,7 @@ class BannerAndCheapClassAccessTest extends TestCase
     public function test_public_banner_image_uses_api_media_route_without_storage_symlink(): void
     {
         Storage::fake('public');
-        Storage::disk('public')->put('stage-five/banners/banner.png', 'image');
+        Storage::disk('public')->put('stage-five/banners/banner.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='));
         DynamicBanner::create([
             'title' => 'Banner bergambar',
             'image_path' => 'stage-five/banners/banner.png',

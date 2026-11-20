@@ -3,29 +3,69 @@ import { useEffect, useRef, useState } from "react";
 interface TurnstileWidgetProps {
   onTokenChange: (token: string) => void;
   resetTrigger?: number;
+  action?: string;
 }
 
 type TurnstileStatus = "idle" | "loading" | "ready" | "verified" | "expired" | "error" | "bypassed";
 
-export default function TurnstileWidget({ onTokenChange, resetTrigger }: TurnstileWidgetProps) {
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (container: HTMLElement, options: {
+        sitekey: string;
+        action: string;
+        theme: string;
+        callback: (token: string) => void;
+        "expired-callback": () => void;
+        "error-callback": (errorCode: string) => void;
+      }) => number;
+      reset: (widgetId: number) => void;
+      remove: (widgetId: number) => void;
+    };
+  }
+}
+
+export default function TurnstileWidget({ onTokenChange, resetTrigger, action = "register" }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<number | null>(null);
   const scriptLoadedRef = useRef(false);
   const scriptLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const renderAttemptedRef = useRef(false);
+  const scriptReadyRef = useRef(false);
+  const renderWidgetRef = useRef<() => void>(() => {});
   const [token, setToken] = useState<string>("");
   const [status, setStatus] = useState<TurnstileStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
 
-  // Store latest callback to avoid re-running effect when parent passes new function reference
+  // Keep callbacks current without tying the widget lifecycle to parent renders.
   const onTokenChangeRef = useRef(onTokenChange);
+  const onVerifyRef = useRef<(token: string) => void>(() => {});
+  const onExpireRef = useRef<() => void>(() => {});
+  const onErrorRef = useRef<(errorCode: string) => void>(() => {});
   onTokenChangeRef.current = onTokenChange;
+  onVerifyRef.current = (verifiedToken) => {
+    setToken(verifiedToken);
+    setStatus("verified");
+    setErrorMessage("");
+  };
+  onExpireRef.current = () => {
+    setToken("");
+    setStatus("expired");
+    setErrorMessage("Verifikasi keamanan Cloudflare gagal atau kedaluwarsa. Silakan coba lagi.");
+  };
+  onErrorRef.current = (errorCode) => {
+    setToken("");
+    onTokenChangeRef.current("");
+    setStatus("error");
+    setErrorMessage(`Verifikasi keamanan gagal (kode: ${errorCode}). Pastikan hostname terdaftar di Cloudflare Turnstile atau muat ulang.`);
+  };
 
   // Reset widget when resetTrigger changes (e.g., after form submission error)
   useEffect(() => {
     if (resetTrigger !== undefined && widgetIdRef.current !== null && window.turnstile) {
       window.turnstile.reset(widgetIdRef.current);
       setToken("");
+      scriptReadyRef.current = true;
       setStatus("ready");
       setErrorMessage("");
     }
@@ -33,12 +73,53 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
 
   // Load Turnstile script with timeout fallback
   useEffect(() => {
-    if (scriptLoadedRef.current) return;
+    // If script already loaded and widget rendered, ensure ready state
+    if (scriptLoadedRef.current && window.turnstile) {
+      scriptReadyRef.current = true;
+      setStatus("ready");
+      renderWidgetRef.current?.();
+      return;
+    }
 
     const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim();
     if (!siteKey) {
+      scriptReadyRef.current = false;
       setStatus("bypassed");
       return; // Bypass mode for local dev
+    }
+
+    // Check if turnstile is already available globally (e.g., from another tab switch)
+    if (window.turnstile) {
+      scriptLoadedRef.current = true;
+      scriptReadyRef.current = true;
+      setStatus("ready");
+      renderWidgetRef.current?.();
+      return;
+    }
+
+    // Check if script tag already exists in document.head
+    const existingScript = document.querySelector<HTMLScriptElement>('script[src*="challenges.cloudflare.com/turnstile"]');
+    if (existingScript) {
+      scriptLoadedRef.current = true;
+      scriptReadyRef.current = true;
+      setStatus("loading");
+
+      const handleExistingLoad = () => {
+        existingScript.removeEventListener("load", handleExistingLoad);
+        existingScript.removeEventListener("error", handleExistingError);
+        scriptReadyRef.current = true;
+        renderWidgetRef.current?.();
+        setStatus("ready");
+      };
+      const handleExistingError = () => {
+        existingScript.removeEventListener("load", handleExistingLoad);
+        existingScript.removeEventListener("error", handleExistingError);
+        setStatus("error");
+        setErrorMessage("Gagal memuat skrip verifikasi. Periksa koneksi internet Anda.");
+      };
+      existingScript.addEventListener("load", handleExistingLoad);
+      existingScript.addEventListener("error", handleExistingError);
+      return;
     }
 
     setStatus("loading");
@@ -53,7 +134,16 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
         clearTimeout(scriptLoadTimeoutRef.current);
         scriptLoadTimeoutRef.current = null;
       }
+      script.removeEventListener("load", handleLoad);
+      script.removeEventListener("error", handleError);
       scriptLoadedRef.current = true;
+      scriptReadyRef.current = true;
+      try {
+        renderWidgetRef.current?.();
+      } catch {
+        setStatus("error");
+        setErrorMessage("Gagal memuat verifikasi keamanan. Silakan coba lagi.");
+      }
       setStatus("ready");
     };
 
@@ -62,12 +152,14 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
         clearTimeout(scriptLoadTimeoutRef.current);
         scriptLoadTimeoutRef.current = null;
       }
+      script.removeEventListener("load", handleLoad);
+      script.removeEventListener("error", handleError);
       setStatus("error");
       setErrorMessage("Gagal memuat skrip verifikasi. Periksa koneksi internet Anda.");
     };
 
-    script.onload = handleLoad;
-    script.onerror = handleError;
+    script.addEventListener("load", handleLoad);
+    script.addEventListener("error", handleError);
 
     // Timeout fallback (8 seconds)
     scriptLoadTimeoutRef.current = setTimeout(() => {
@@ -83,44 +175,40 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
         clearTimeout(scriptLoadTimeoutRef.current);
         scriptLoadTimeoutRef.current = null;
       }
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
-      }
+      script.removeEventListener("load", handleLoad);
+      script.removeEventListener("error", handleError);
+      // Do NOT remove the global script tag from document.head to avoid "Turnstile already has been loaded"
     };
   }, []);
 
-  // Render widget when container and script are ready - only runs once per mount
-  useEffect(() => {
-    if (!containerRef.current || !window.turnstile) return;
-    if (status !== "ready") return;
+  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim();
+  const theme = "light";
+
+  renderWidgetRef.current = () => {
+    if (!scriptReadyRef.current || !containerRef.current || !window.turnstile || !siteKey) return;
+    // Prevent "Turnstile has already been rendered in this container"
+    if (widgetIdRef.current !== null) {
+      if (window.turnstile) {
+        window.turnstile.reset(widgetIdRef.current);
+      }
+      return;
+    }
     if (renderAttemptedRef.current) return;
 
-    const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim();
-    if (!siteKey) return;
-
     renderAttemptedRef.current = true;
-
-    const widgetId = window.turnstile.render(containerRef.current, {
+    widgetIdRef.current = window.turnstile.render(containerRef.current, {
       sitekey: siteKey,
-      theme: "light",
-      callback: (token: string) => {
-        setToken(token);
-        setStatus("verified");
-        setErrorMessage("");
-      },
-      "expired-callback": () => {
-        setToken("");
-        setStatus("expired");
-        setErrorMessage("Verifikasi keamanan Cloudflare gagal atau kedaluwarsa. Silakan coba lagi.");
-      },
-      "error-callback": () => {
-        setToken("");
-        setStatus("error");
-        setErrorMessage("Verifikasi keamanan Cloudflare gagal atau kedaluwarsa. Silakan coba lagi.");
-      },
+      action,
+      theme,
+      callback: (verifiedToken: string) => onVerifyRef.current(verifiedToken),
+      "expired-callback": () => onExpireRef.current(),
+      "error-callback": (errorCode: string) => onErrorRef.current(errorCode),
     });
+  };
 
-    widgetIdRef.current = widgetId;
+  // Render once per configuration. Script readiness is signaled without restarting this effect.
+  useEffect(() => {
+    renderWidgetRef.current();
 
     return () => {
       if (widgetIdRef.current !== null && window.turnstile) {
@@ -129,7 +217,7 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
         renderAttemptedRef.current = false;
       }
     };
-  }, [status]);
+  }, [siteKey, action, theme]);
 
   // Sync token to parent - only depends on token, not on onTokenChange reference
   useEffect(() => {
@@ -143,30 +231,58 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger }: Turnsti
     }
     renderAttemptedRef.current = false;
     scriptLoadedRef.current = false;
-    if (document.querySelector('script[src*="turnstile"]')) {
-      document.querySelector('script[src*="turnstile"]')?.remove();
-    }
+    scriptReadyRef.current = false;
+    // Do NOT remove the global script tag
     setStatus("idle");
     setErrorMessage("");
+    setTimeout(() => {
+      const siteKeyRetry = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim();
+      if (!siteKeyRetry || !window.turnstile) {
+        // If no site key or turnstile not loaded, reload script
+        const script = document.createElement("script");
+        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        script.async = true;
+        script.defer = true;
+
+        const handleRetryLoad = () => {
+          script.removeEventListener("load", handleRetryLoad);
+          script.removeEventListener("error", handleRetryError);
+          scriptLoadedRef.current = true;
+          scriptReadyRef.current = true;
+          renderWidgetRef.current();
+          setStatus("ready");
+        };
+
+        const handleRetryError = () => {
+          script.removeEventListener("load", handleRetryLoad);
+          script.removeEventListener("error", handleRetryError);
+          setStatus("error");
+          setErrorMessage("Gagal memuat skrip verifikasi. Periksa koneksi internet Anda.");
+        };
+
+        script.addEventListener("load", handleRetryLoad);
+        script.addEventListener("error", handleRetryError);
+
+        document.head.appendChild(script);
+      } else {
+        // Turnstile already loaded, just re-render
+        scriptLoadedRef.current = true;
+        scriptReadyRef.current = true;
+        renderWidgetRef.current();
+        setStatus("ready");
+      }
+    }, 0);
   };
 
-  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim();
-
-  // Bypass mode - different outer wrapper (dev only)
-  if (status === "bypassed") {
-    return (
-      <div className="cf-turnstile" data-sitekey={siteKey}>
-        <p className="text-xs text-slate-500 text-center">Mode pengembangan: verifikasi dilewati</p>
-      </div>
-    );
-  }
-
-  // Always render the same outer wrapper with containerRef to prevent remount
+  // Keep the Turnstile host stable so Cloudflare's challenge state is not remounted.
   return (
     <div className="cf-turnstile" data-sitekey={siteKey}>
+      {status === "bypassed" && (
+        <p className="text-xs text-slate-500 text-center">Mode pengembangan: verifikasi dilewati</p>
+      )}
       <div
         ref={containerRef}
-        className="cf-turnstile"
+        className={`cf-turnstile ${status === "ready" || status === "verified" ? "" : "hidden"}`}
         data-sitekey={siteKey}
       />
       {status === "loading" && (

@@ -5,28 +5,23 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\UploadSecurityService;
 use App\Support\PublicMedia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class AdminSettingController extends Controller
 {
     // 1. UPDATE SAMPUL (Hanya Admin)
-    public function updateTeacherCover(Request $request)
+    public function updateTeacherCover(Request $request, UploadSecurityService $uploads)
     {
         $request->validate([
             'image' => 'required|image|mimes:jpeg,png,jpg,webp|max:5120',
         ]);
 
-        $extension = $request->file('image')->extension();
-        $path = $request->file('image')->storeAs(
-            'settings',
-            'global_teacher_cover_'.Str::uuid().".{$extension}",
-            'public'
-        );
+        $path = $uploads->store($request->file('image'), 'settings', 'public');
         $oldPath = null;
 
         try {

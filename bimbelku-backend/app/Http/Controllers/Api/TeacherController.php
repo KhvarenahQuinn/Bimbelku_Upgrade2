@@ -16,6 +16,7 @@ use App\Services\BankAccountNameVerifier;
 use App\Services\TeacherMatchingService;
 use App\Services\TeacherOfferReleaseService;
 use App\Services\TeacherPayoutService;
+use App\Services\UploadSecurityService;
 use App\Support\EducationCatalog;
 use App\Support\PublicMedia;
 use App\Support\XenditPayoutChannelCatalog;
@@ -89,14 +90,14 @@ class TeacherController extends Controller
         ]);
     }
 
-    public function updateProfileCover(Request $request)
+    public function updateProfileCover(Request $request, UploadSecurityService $uploads)
     {
         $request->validate([
             'profile_cover' => ['required', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ]);
 
         $user = $request->user();
-        $path = $request->file('profile_cover')->store('profile_covers', 'public');
+        $path = $uploads->store($request->file('profile_cover'), 'profile_covers', 'public');
         try {
             $oldPath = DB::transaction(function () use ($user, $path) {
                 $lockedUser = User::query()->lockForUpdate()->findOrFail($user->id);
@@ -125,7 +126,8 @@ class TeacherController extends Controller
     public function updateProfile(
         Request $request,
         TeacherOfferReleaseService $offerReleaseService,
-        TeacherMatchingService $matchingService
+        TeacherMatchingService $matchingService,
+        UploadSecurityService $uploads
     ) {
         $request->validate([
             'name' => ['nullable', 'string', 'max:255', 'regex:/\pL/u', 'not_regex:/\d/u'],
@@ -215,19 +217,19 @@ class TeacherController extends Controller
         try {
             if ($request->hasFile('photo')) {
                 $oldFiles['photo'] = ['public', $profile->photo];
-                $newFiles['photo'] = ['public', $request->file('photo')->store('photos', 'public')];
+                $newFiles['photo'] = ['public', $uploads->store($request->file('photo'), 'photos', 'public')];
                 $profile->photo = $newFiles['photo'][1];
             }
             if ($request->hasFile('profile_cover')) {
                 $oldFiles['profile_cover'] = ['public', $user->profile_cover];
                 $newFiles['profile_cover'] = [
                     'public',
-                    $request->file('profile_cover')->store('profile_covers', 'public'),
+                    $uploads->store($request->file('profile_cover'), 'profile_covers', 'public'),
                 ];
             }
             if ($request->hasFile('cv_file')) {
                 $oldFiles['cv_file'] = ['local', $profile->cv_file];
-                $newFiles['cv_file'] = ['local', $request->file('cv_file')->store('cvs', 'local')];
+                $newFiles['cv_file'] = ['local', $uploads->store($request->file('cv_file'), 'cvs', 'local')];
                 $profile->cv_file = $newFiles['cv_file'][1];
             }
             foreach ($verificationDocuments as $field => $directory) {
@@ -236,7 +238,7 @@ class TeacherController extends Controller
                 }
 
                 $oldFiles[$field] = ['local', $profile->{$field}];
-                $newFiles[$field] = ['local', $request->file($field)->store($directory, 'local')];
+                $newFiles[$field] = ['local', $uploads->store($request->file($field), $directory, 'local')];
                 $profile->{$field} = $newFiles[$field][1];
             }
 

@@ -84,6 +84,8 @@ export default function CaseCenter() {
     const isLapsedAppeal = type === "dispute" && item.kind === "lapsed_session";
     const isEmergency = type === "report" && item.type === "teacher_emergency";
     setSelected({ type, item });
+    const defaultRefund = itemRefundCap(item);
+    setRefundAmount(defaultRefund > 0 ? String(Math.floor(defaultRefund)) : "");
     setDecision(
       type === "report"
         ? (isEmergency ? "accepted" : "accepted")
@@ -91,16 +93,16 @@ export default function CaseCenter() {
           ? (isLapsedAppeal ? "full_refund" : "teacher_paid")
           : type === "completion" ? "approve" : "approve",
     );
-    setRefundAmount("");
     setCostBearer("tutor_share");
     setNotes("");
   };
 
   const isLapsedAppeal = selected?.type === "dispute" && selected.item?.kind === "lapsed_session";
   const isEmergencyReport = selected?.type === "report" && selected.item?.type === "teacher_emergency";
-  const needsRefundAmount = isLapsedAppeal && decision === "partial_refund";
+  const needsRefundAmount = (isLapsedAppeal && decision === "partial_refund")
+    || (isEmergencyReport && decision === "accepted" && itemRefundScope(selected?.item) === "session");
   const needsCostBearer = (isLapsedAppeal && (decision === "full_refund" || decision === "partial_refund"))
-    || isEmergencyReport;
+    || (isEmergencyReport && decision === "accepted" && itemRefundScope(selected?.item) !== "none");
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -121,9 +123,11 @@ export default function CaseCenter() {
       if (type === "report") {
         const emergencyPayload = item.type === "teacher_emergency"
           ? {
-              refund_scope: decision === "rejected" ? "none" : "session",
+              refund_scope: decision === "rejected" ? "none" : itemRefundScope(item),
               cost_bearer: costBearer,
-              refund_amount: Number(refundAmount.replace(/[^0-9]/g, "")) || undefined,
+              refund_amount: decision === "accepted" && itemRefundScope(item) === "session"
+                ? Number(refundAmount.replace(/[^0-9]/g, "")) || undefined
+                : undefined,
             }
           : {};
         response = await http.post(`/admin/session-reports/${item.id}/resolve`, { decision, notes, ...emergencyPayload });
@@ -192,7 +196,7 @@ export default function CaseCenter() {
             {scope === "history" && <HistoryDecision item={selected.item} />}
             <fieldset disabled={scope === "history"} className={scope === "history" ? "hidden" : "space-y-5"}>
             <div><Label>Keputusan</Label><Select value={decision} onValueChange={setDecision}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{selected.type === "report" ? (isEmergencyReport ? <><SelectItem value="accepted">Laporan valid · refund sesi</SelectItem><SelectItem value="rejected">Laporan ditolak · sesi tetap berjalan</SelectItem></> : <><SelectItem value="accepted">Laporan valid</SelectItem><SelectItem value="rejected">Laporan ditolak</SelectItem></>) : selected.type === "dispute" ? (isLapsedAppeal ? <><SelectItem value="full_refund">Refund penuh nilai sesi</SelectItem><SelectItem value="partial_refund">Refund sebagian</SelectItem><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem></> : <><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem><SelectItem value="student_refund">Refund penuh murid</SelectItem></>) : selected.type === "replacement" ? <><SelectItem value="approve">Setujui dan mulai pencarian</SelectItem><SelectItem value="reject">Tolak pengajuan</SelectItem></> : <><SelectItem value="approve">Sahkan sesi</SelectItem><SelectItem value="refund">Refund penuh</SelectItem></>}</SelectContent></Select></div>
-            {needsRefundAmount && <div><Label>Nominal refund (Rp)</Label><Input inputMode="numeric" value={refundAmount} onChange={(event) => setRefundAmount(event.target.value.replace(/[^0-9]/g, ""))} className="mt-2 h-11 rounded-xl" placeholder="0" /></div>}
+            {needsRefundAmount && <div><Label>Nominal Refund (Rp)</Label><Input inputMode="numeric" type="number" min={1} max={itemRefundCap(selected?.item)} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value.replace(/[^0-9]/g, ""))} className="mt-2 h-11 rounded-xl" placeholder="1" required /><p className="mt-1 text-xs text-slate-500">Maksimal {new Intl.NumberFormat("id-ID").format(itemRefundCap(selected?.item))} sesuai nilai sesi. Nominal harus lebih dari Rp0.</p></div>}
             {needsCostBearer && <div><Label>Penanggung biaya</Label><Select value={costBearer} onValueChange={setCostBearer}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="tutor_share">Potong hak tutor</SelectItem><SelectItem value="platform">Ditanggung platform</SelectItem></SelectContent></Select></div>}
             {(isLapsedAppeal || isEmergencyReport) && selected && <AttendanceEvidence bookingId={isLapsedAppeal ? selected.item.booking_id ?? selected.item.booking?.id : selected.item.booking_id ?? selected.item.booking?.id} />}
             <div><Label>Catatan keputusan</Label><Textarea required minLength={20} className="mt-2 min-h-32 rounded-xl" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Dasar pemeriksaan dan keputusan admin" /></div>
@@ -203,6 +207,21 @@ export default function CaseCenter() {
       </Dialog>
     </AdminLayout>
   );
+}
+
+function itemRefundScope(item: any): "session" | "none" {
+  return item?.type === "teacher_emergency" ? "session" : "none";
+}
+
+function itemRefundCap(item: any): number {
+  const booking = item?.booking;
+  const paidParticipants = (booking?.participants || [])
+    .filter((participant: any) => participant.order?.status === "paid")
+    .map((participant: any) => Number(participant.amount || 0))
+    .filter((amount: number) => Number.isFinite(amount) && amount > 0);
+  if (paidParticipants.length) return Math.floor(Math.min(...paidParticipants));
+  const bookingCap = Number(booking?.gross_amount || booking?.total_amount || 0);
+  return Number.isFinite(bookingCap) && bookingCap > 0 ? Math.floor(bookingCap) : 0;
 }
 
 function TabCard({ active, attention, tone, onClick, icon: Icon, label, count }: { active: boolean; attention: boolean; tone: "urgent" | "warning"; onClick: () => void; icon: typeof Gavel; label: string; count: number }) {
@@ -220,7 +239,7 @@ function CaseRow({ type, item, history, onOpen }: { type: CaseType; item: any; h
   const Icon = icon;
   const name = type === "report" ? (item.reporter?.name || item.teacher?.name) : type === "dispute" || type === "replacement" ? item.student?.name : item.teacher?.name;
   if (type === "replacement") {
-    const detail = `${item.subject?.subject_name || "Mapel"} · ${item.sessions?.length || 0} sesi tersisa · ${String(item.reason_code || "lainnya").replaceAll("_", " ")}`;
+    const detail = `${item.subject?.subject_name || "Mapel"} · ${item.sessions?.length || 0} sesi tersisa · ${String(item.reason_code || "lainnya").replace(/_/g, " ")}`;
     return <div className="flex flex-col justify-between gap-4 p-5 hover:bg-slate-50 sm:flex-row sm:items-center"><div className="flex min-w-0 gap-4"><div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${history ? "bg-slate-100 text-slate-500" : "bg-rose-50 text-rose-600"}`}><Icon /></div><div className="min-w-0"><p className="break-words font-black text-slate-900">{name || "Pengguna"} · Kasus #{item.id}</p><p className="mt-1 line-clamp-2 break-words text-sm leading-6 text-slate-500">{detail}</p></div></div><Button variant="outline" className="rounded-xl" onClick={onOpen}>{history ? "Lihat riwayat" : "Periksa"}</Button></div>;
   }
   const detail = type === "report" ? (item.incident_type || (item.type === "student_absence" ? "Murid tidak hadir" : item.type === "teacher_absence" ? "Tutor tidak hadir" : "Keadaan darurat")) : type === "dispute" ? item.reason : "Masa keputusan murid berakhir";
@@ -230,7 +249,7 @@ function CaseRow({ type, item, history, onOpen }: { type: CaseType; item: any; h
 function HistoryDecision({ item }: { item: any }) {
   const notes = item.review_notes || item.resolution_notes || item.completion_notes;
   const decidedAt = item.reviewed_at || item.resolved_at || item.updated_at;
-  return <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900"><p className="font-black">Kasus sudah selesai · {String(item.status || "selesai").replaceAll("_", " ")}</p>{notes && <p className="mt-2 break-words leading-6"><strong>Catatan keputusan:</strong> {notes}</p>}{decidedAt && <p className="mt-2 text-xs font-bold text-emerald-700">Diproses {new Date(decidedAt).toLocaleString("id-ID")}</p>}</div>;
+  return <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900"><p className="font-black">Kasus sudah selesai · {String(item.status || "selesai").replace(/_/g, " ")}</p>{notes && <p className="mt-2 break-words leading-6"><strong>Catatan keputusan:</strong> {notes}</p>}{decidedAt && <p className="mt-2 text-xs font-bold text-emerald-700">Diproses {new Date(decidedAt).toLocaleString("id-ID")}</p>}</div>;
 }
 
 function CaseDetail({ type, item }: { type: CaseType; item: any }) {
@@ -260,7 +279,7 @@ function CaseDetail({ type, item }: { type: CaseType; item: any }) {
         <p><strong>Guru lama:</strong> {item.old_teacher?.name || "-"}</p>
         <p><strong>Jumlah sesi:</strong> {item.sessions?.length || 0}</p>
       </div>
-      <p><strong>Alasan:</strong> {String(item.reason_code || "lainnya").replaceAll("_", " ")}</p>
+      <p><strong>Alasan:</strong> {String(item.reason_code || "lainnya").replace(/_/g, " ")}</p>
       <p><strong>Penjelasan murid:</strong> {item.reason_detail || "-"}</p>
       {item.sessions?.length > 0 && <div className="rounded-xl border border-indigo-100 bg-white p-3"><p className="text-[10px] font-black uppercase tracking-[.14em] text-indigo-500">Sesi yang akan dialihkan</p><div className="mt-2 space-y-1">{item.sessions.map((row: any) => <p key={row.id}>{row.package_session?.scheduled_start_at ? new Date(row.package_session.scheduled_start_at).toLocaleString("id-ID") : "Sesi #" + row.package_session_id}</p>)}</div></div>}
       {item.sessions?.some((row: any) => (row.old_booking?.reports?.length || 0) + (row.old_booking?.disputes?.length || 0) > 0) && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="font-black text-amber-900">Kasus sesi terkait</p>{item.sessions.map((row: any) => { const reports = row.old_booking?.reports?.length || 0; const disputes = row.old_booking?.disputes?.length || 0; return reports + disputes > 0 ? <p key={row.id} className="mt-1 text-amber-800">Sesi #{row.package_session_id}: {reports} laporan · {disputes} keberatan</p> : null; })}</div>}
@@ -304,7 +323,7 @@ function AttendanceEvidence({ bookingId }: { bookingId?: number }) {
   return <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 text-sm text-indigo-950">
     <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.14em] text-indigo-600"><ScrollText size={14} /> Bukti kehadiran</p>
     {loading ? <p className="mt-2 flex items-center gap-2 text-xs font-bold"><Loader2 className="animate-spin" size={14} /> Memuat bukti...</p> : error ? <p className="mt-2 text-xs font-bold text-rose-700">{error}</p> : data ? <>
-      <p className="mt-2 rounded-xl bg-white px-3 py-2 text-xs font-black">Kesimpulan bukti: {String(data.evidence_state || "unclear").replaceAll("_", " ")}</p>
+      <p className="mt-2 rounded-xl bg-white px-3 py-2 text-xs font-black">Kesimpulan bukti: {String(data.evidence_state || "unclear").replace(/_/g, " ")}</p>
       <div className="mt-2 grid gap-1 text-xs">
         <p>Tutor siap: {time(data.tutor_ready_at)}</p>
         <p>Murid konfirmasi: {time(data.student_confirmed_at)}</p>

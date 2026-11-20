@@ -15,11 +15,18 @@ class AuthRegistrationValidationParityTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('turnstile.enabled', false);
+        config()->set('turnstile.secret_key', null);
+    }
+
     private function baseStudentPayload(array $overrides = []): array
     {
         return array_merge([
             'name' => 'Murid Valid',
-            'email' => 'murid.valid@example.test',
+            'email' => 'murid.valid@gmail.com',
             'phone' => '081234567890',
             'password' => 'password123',
             'password_confirmation' => 'password123',
@@ -37,7 +44,7 @@ class AuthRegistrationValidationParityTest extends TestCase
             ->assertJsonPath('requires_email_verification', true);
 
         $this->assertDatabaseHas('users', [
-            'email' => 'murid.valid@example.test',
+            'email' => 'murid.valid@gmail.com',
             'role' => 'student',
         ]);
     }
@@ -49,19 +56,22 @@ class AuthRegistrationValidationParityTest extends TestCase
         // disengaja: frontend lebih ketat, backend tetap sumber kebenaran, dan
         // tidak ada alamat yang valid di backend namun ditolak frontend.
         // Test ini mengunci format yang ditolak keduanya.
-        foreach (['not-an-email', 'user..name@example.test', 'user@@example.test', 'plainaddress'] as $email) {
+        foreach (['not-an-email', 'user..name@gmail.com', 'user@@gmail.com', 'plainaddress'] as $email) {
             $response = $this->postJson('/api/register', $this->baseStudentPayload(['email' => $email]));
             $response->assertStatus(422)->assertJsonValidationErrors('email');
             $this->assertNotSame('The given data was invalid.', $response->json('message'));
         }
     }
 
-    public function test_email_rule_is_more_permissive_than_frontend_on_bare_domains(): void
+    public function test_registration_accepts_trusted_consumer_and_academic_domains(): void
     {
-        // Dokumentasi perilaku: backend menerima alamat yang ditolak frontend.
-        // Kalau Laravel memperketat rule ini di masa depan, test ini gagal dan
-        // memberi tahu bahwa komentar divergensi di atas sudah usang.
-        foreach (['a@b', 'user@example'] as $index => $email) {
+        foreach ([
+            'murid@yahoo.co.id',
+            'murid@school.ac.id',
+            'murid@campus.edu',
+            'murid@sma.sch.id',
+            'murid@murid.belajar.id',
+        ] as $index => $email) {
             $this->postJson('/api/register', $this->baseStudentPayload([
                 'email' => $email,
                 'phone' => '08123456789'.$index,
@@ -69,11 +79,22 @@ class AuthRegistrationValidationParityTest extends TestCase
         }
     }
 
+    public function test_registration_rejects_untrusted_email_domains_with_guidance(): void
+    {
+        $guidance = 'Gunakan email aktif yang umum (Gmail, Yahoo, Outlook, iCloud, dll.) atau email institusi pendidikan (.ac.id, .sch.id, .edu, belajar.id, dll.).';
+        foreach (['murid@example.test', 'murid@mailinator.com', 'murid@asalasal.xyz'] as $email) {
+            $this->postJson('/api/register', $this->baseStudentPayload(['email' => $email]))
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('email')
+                ->assertJsonPath('errors.email.0', $guidance);
+        }
+    }
+
     public function test_email_must_be_unique(): void
     {
-        User::factory()->create(['email' => 'taken@example.test']);
+        User::factory()->create(['email' => 'taken@gmail.com']);
 
-        $this->postJson('/api/register', $this->baseStudentPayload(['email' => 'taken@example.test']))
+        $this->postJson('/api/register', $this->baseStudentPayload(['email' => 'taken@gmail.com']))
             ->assertStatus(422)
             ->assertJsonValidationErrors('email')
             ->assertJsonPath('errors.email.0', 'Email ini sudah terdaftar. Silakan masuk dengan akun tersebut atau gunakan email lain.');
@@ -93,7 +114,7 @@ class AuthRegistrationValidationParityTest extends TestCase
         // Format yang sama dengan frontend `isValidPhone`: digit 8–15 dengan awalan + opsional.
         foreach (['+6281234567890', '081234567890'] as $phone) {
             $this->postJson('/api/register', $this->baseStudentPayload([
-                'email' => 'phone-ok-'.md5($phone).'@example.test',
+                'email' => 'phone-ok-'.md5($phone).'@gmail.com',
                 'phone' => $phone,
             ]))->assertCreated();
         }

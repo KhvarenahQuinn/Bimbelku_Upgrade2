@@ -171,7 +171,7 @@ php scripts/audit-testing-readiness.php --gateway-status
 
 Audit mengembalikan exit 1 bila DB tidak dapat diperiksa atau masih ada migrasi pending; hasil JSON tetap menjelaskan kondisi. Exit 0 hanya menandakan audit DB/migrasi bersih, bukan seluruh kesiapan pembayaran/bank/UI. Endpoint remote dibatasi HTTPS host resmi dan key development; tidak mencetak secret, raw response, atau rekening pengguna.
 
-Perintah demo lama seperti `demo:cheap-class setup/pre-payment/reset`, `demo:package-renewal setup`, dan `demo:session-reminder setup` dapat menimpa data demo atau membuat tagihan paid sintetis. Jangan menjalankannya di database interaktif sebagai bukti pembayaran nyata. Tutorial manual lama tetap tersedia di `testing.md`, tetapi gunakan temuan/prasyarat di dokumen ini untuk menghindari asumsi yang belum terbukti.
+Perintah seperti `demo:cheap-class setup/pre-payment/reset`, `demo:package-renewal setup`, dan `demo:session-reminder setup` dapat mengganti fixture demo atau membuat tagihan paid sintetis. Jangan jalankan perintah tersebut pada database interaktif untuk membuktikan pembayaran nyata. Panduan alur manual ada di [testing.md](testing.md); gunakan catatan kesiapan di dokumen ini sebelum menjalankan skenario.
 
 ## 10. Syarat menutup tahap berikutnya
 

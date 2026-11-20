@@ -15,6 +15,7 @@ export type StoredSessionUser = {
 };
 
 let sessionVersion = 0;
+let loggingOut = false;
 
 const notifySessionUpdated = (token: string | null) => {
   sessionVersion += 1;
@@ -45,6 +46,7 @@ const applyAxiosAuthHeader = (token: string | null) => {
  * memakai sesi lama/kosong.
  */
 export function storeBrowserSession(user: StoredSessionUser, accessToken?: string | null) {
+  loggingOut = false;
   const candidate = typeof accessToken === "string" ? accessToken.trim() : "";
   const token = candidate && candidate !== SESSION_MARKER ? candidate : SESSION_MARKER;
   localStorage.setItem("token", token);
@@ -69,6 +71,7 @@ export function hydrateBrowserSession() {
 }
 
 export function clearBrowserSession() {
+  loggingOut = true;
   localStorage.removeItem("token");
   localStorage.removeItem("user");
   applyAxiosAuthHeader(null);
@@ -97,6 +100,25 @@ export function readStoredSession(): StoredSessionSnapshot {
   } catch {
     return { token, role: "", user: null };
   }
+}
+
+export function beginLogout() {
+  loggingOut = true;
+  notifySessionUpdated(localStorage.getItem("token"));
+}
+
+export function cancelLogout() {
+  loggingOut = false;
+  notifySessionUpdated(localStorage.getItem("token"));
+}
+
+export function isLoggingOut() {
+  return loggingOut;
+}
+
+export function hasActiveBrowserSession() {
+  const token = localStorage.getItem("token");
+  return Boolean(token && !loggingOut);
 }
 
 export function getSessionVersion() {

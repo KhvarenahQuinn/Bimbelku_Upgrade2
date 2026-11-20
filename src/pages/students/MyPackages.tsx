@@ -14,6 +14,7 @@ import {
   CalendarClock,
   Clock3,
   CreditCard,
+  HelpCircle,
   Loader2,
   RefreshCw,
   Search,
@@ -515,6 +516,7 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
               const displayStatus = packageDisplayStatus(item);
               const canViewProgress = ["matching", "teacher_pending", "no_teacher", "active", "completed", "refunded"].includes(displayStatus);
               const needsPayment = ["awaiting_payment", "payment_rejected", "partially_paid"].includes(item.status) && item.latest_order;
+              const rejectionReason = item.latest_order?.payment_rejection_reason?.trim() || null;
               const canCancelSearch = ["matching", "teacher_pending", "no_teacher"].includes(item.status);
               const retryableSubjects = subjects.filter((subject) => subject.status === "no_teacher" && subject.matching?.can_retry);
               const canRetry = retryableSubjects.length > 0;
@@ -589,7 +591,7 @@ export default function PackageProcessList({ scope }: { scope: PackageScope }) {
                           <CreditCard size={17} /> Bayar Paket
                         </Link>
                       )}
-                      {rejectionReason && (
+                      {item.latest_order?.status === "rejected" && rejectionReason && (
                         <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold leading-5 text-rose-900">
                           <p className="font-black">Pembayaran ditolak</p>
                           <p className="mt-1">{rejectionReason}</p>

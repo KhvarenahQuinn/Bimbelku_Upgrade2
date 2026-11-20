@@ -11,6 +11,7 @@ use App\Models\WebsiteSection;
 use App\Models\WebsiteSetting;
 use App\Models\WebsiteTestimonial;
 use App\Models\WebsiteTrustItem;
+use App\Services\UploadSecurityService;
 use App\Support\PublicMedia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -62,7 +63,7 @@ class WebsiteContentController extends Controller
         return response()->json(['media' => $this->mediaPayload()]);
     }
 
-    public function updateMedia(Request $request)
+    public function updateMedia(Request $request, UploadSecurityService $uploads)
     {
         $request->validate([
             'logo' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:2048'],
@@ -94,8 +95,7 @@ class WebsiteContentController extends Controller
                     continue;
                 }
                 $file = $request->file($input);
-                $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-                $newPaths[$column] = $file->storeAs('website', $input.'_'.Str::uuid().'.'.$extension, 'public');
+                $newPaths[$column] = $uploads->store($file, 'website', 'public', $input);
             }
 
             DB::transaction(function () use ($settings, $newPaths, &$oldPaths): void {
@@ -197,7 +197,7 @@ class WebsiteContentController extends Controller
         })->values());
     }
 
-    public function update(Request $request)
+    public function update(Request $request, UploadSecurityService $uploads)
     {
         $data = $request->validate([
             'brand_name' => ['required', 'string', 'max:80'],
@@ -350,12 +350,11 @@ class WebsiteContentController extends Controller
                     continue;
                 }
                 $file = $request->file($input);
-                $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-                $newPaths[$column] = $file->storeAs('website', $input.'_'.Str::uuid().'.'.$extension, 'public');
+                $newPaths[$column] = $uploads->store($file, 'website', 'public', $input);
                 $oldPaths[] = $settings->{$column};
             }
 
-            DB::transaction(function () use ($data, $settings, &$newPaths, $request, &$oldPaths, &$newPrivatePaths, &$oldPrivatePaths) {
+            DB::transaction(function () use ($data, $settings, &$newPaths, $request, $uploads, &$oldPaths, &$newPrivatePaths, &$oldPrivatePaths) {
                 $settings->newQuery()->whereKey($settings->id)->lockForUpdate()->firstOrFail();
                 $settings->update(array_merge(collect($data)->except([
                     'sections', 'trust_items', ...array_keys(self::MEDIA_FIELDS),
@@ -406,7 +405,7 @@ class WebsiteContentController extends Controller
                         $oldPaths[] = $testimonial->photo_path;
                         $file = $request->file("testimonials.$index.photo");
                         $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-                        $attributes['photo_path'] = $file->storeAs('website/testimonials', 'photo_'.Str::uuid().'.'.$extension, 'public');
+                        $attributes['photo_path'] = $uploads->store($file, 'website/testimonials', 'public', 'photo_'.Str::uuid());
                         $newPaths[] = $attributes['photo_path'];
                     }
                     if ($request->hasFile("testimonials.$index.proof")) {
@@ -415,7 +414,7 @@ class WebsiteContentController extends Controller
                         }
                         $file = $request->file("testimonials.$index.proof");
                         $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-                        $attributes['proof_path'] = $file->storeAs('website-testimonial-proofs', 'proof_'.Str::uuid().'.'.$extension, 'local');
+                        $attributes['proof_path'] = $uploads->store($file, 'website-testimonial-proofs', 'local', 'proof_'.Str::uuid());
                         $newPrivatePaths[] = $attributes['proof_path'];
                     }
 

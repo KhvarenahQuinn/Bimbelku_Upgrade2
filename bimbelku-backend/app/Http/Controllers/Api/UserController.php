@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\UploadSecurityService;
 use App\Support\AdminPermissionCatalog;
 use App\Support\EducationCatalog;
 use App\Support\PublicMedia;
@@ -74,7 +75,7 @@ class UserController extends Controller
     // UPDATE PROFILE (Nama, Foto, dan Sampul)
     // Endpoint: PUT /api/user
     // =================================================
-    public function update(Request $request)
+    public function update(Request $request, UploadSecurityService $uploads)
     {
         $user = Auth::user();
 
@@ -118,10 +119,10 @@ class UserController extends Controller
         $oldAvatar = $user->avatar;
         $oldCover = $user->profile_cover;
         $newAvatar = $request->hasFile('avatar')
-            ? $request->file('avatar')->store('avatars', 'public')
+            ? $uploads->store($request->file('avatar'), 'avatars', 'public')
             : null;
         $newCover = $request->hasFile('profile_cover')
-            ? $request->file('profile_cover')->store('profile_covers', 'public')
+            ? $uploads->store($request->file('profile_cover'), 'profile_covers', 'public')
             : null;
 
         try {

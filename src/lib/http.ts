@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 import { API_BASE_URL, STORAGE_BASE_URL } from "@/lib/apiBase";
-import { SESSION_MARKER, SESSION_UPDATED_EVENT, isAuthTransitionPath } from "@/lib/session";
+import { isLoggingOut, SESSION_MARKER, SESSION_UPDATED_EVENT, isAuthTransitionPath } from "@/lib/session";
 
 export { API_BASE_URL, STORAGE_BASE_URL } from "@/lib/apiBase";
 
@@ -258,6 +258,7 @@ const handleRejectedResponse = (error: unknown) => {
       error.response?.status === 401
       && storedToken
       && !ignoresExpiredSession
+      && !isLoggingOut()
       && !nonCriticalRequest
       && !authTransition
       && !tokenChanged

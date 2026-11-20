@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { notify } from "@/lib/notify";
-import { clearBrowserSession } from "@/lib/session";
+import { beginLogout, cancelLogout, clearBrowserSession } from "@/lib/session";
 
 export type LogoutScope = "current" | "all";
 
@@ -24,11 +24,13 @@ export function useLogout() {
     if (!approved) return;
 
     const { default: http, clearApiCache, getApiError } = await import("@/lib/http");
+    beginLogout();
 
     if (allDevices) {
       try {
         await http.post("/logout-all");
       } catch (error) {
+        cancelLogout();
         notify.error(getApiError(error, "Semua sesi belum dapat diputus. Coba lagi."));
         return;
       }
