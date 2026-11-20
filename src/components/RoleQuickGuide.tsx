@@ -552,11 +552,9 @@ function RoleQuickGuideContent({ role }: { role: Role }) {
 
   const tutorialOverlay = open && typeof document !== "undefined" ? (
     <div
-      className="fixed inset-0 z-[var(--layer-modal)] overflow-hidden overscroll-contain"
+      className="fixed inset-0 z-[var(--layer-modal)] touch-none overflow-hidden overscroll-none"
       data-tutorial-portal
       role="presentation"
-      onWheel={(event) => event.preventDefault()}
-      onTouchMove={(event) => event.preventDefault()}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) closeGuide();
       }}

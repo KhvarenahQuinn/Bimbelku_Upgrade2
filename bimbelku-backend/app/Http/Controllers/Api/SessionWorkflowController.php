@@ -466,14 +466,14 @@ class SessionWorkflowController extends Controller
             'session_reports' => SessionReport::query()
                 ->when($active, fn ($query) => $query->where('status', 'pending'))
                 ->when(! $active, fn ($query) => $query->where('status', '!=', 'pending'))
-                ->with(['booking.teacher', 'reportedStudent', 'reporter', 'teacher', 'reviewer'])
+                ->with(['booking.teacher', 'booking.participants.order', 'reportedStudent', 'reporter', 'teacher', 'reviewer'])
                 ->latest()
                 ->limit(200)
                 ->get(),
             'disputes' => BookingDispute::query()
                 ->when($active, fn ($query) => $query->where('status', 'pending'))
                 ->when(! $active, fn ($query) => $query->where('status', '!=', 'pending'))
-                ->with(['booking.teacher', 'booking.latestLearningProgressReport', 'student', 'resolver'])
+                ->with(['booking.teacher', 'booking.participants.order', 'booking.latestLearningProgressReport', 'student', 'resolver'])
                 ->latest()
                 ->limit(200)
                 ->get(),
@@ -711,12 +711,23 @@ class SessionWorkflowController extends Controller
         BookingDispute $bookingDispute
     ) {
         $isLapsedAppeal = ($bookingDispute->kind ?? 'completion_objection') === 'lapsed_session';
+        $appealRefundCap = $isLapsedAppeal
+            ? (float) ($bookingDispute->booking?->participants()
+                ->where('student_id', $bookingDispute->student_id)
+                ->whereHas('order', fn ($query) => $query->where('status', 'paid'))
+                ->value('amount') ?? 0)
+            : 0;
         $validated = $request->validate([
             'resolution' => ['required', Rule::in($isLapsedAppeal
                 ? ['full_refund', 'partial_refund', 'teacher_paid', 'student_refund']
                 : ['student_refund', 'teacher_paid'])],
             'notes' => ['required', 'string', 'min:20', 'max:2000'],
-            'refund_amount' => ['nullable', 'numeric', 'min:1'],
+            'refund_amount' => [
+                $isLapsedAppeal ? 'required_if:resolution,partial_refund' : 'nullable',
+                'numeric',
+                'min:1',
+                'max:'.$appealRefundCap,
+            ],
             'cost_bearer' => ['nullable', Rule::in(['tutor_share', 'platform'])],
         ]);
 
@@ -852,13 +863,21 @@ class SessionWorkflowController extends Controller
         SessionReport $sessionReport
     ) {
         $reportType = (string) $sessionReport->type;
+        $sessionRefundCap = (float) ($sessionReport->booking?->participants()
+            ->whereHas('order', fn ($query) => $query->where('status', 'paid'))
+            ->min('amount') ?? 0);
         $validated = $request->validate([
             'decision' => ['required', Rule::in(['accepted', 'rejected'])],
             'notes' => ['required', 'string', 'min:20', 'max:2000'],
             'refund_scope' => $reportType === 'teacher_emergency'
                 ? ['nullable', Rule::in(['none', 'session', 'remaining_package'])]
                 : ['nullable'],
-            'refund_amount' => ['nullable', 'numeric', 'min:1'],
+            'refund_amount' => [
+                $reportType === 'teacher_emergency' ? 'required_if:refund_scope,session' : 'nullable',
+                'numeric',
+                'min:1',
+                'max:'.$sessionRefundCap,
+            ],
             'cost_bearer' => ['nullable', Rule::in(['tutor_share', 'platform'])],
         ]);
 

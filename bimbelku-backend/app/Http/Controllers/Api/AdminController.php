@@ -20,6 +20,7 @@ use App\Models\TeacherProfile;
 use App\Models\TeacherSubject;
 use App\Models\User;
 use App\Services\CheapClassService;
+use App\Services\OneTimeCodeService;
 use App\Services\PackageCheckoutService;
 use App\Services\PaymentReconciliationService;
 use App\Services\TeacherMatchingService;
@@ -28,6 +29,7 @@ use App\Services\UploadSecurityService;
 use App\Services\XenditMoneyMovementService;
 use App\Support\AdminPermissionCatalog;
 use App\Support\PublicMedia;
+use App\Support\RegistrationEmailDomain;
 use App\Support\XenditPayoutChannelCatalog;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
@@ -312,6 +314,7 @@ class AdminController extends Controller
 
         $users = $query->paginate($perPage);
         $users->getCollection()->transform(function (User $u) {
+            $u->makeVisible('phone');
             if ($u->role === 'student') {
                 $u->setAttribute('student_birth_date', $u->date_of_birth?->toDateString());
                 $u->setAttribute('guardian', $u->guardian_consent_at ? [
@@ -352,6 +355,92 @@ class AdminController extends Controller
                 'last_page' => $users->lastPage(),
                 'per_page' => $users->perPage(),
                 'total' => $users->total(),
+            ],
+        ]);
+    }
+
+    public function updateUserDetails(Request $request, User $user, OneTimeCodeService $codes)
+    {
+        $request->merge([
+            'email' => mb_strtolower(trim((string) $request->input('email'))),
+            'name' => trim((string) $request->input('name')),
+            'phone' => trim((string) $request->input('phone')),
+        ]);
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255', 'regex:/\\pL/u', 'not_regex:/\\d/u'],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'phone' => ['required', 'string', 'max:24', 'regex:/^\\+?[0-9\\s().-]+$/'],
+            'guardian_name' => ['nullable', 'string', 'max:255', 'regex:/\\pL/u', 'not_regex:/\\d/u'],
+            'guardian_phone' => ['nullable', 'string', 'max:24', 'regex:/^\\+?[0-9\\s().-]+$/'],
+            'guardian_relationship' => ['nullable', Rule::in(['orang_tua', 'wali_keluarga', 'wali_resmi'])],
+        ]);
+        if (! RegistrationEmailDomain::allows($validated['email'])) {
+            return response()->json([
+                'message' => 'Gunakan email aktif yang umum atau email institusi pendidikan.',
+                'errors' => ['email' => ['Domain email tidak termasuk allowlist registrasi.']],
+            ], 422);
+        }
+        $normalizedPhone = preg_replace('/\\D+/', '', $validated['phone']);
+        if (! is_string($normalizedPhone) || ! preg_match('/^[0-9]{8,15}$/', $normalizedPhone)) {
+            return response()->json(['message' => 'Nomor telepon harus berisi 8–15 angka.'], 422);
+        }
+        $normalizedGuardianPhone = isset($validated['guardian_phone'])
+            ? preg_replace('/\\D+/', '', $validated['guardian_phone'])
+            : null;
+        if ($normalizedGuardianPhone !== null && $normalizedGuardianPhone !== ''
+            && ! preg_match('/^[0-9]{8,15}$/', $normalizedGuardianPhone)) {
+            return response()->json(['message' => 'Nomor wali harus berisi 8–15 angka.'], 422);
+        }
+
+        abort_if($user->role === 'admin', 403, 'Data admin dikelola melalui menu akun admin.');
+        $emailChanged = mb_strtolower((string) $user->email) !== $validated['email'];
+        DB::transaction(function () use ($user, $validated, $normalizedPhone, $normalizedGuardianPhone, &$emailChanged) {
+            $lockedUser = User::query()->lockForUpdate()->findOrFail($user->id);
+            $emailChanged = mb_strtolower((string) $lockedUser->email) !== $validated['email'];
+            $lockedUser->name = $validated['name'];
+            $lockedUser->email = $validated['email'];
+            $lockedUser->phone = $normalizedPhone;
+            if ($lockedUser->role === 'student') {
+                $lockedUser->guardian_name = $validated['guardian_name'] ?? null;
+                $lockedUser->guardian_phone = $normalizedGuardianPhone ?: null;
+                $lockedUser->guardian_relationship = $validated['guardian_relationship'] ?? null;
+            } elseif ($lockedUser->role === 'teacher') {
+                $lockedUser->teacherProfile()->update(['whatsapp_number' => $normalizedPhone]);
+            }
+            if ($emailChanged) {
+                $lockedUser->email_verified_at = null;
+                $lockedUser->email_verification_required_at = now();
+                $lockedUser->tokens()->delete();
+            }
+            $lockedUser->save();
+            $user->refresh();
+        }, 3);
+
+        $verificationDeliveryFailed = false;
+        if ($emailChanged) {
+            try {
+                $codes->send($user, OneTimeCodeService::EMAIL_VERIFICATION);
+            } catch (\Throwable $exception) {
+                report($exception);
+                $verificationDeliveryFailed = true;
+            }
+        }
+
+        return response()->json([
+            'message' => $emailChanged
+                ? ($verificationDeliveryFailed
+                    ? 'Data diperbarui dan semua sesi lama dihentikan. Pengiriman OTP ke email baru gagal; pengguna dapat meminta kirim ulang saat masuk.'
+                    : 'Data diperbarui dan semua sesi lama dihentikan. OTP verifikasi telah dikirim ke email baru.')
+                : 'Data pengguna berhasil diperbarui.',
+            'data' => [
+                'id' => $user->id,
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'phone' => $normalizedPhone,
+                'guardian_name' => $user->role === 'student' ? ($validated['guardian_name'] ?? null) : null,
+                'guardian_phone' => $user->role === 'student' ? $normalizedGuardianPhone : null,
+                'guardian_relationship' => $user->role === 'student' ? ($validated['guardian_relationship'] ?? null) : null,
+                'email_verification_required' => $emailChanged,
             ],
         ]);
     }

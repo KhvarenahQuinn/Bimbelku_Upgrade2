@@ -1,5 +1,6 @@
 import { notify } from "@/lib/notify";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Loader2, RefreshCw, ShieldAlert, Star } from "lucide-react";
 import TeacherLayout from "@/components/TeacherLayout";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,12 @@ export default function TeacherPerformance() {
           <div className="rounded-[2rem] bg-white p-16 text-center"><ShieldAlert className="mx-auto text-rose-300" /><p className="mt-3 font-black">Data belum dapat dimuat</p><Button onClick={() => void load()} className="mt-4 rounded-xl bg-indigo-600">Coba lagi</Button></div>
         ) : (
           <>
+            <section className="rounded-[1.7rem] border border-indigo-100 bg-indigo-50/70 p-4 sm:rounded-[2rem] sm:p-6">
+              <p className="text-xs font-black uppercase tracking-[.16em] text-indigo-600">Banding akun</p>
+              <h2 className="mt-2 text-lg font-black text-slate-900">Butuh peninjauan akun?</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Pengajuan banding akun belum tersedia melalui halaman ini. Hubungi admin lewat Pusat Bantuan agar status akun dan langkah selanjutnya dapat diperiksa.</p>
+              <Link to="/guru/bantuan" className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-4 text-sm font-black text-white hover:bg-indigo-700">Buka Pusat Bantuan</Link>
+            </section>
             <section className="grid gap-3 sm:grid-cols-2">
               <Metric label="Nilai rata-rata" value={data.rating.count ? data.rating.average.toFixed(1) + " / 5" : "-"} detail={data.rating.count + " penilaian terverifikasi"} />
               <Metric label="Status menerima kelas" value={data.suspended_until ? "Dijeda sementara" : "Aktif"} detail={data.suspended_until ? "Sampai " + dateTime(data.suspended_until) + " WIB" : "Tidak ada pembatasan respons"} />

@@ -14,6 +14,7 @@ use App\Services\PersistentLoginService;
 use App\Services\UploadSecurityService;
 use App\Support\AdminPermissionCatalog;
 use App\Support\EducationCatalog;
+use App\Support\RegistrationEmailDomain;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -46,29 +47,7 @@ class AuthController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => ['required', 'string', 'max:255', 'regex:/\pL/u', 'not_regex:/\d/u'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users', function (string $attribute, mixed $value, \Closure $fail): void {
-                $domain = mb_strtolower(substr((string) $value, strrpos((string) $value, '@') + 1));
-                $consumerDomains = [
-                    // Google
-                    'gmail.com', 'googlemail.com',
-                    // Yahoo
-                    'yahoo.com', 'yahoo.co.id', 'ymail.com', 'rocketmail.com',
-                    // Microsoft
-                    'outlook.com', 'outlook.co.id', 'hotmail.com', 'hotmail.co.id', 'live.com', 'msn.com',
-                    // Apple
-                    'icloud.com', 'me.com', 'mac.com',
-                    // Privacy / Others
-                    'proton.me', 'protonmail.com', 'pm.me',
-                    'zoho.com', 'zohomail.com',
-                    'aol.com', 'gmx.com', 'fastmail.com',
-                    'tuta.com', 'tutanota.com',
-                ];
-                $academicDomain = $domain === 'belajar.id'
-                    || str_ends_with($domain, '.belajar.id')
-                    || $domain === 'madrasah.kemenag.go.id'
-                    || str_ends_with($domain, '.madrasah.kemenag.go.id')
-                    || preg_match('/\.(ac|sch|edu)(\.[a-z]{2})?$/i', $domain) === 1;
-
-                if (! in_array($domain, $consumerDomains, true) && ! $academicDomain) {
+                if (! RegistrationEmailDomain::allows((string) $value)) {
                     $fail('Gunakan email aktif yang umum (Gmail, Yahoo, Outlook, iCloud, dll.) atau email institusi pendidikan (.ac.id, .sch.id, .edu, belajar.id, dll.).');
                 }
             }],

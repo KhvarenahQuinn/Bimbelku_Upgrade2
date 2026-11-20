@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import http, { getCached } from "@/lib/http";
+import { hasActiveBrowserSession, SESSION_UPDATED_EVENT } from "@/lib/session";
 
 type SessionActionKind =
   | "student_confirm_presence"
@@ -250,7 +251,7 @@ export default function SessionActionReminder() {
   })();
 
   const load = useCallback(async (force = false) => {
-    if (!localStorage.getItem("token") || !["student", "teacher", "admin"].includes(role)) {
+    if (!hasActiveBrowserSession() || !["student", "teacher", "admin"].includes(role)) {
       setAction(null);
       setPendingCount(0);
       setLoaded(true);
@@ -302,12 +303,25 @@ export default function SessionActionReminder() {
       void load(true);
     };
     const onFocus = () => refresh();
+    const onSessionUpdated = () => {
+      if (!hasActiveBrowserSession()) {
+        if (debounceTimer) window.clearTimeout(debounceTimer);
+        debounceTimer = null;
+        setAction(null);
+        setPendingCount(0);
+        setLoaded(true);
+        return;
+      }
+      refresh();
+    };
+    window.addEventListener(SESSION_UPDATED_EVENT, onSessionUpdated);
     window.addEventListener("bimbelku:data-changed", onDataChanged);
     window.addEventListener("focus", onFocus);
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
     }, 8_000);
     return () => {
+      window.removeEventListener(SESSION_UPDATED_EVENT, onSessionUpdated);
       window.removeEventListener("bimbelku:data-changed", onDataChanged);
       window.removeEventListener("focus", onFocus);
       window.clearInterval(timer);

@@ -4,7 +4,8 @@ Panduan ini mengumpulkan konfigurasi dan praktik perlindungan untuk aplikasi Bim
 
 ## Area penting
 
-- Pendaftaran membatasi domain email sesuai daftar provider konsumen dan institusi pendidikan.
+- Pendaftaran dan perubahan email oleh admin membatasi domain sesuai allowlist provider konsumen dan institusi pendidikan. Perubahan email menghapus sesi API aktif dan mewajibkan verifikasi ulang saat pengguna masuk kembali.
+- Perubahan data profil oleh admin dicatat pada rantai audit administrasi; admin utama tidak dapat diubah melalui endpoint pengguna.
 - Autentikasi dan akses dokumen memeriksa identitas serta izin pengguna.
 - Upload memeriksa MIME berdasarkan isi file, menolak konten aktif, dan memberi nama acak sebelum penyimpanan.
 - File privat tidak disajikan melalui disk publik. Respons file memuat `nosniff` dan `Content Security Policy` sandbox.

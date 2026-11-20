@@ -5,7 +5,7 @@ import { X, Clock, CreditCard, Loader2, AlertTriangle, ChevronRight, Sparkles } 
 import { Button } from "@/components/ui/button";
 import { setPendingPaymentWidgetVisible } from "@/lib/floatingLayer";
 import http, { getCached } from "@/lib/http";
-import { clearBrowserSession } from "@/lib/session";
+import { clearBrowserSession, hasActiveBrowserSession, SESSION_UPDATED_EVENT } from "@/lib/session";
 
 export default function PendingPaymentPopup() {
   const navigate = useNavigate();
@@ -29,8 +29,11 @@ export default function PendingPaymentPopup() {
 
   // 1. Cek Tagihan Aktif ke Backend (Dengan pengaman token)
   const checkActiveOrder = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!hasActiveBrowserSession()) {
+      setOrder(null);
+      setIsVisible(false);
+      return;
+    }
 
     try {
         let storedUser: { role?: string } | null = null;
@@ -47,10 +50,11 @@ export default function PendingPaymentPopup() {
             return;
         }
 
-        const response = await getCached("/active-order", {
+        const response = await getCached<any>("/active-order", {
           maxAgeMs: 10_000,
           force: true,
         });
+        if (!hasActiveBrowserSession()) return;
         if (response.data && response.data.order_id) {
             setOrder(response.data);
             setIsVisible(true);
@@ -65,6 +69,14 @@ export default function PendingPaymentPopup() {
   useEffect(() => {
     void checkActiveOrder();
     const handleDataChanged = () => void checkActiveOrder();
+    const handleSessionUpdated = () => {
+      if (hasActiveBrowserSession()) void checkActiveOrder();
+      else {
+        setOrder(null);
+        setIsVisible(false);
+      }
+    };
+    window.addEventListener(SESSION_UPDATED_EVENT, handleSessionUpdated);
     window.addEventListener("bimbelku:data-changed", handleDataChanged);
     // Cek berkala saat halaman aktif agar beban server tetap ringan
     const intervalCheck = setInterval(() => {
@@ -72,6 +84,7 @@ export default function PendingPaymentPopup() {
     }, 60000);
     return () => {
       clearInterval(intervalCheck);
+      window.removeEventListener(SESSION_UPDATED_EVENT, handleSessionUpdated);
       window.removeEventListener("bimbelku:data-changed", handleDataChanged);
     };
   }, []);
