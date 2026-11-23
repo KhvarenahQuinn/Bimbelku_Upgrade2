@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Booking;
 use App\Models\BookingRequest;
 use App\Models\LearningPackage;
 use App\Models\LearningTimeSlot;
@@ -10,6 +11,7 @@ use App\Models\PackagePlan;
 use App\Models\PackageSession;
 use App\Models\PackageSubject;
 use App\Models\TeacherAvailability;
+use App\Models\TeacherAvailabilityException;
 use App\Models\TeacherOffer;
 use App\Models\TeacherProfile;
 use App\Models\TeacherSubject;
@@ -288,6 +290,102 @@ class PackageRescheduleMatchingRetryTest extends TestCase
 
         $this->assertSame('pending', $offer->fresh()->status);
         $this->assertSame('teacher_pending', $request->fresh()->status);
+    }
+
+    public function test_losing_the_slot_between_acceptance_and_activation_keeps_sessions_out_of_the_calendar(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-30 09:00:00', 'Asia/Jakarta'));
+        [$student, $teacher, $package, $subject, $request] = $this->fixture('2026-10-05 14:00:00');
+        Sanctum::actingAs($student);
+        $this->postJson("/api/student/packages/{$package->id}/retry")->assertOk();
+
+        $offerA = TeacherOffer::query()
+            ->where('booking_request_id', $request->id)
+            ->where('teacher_id', $teacher->id)
+            ->where('status', 'pending')
+            ->firstOrFail();
+
+        // Mapel kedua di paket yang sama, dijadwalkan di pekan berikutnya, supaya
+        // aktivasi baru terjadi saat mapel ini diterima.
+        TeacherSubject::create([
+            'teacher_profile_id' => TeacherProfile::query()->where('user_id', $teacher->id)->value('id'),
+            'name' => 'Bahasa Inggris',
+            'levels' => ['SMA'],
+            'is_active' => true,
+            'is_online' => true,
+            'is_offline' => false,
+            'is_private_active' => true,
+        ]);
+        $secondSubject = PackageSubject::create([
+            'learning_package_id' => $package->id,
+            'subject_name' => 'Bahasa Inggris',
+            'allocated_sessions' => 1,
+            'learning_goal' => 'Latihan menulis paragraf.',
+            'unit_price' => 50000,
+            'subtotal_amount' => 50000,
+            'status' => 'matching',
+        ]);
+        $secondStart = Carbon::parse('2026-10-12 14:00:00', 'Asia/Jakarta');
+        PackageSession::create([
+            'package_subject_id' => $secondSubject->id,
+            'sequence' => 1,
+            'scheduled_start_at' => $secondStart,
+            'scheduled_end_at' => $secondStart->copy()->addHour(),
+            'status' => 'planned',
+        ]);
+        $secondRequest = BookingRequest::create([
+            'student_id' => $student->id,
+            'package_subject_id' => $secondSubject->id,
+            'subject_name' => 'Bahasa Inggris',
+            'education_level' => 'SMA',
+            'grade' => 'Kelas 12',
+            'learning_mode' => 'online',
+            'class_type' => 'private',
+            'scheduled_date' => $secondStart->toDateString(),
+            'start_time' => $secondStart->format('H:i:s'),
+            'end_time' => $secondStart->copy()->addHour()->format('H:i:s'),
+            'duration_hours' => 1,
+            'status' => 'matching',
+            'hourly_rate' => 50000,
+            'total_amount' => 50000,
+            'search_started_at' => now(),
+            'search_expires_at' => now()->addHours(24),
+        ]);
+        app(TeacherMatchingService::class)->dispatchNextOffer($secondRequest);
+
+        Sanctum::actingAs($teacher);
+        // Mapel pertama diterima, paket belum aktif karena mapel kedua belum.
+        $this->postJson("/api/teacher/offers/{$offerA->id}/accept")
+            ->assertOk()
+            ->assertJsonPath('data.package_activated', false);
+
+        // Tutor kemudian memblokir tanggal sesi pertama.
+        TeacherAvailabilityException::create([
+            'user_id' => $teacher->id,
+            'start_date' => '2026-10-05',
+            'end_date' => '2026-10-05',
+            'reason' => 'Acara keluarga.',
+        ]);
+
+        $offerB = TeacherOffer::query()
+            ->where('booking_request_id', $secondRequest->id)
+            ->where('teacher_id', $teacher->id)
+            ->where('status', 'pending')
+            ->firstOrFail();
+        $this->postJson("/api/teacher/offers/{$offerB->id}/accept")
+            ->assertOk()
+            ->assertJsonPath('data.package_activated', false);
+
+        // Sesi pertama tidak boleh lahir di slot yang sudah diblokir.
+        $this->assertSame(0, Booking::query()->where('booking_request_id', $request->id)->count());
+        $this->assertSame('teacher_pending', $subject->fresh()->status);
+        $this->assertNull($subject->fresh()->assigned_teacher_id);
+        $this->assertSame('matching', $request->fresh()->status);
+        $this->assertSame('matching', $package->fresh()->status);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $student->id,
+            'title' => 'Jadwal tutor berubah',
+        ]);
     }
 
     private function addEligibleTeacher(

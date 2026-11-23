@@ -372,12 +372,12 @@ class PackageCheckoutService
                 return ['package' => $package->fresh('subjects.assignedTeacher'), 'package_activated' => false];
             }
 
-            $this->activateMatchedPackage($package);
+            $activated = $this->activateMatchedPackage($package);
 
             return [
                 'package' => $package->fresh(['subjects.assignedTeacher', 'orders']),
                 'order' => $package->orders()->latest()->first(),
-                'package_activated' => true,
+                'package_activated' => $activated,
             ];
         }, 3);
     }
@@ -676,7 +676,7 @@ class PackageCheckoutService
         return $order->fresh(['booking', 'learningPackage']);
     }
 
-    private function activateMatchedPackage(LearningPackage $package): void
+    private function activateMatchedPackage(LearningPackage $package): bool
     {
         $package->load([
             'student', 'plan', 'subjects.sessions', 'subjects.bookingRequest',
@@ -684,6 +684,13 @@ class PackageCheckoutService
         ]);
         $order = $package->orders()->where('status', 'paid')->lockForUpdate()->latest()->first();
         abort_unless($order, 422, 'Pembayaran paket belum diterima.');
+
+        // Ketersediaan tutor bisa berubah setelah penawaran diterima. Jangan
+        // sampai sesi lahir ke slot yang sudah diblokir: mapel yang bentrok
+        // dikembalikan ke pencarian tutor lebih dulu.
+        if ($this->releaseUnavailableSubjects($package)->isNotEmpty()) {
+            return false;
+        }
 
         $commissionPercent = 20.0;
         $durationHours = (int) ($package->duration_hours ?? 1);
@@ -821,6 +828,92 @@ class PackageCheckoutService
                     ]
                 );
             });
+
+        return true;
+    }
+
+    /**
+     * Mapel yang tutornya sudah menerima penawaran tetapi belum diaktifkan bisa
+     * kehilangan slot karena tutor mengubah ketersediaan atau menambah tanggal
+     * tidak tersedia. Mapel seperti itu dikembalikan ke pencarian tutor, bukan
+     * diaktifkan dengan jadwal yang bentrok.
+     */
+    private function releaseUnavailableSubjects(LearningPackage $package)
+    {
+        $released = collect();
+
+        foreach ($package->subjects as $subject) {
+            $teacher = $subject->assignedTeacher;
+            if (! $subject->assigned_teacher_id || ! $teacher) {
+                continue;
+            }
+
+            $unavailable = $subject->sessions->contains(fn (PackageSession $session) => ! $this->matchingService->teacherAvailableAt(
+                $teacher,
+                $session->scheduled_start_at,
+                $session->scheduled_end_at
+            ));
+            if (! $unavailable) {
+                continue;
+            }
+
+            $request = $subject->bookingRequest;
+            $subject->update(['status' => 'teacher_pending', 'assigned_teacher_id' => null]);
+            $request?->forceFill([
+                'status' => 'matching',
+                'matched_teacher_id' => null,
+                'teacher_response_deadline' => null,
+                'teacher_decision_deadline' => null,
+                'search_started_at' => now(),
+                'search_expires_at' => now()->addDay(),
+                'next_matching_at' => now(),
+            ])->save();
+            if ($request) {
+                TeacherOffer::query()
+                    ->where('booking_request_id', $request->id)
+                    ->where('status', 'accepted')
+                    ->update([
+                        'status' => 'cancelled',
+                        'rejection_reason' => 'Jadwal tutor tidak lagi tersedia setelah penawaran diterima.',
+                        'no_response_penalty_applied' => false,
+                    ]);
+            }
+            PackageRenewal::query()
+                ->where('new_package_id', $package->id)
+                ->where('old_teacher_id', $teacher->id)
+                ->update(['status' => 'requested']);
+
+            Notification::updateOrCreate(
+                ['unique_key' => "package-slot-unavailable:{$subject->id}:{$package->student_id}"],
+                [
+                    'user_id' => $package->student_id,
+                    'title' => 'Jadwal tutor berubah',
+                    'message' => "Ketersediaan tutor untuk {$subject->subject_name} berubah, jadi paket {$package->package_code} belum dapat diaktifkan. Sistem mencari tutor pengganti.",
+                    'type' => 'warning',
+                    'target_url' => '/student/packages',
+                    'is_read' => false,
+                ]
+            );
+            Notification::updateOrCreate(
+                ['unique_key' => "package-slot-released:{$subject->id}:{$teacher->id}"],
+                [
+                    'user_id' => $teacher->id,
+                    'title' => 'Paket dilepas dari jadwal Anda',
+                    'message' => "Jadwal {$subject->subject_name} pada paket {$package->package_code} dilepas karena slotnya sudah tidak tersedia di ketersediaan Anda.",
+                    'type' => 'info',
+                    'target_url' => '/guru/kelas',
+                    'is_read' => false,
+                ]
+            );
+
+            $released->push($subject);
+        }
+
+        if ($released->isNotEmpty()) {
+            $package->update(['status' => 'matching']);
+        }
+
+        return $released;
     }
 
     private function assertTarget(?array $targets, string|int $value, string $message): void

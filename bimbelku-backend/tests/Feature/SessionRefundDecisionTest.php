@@ -36,6 +36,11 @@ class SessionRefundDecisionTest extends TestCase
     {
         $fixture = SessionFinanceFixture::make($this, 2);
         $booking = $fixture['first']['booking'];
+        // Laporan darurat hanya masuk akal saat sesi sudah berjalan.
+        $booking->forceFill([
+            'start_at' => now()->subMinutes(20),
+            'end_at' => now()->addMinutes(40),
+        ])->save();
         Sanctum::actingAs($fixture['teacher']);
 
         $this->postJson("/api/teacher/bookings/{$booking->id}/emergency", [
@@ -54,6 +59,43 @@ class SessionRefundDecisionTest extends TestCase
         $this->assertSame('paid', $booking->participants()->firstOrFail()->status);
         $this->assertSame('paid', $fixture['order']->fresh()->status);
         $this->assertSame(0, Refund::query()->count());
+    }
+
+    public function test_emergency_report_cannot_freeze_a_session_that_has_not_started(): void
+    {
+        $fixture = SessionFinanceFixture::make($this, 1);
+        $booking = $fixture['first']['booking'];
+        Sanctum::actingAs($fixture['teacher']);
+
+        $payload = [
+            'incident_type' => 'keluarga',
+            'chronology' => 'Tutor mengalami musibah keluarga mendadak dan tidak dapat mengajar pada jam tersebut.',
+            'incident_at' => now()->toDateTimeString(),
+            'incident_location' => 'Yogyakarta',
+            'impact' => 'Sesi tidak dapat dilaksanakan oleh tutor.',
+            'evidence' => UploadedFile::fake()->image('bukti.jpg', 8, 8),
+        ];
+
+        $this->postJson("/api/teacher/bookings/{$booking->id}/emergency", $payload)
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Laporan keadaan darurat dapat dibuat mulai 15 menit sebelum sesi dimulai.');
+
+        $this->assertSame('confirmed', $booking->fresh()->status);
+        $this->assertSame(0, SessionReport::query()->count());
+
+        // Sesi berjalan, tetapi waktu kejadian yang diklaim berada di luar jendela sesi.
+        $booking->forceFill([
+            'start_at' => now()->subMinutes(20),
+            'end_at' => now()->addMinutes(40),
+        ])->save();
+        $this->postJson("/api/teacher/bookings/{$booking->id}/emergency", [
+            ...$payload,
+            'incident_at' => now()->subHours(5)->toDateTimeString(),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Waktu kejadian harus berada di dalam jendela sesi ini.');
+
+        $this->assertSame(0, SessionReport::query()->count());
     }
 
     public function test_emergency_decision_without_refund_pays_the_tutor_normally(): void

@@ -126,7 +126,31 @@ class AppServiceProvider extends ServiceProvider
 
         // Public authentication. Each endpoint owns a separate IP bucket.
         $registerIsolatedLimiter('auth-register', 5, 'Pendaftaran dilakukan terlalu sering. Tunggu :seconds detik lalu coba lagi.');
-        $registerIsolatedLimiter('auth-login', 10, 'Percobaan login terlalu sering. Tunggu :seconds detik lalu coba lagi.');
+        // Login publik: satu bucket per IP menahan penyemutan massal, dan bucket
+        // tambahan per IP+email menahan tebakan paralel pada satu akun tanpa
+        // memblokir rekan yang kebetulan berbagi IP.
+        RateLimiter::for('auth-login', function (Request $request) {
+            $email = mb_strtolower(trim((string) $request->input('email')));
+            $message = 'Percobaan login terlalu sering. Tunggu :seconds detik lalu coba lagi.';
+            $response = function (Request $request, array $headers) use ($message) {
+                $retryAfter = max(1, (int) ($headers['Retry-After'] ?? 60));
+
+                return response()->json([
+                    'message' => str_replace(':seconds', (string) $retryAfter, $message),
+                    'error_code' => 'auth_login_rate_limited',
+                    'retry_after_seconds' => $retryAfter,
+                ], 429, $headers);
+            };
+
+            return [
+                Limit::perMinute(10)->by('auth-login:ip:'.(string) $request->ip())->response($response),
+                // Google OAuth juga memakai limiter ini tanpa email; bucket kedua
+                // hanya masuk akal saat ada kredensial yang mau ditebak.
+                ...($email !== ''
+                    ? [Limit::perMinute(5)->by('auth-login:cred:'.(string) $request->ip().':'.$email)->response($response)]
+                    : []),
+            ];
+        });
 
         // Portal admin: kunci gabungan IP + email. Satu IP yang menebak banyak
         // email tetap kena batas, dan satu email yang diserang dari banyak IP

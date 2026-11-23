@@ -64,7 +64,7 @@ use App\Http\Controllers\Api\XenditPaymentController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/register', [AuthController::class, 'register'])->middleware(['throttle:auth-register', 'turnstile']);
-Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
+Route::post('/login', [AuthController::class, 'login'])->middleware(['throttle:auth-login', 'turnstile']);
 Route::post('/login/admin', [AuthController::class, 'adminLogin'])->middleware('throttle:auth-login-admin');
 Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect'])->middleware('throttle:auth-login');
 Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->middleware('throttle:auth-login');
