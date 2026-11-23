@@ -70,9 +70,13 @@ class XenditPaymentController extends Controller
                     'code' => 'wallet_not_supported',
                 ], 422);
             }
-            if (! $reusesExistingHold && $quote['external_due'] <= $quote['usable_amount'] + 0.009) {
+            // Hanya tagihan yang benar-benar tertutup penuh yang tidak punya
+            // sisa untuk diinvoicekan lewat Xendit. Membandingkan dengan
+            // `usable_amount` menolak setiap tagihan yang saldonya menutupi
+            // separuh nilai tagihan atau lebih.
+            if ($quote['external_due'] <= 0.009) {
                 return response()->json([
-                    'message' => 'Saldo BimbelKu menutupi seluruh tagihan. Selesaikan pembayaran memakai saldo tanpa Xendit.',
+                    'message' => 'Sisa tagihan sudah tertutup penuh oleh Saldo BimbelKu.',
                     'code' => 'wallet_covers_full_invoice',
                 ], 422);
             }

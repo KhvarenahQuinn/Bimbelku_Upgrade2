@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Support\XenditPayoutChannelCatalog;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
@@ -163,9 +164,23 @@ class TeacherPayoutService
         $verification = $this->assertVerification($teacher, $profile, $verification);
         $verificationMethod = (string) ($verification['method'] ?? 'otp');
 
+        // Faktor kedua pencairan diperiksa untuk SETIAP pencairan, termasuk
+        // saat rekening tersimpan dipakai ulang. Verifikasi dijalankan sebelum
+        // transaksi pencairan: OneTimeCodeService menaikkan penghitung
+        // percobaan di dalam savepoint-nya sendiri, sehingga rollback transaksi
+        // luar akan menghapus penghitung itu dan membuka tebakan OTP tanpa
+        // batas. Mutasi rekening dan reservasi dana tetap di dalam transaksi.
+        if ($verificationMethod === 'otp') {
+            $this->oneTimeCodes->verify(
+                $teacher,
+                OneTimeCodeService::PAYOUT_BANK_CHANGE,
+                (string) ($verification['code'] ?? '')
+            );
+        }
+
         $previousBank = [];
         try {
-            $records = DB::transaction(function () use ($teacher, $requestedAmount, $channelCode, $bankDetails, $verification, $verificationMethod, &$previousBank) {
+            $records = DB::transaction(function () use ($teacher, $requestedAmount, $channelCode, $bankDetails, &$previousBank) {
                 $profile = TeacherProfile::query()->where('user_id', $teacher->id)->lockForUpdate()->first();
                 if (! $profile) {
                     $profile = TeacherProfile::query()->create(['user_id' => $teacher->id]);
@@ -177,13 +192,6 @@ class TeacherPayoutService
                 ]);
                 if (is_array($bankDetails) && filled($bankDetails['account_number'] ?? null)) {
                     $this->assertBankNameMatches($teacher, $bankDetails);
-                    if ($verificationMethod === 'otp') {
-                        $this->oneTimeCodes->verify(
-                            $teacher,
-                            OneTimeCodeService::PAYOUT_BANK_CHANGE,
-                            (string) ($verification['code'] ?? '')
-                        );
-                    }
                     [$profile, $bankChangedNow] = $this->storeBankDetails($teacher, $profile, $bankDetails);
                 }
                 // A hold created by an earlier request still blocks this payout; a
@@ -444,7 +452,10 @@ class TeacherPayoutService
         $method = $profile?->payout_verification_method ?: 'otp';
         $payload = [
             'method' => $method,
-            'code' => $verification['otp'] ?? $verification['code'] ?? null,
+            // Hanya kunci `otp` yang tervalidasi (size:6) yang diterima. Alias
+            // `code` tidak divalidasi oleh controller sehingga tidak boleh
+            // menjadi jalur lolos pemeriksaan kode.
+            'code' => $verification['otp'] ?? null,
             'current_password' => $verification['password'] ?? $verification['current_password'] ?? null,
         ];
 

@@ -13,6 +13,7 @@ use App\Models\TeacherProfile;
 use App\Models\TeacherSubject;
 use App\Models\User;
 use App\Services\BankAccountNameVerifier;
+use App\Services\OneTimeCodeService;
 use App\Services\TeacherMatchingService;
 use App\Services\TeacherOfferReleaseService;
 use App\Services\TeacherPayoutService;
@@ -548,14 +549,17 @@ class TeacherController extends Controller
         ]);
     }
 
-    public function updateBank(Request $request)
+    public function updateBank(Request $request, OneTimeCodeService $oneTimeCodes)
     {
         $validated = $request->validate([
             'payout_channel_code' => ['nullable', 'required_without:bank_name', 'string', Rule::in(XenditPayoutChannelCatalog::codes())],
             'bank_name' => ['nullable', 'required_without:payout_channel_code', 'string', 'max:100', 'regex:/\pL/u'],
             'account_number' => ['required', 'string', 'min:8', 'max:20', 'regex:/^[0-9]+$/'],
             'account_name' => ['required', 'string', 'max:150', 'regex:/\pL/u', 'not_regex:/\d/u'],
-            'current_password' => ['required', 'string', 'max:200'],
+            'current_password' => ['nullable', 'string', 'max:200'],
+            'otp' => ['nullable', 'string', 'size:6'],
+            'verification' => ['nullable', 'array'],
+            'verification.otp' => ['nullable', 'string', 'size:6'],
         ], [
             'account_number.min' => 'Nomor rekening atau e-wallet minimal 8 digit.',
             'account_number.max' => 'Nomor rekening atau e-wallet maksimal 20 digit.',
@@ -565,8 +569,22 @@ class TeacherController extends Controller
         ]);
 
         $user = Auth::user();
-        if (! Hash::check($validated['current_password'], $user->password)) {
-            return response()->json(['message' => 'Kata sandi akun tidak sesuai.'], 422);
+        $profile = TeacherProfile::query()->firstOrCreate(['user_id' => $user->id]);
+        // Rekening hanya berubah setelah faktor kedua untuk metode yang dipilih
+        // tutor lulus — kebijakan yang sama dengan TeacherPayoutService. Kata
+        // sandi saja tidak boleh melewati akun yang memakai OTP.
+        $method = $profile->payout_verification_method ?: 'otp';
+        $code = (string) ($validated['otp'] ?? $validated['verification']['otp'] ?? '');
+        if ($method === 'password') {
+            if (blank($validated['current_password'] ?? null)
+                || ! Hash::check((string) $validated['current_password'], (string) $user->password)) {
+                return response()->json(['message' => 'Kata sandi akun tidak sesuai.'], 422);
+            }
+        } else {
+            if (blank($code)) {
+                return response()->json(['message' => 'Kode verifikasi email wajib diisi sebelum mengubah rekening.'], 422);
+            }
+            $oneTimeCodes->verify($user, OneTimeCodeService::PAYOUT_BANK_CHANGE, $code);
         }
         $normalizeName = static fn (string $name): string => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $name) ?? $name));
         if ($normalizeName($validated['account_name']) !== $normalizeName((string) $user->name)) {
@@ -585,12 +603,13 @@ class TeacherController extends Controller
         $result = DB::transaction(function () use (
             $user,
             $validated,
+            $method,
             $normalizedAccount,
             $holdUntil, $channel,
             $channelCode
         ) {
             $lockedUser = $user->newQuery()->lockForUpdate()->findOrFail($user->id);
-            if (! Hash::check($validated['current_password'], $lockedUser->password)) {
+            if ($method === 'password' && ! Hash::check((string) ($validated['current_password'] ?? ''), (string) $lockedUser->password)) {
                 abort(422, 'Kata sandi akun tidak sesuai.');
             }
 
