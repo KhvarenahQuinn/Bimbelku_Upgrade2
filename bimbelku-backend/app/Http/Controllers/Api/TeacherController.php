@@ -422,13 +422,41 @@ class TeacherController extends Controller
                 'levels' => $levels,
                 'is_online' => (bool) $item['is_online'],
                 'is_offline' => (bool) $item['is_offline'],
-                'is_private_active' => (bool) ($item['is_private_active'] ?? true),
-                'is_group_active' => (bool) ($item['is_group_active'] ?? false),
+                // null berarti klien tidak mengirim flag ini; nilainya diwarisi
+                // dari baris lama atau default registrasi, bukan dianggap false.
+                'is_private_active' => array_key_exists('is_private_active', $item)
+                    ? (bool) $item['is_private_active']
+                    : null,
+                'is_group_active' => array_key_exists('is_group_active', $item)
+                    ? (bool) $item['is_group_active']
+                    : null,
             ];
         }
 
         $user = Auth::user();
         $profile = $user->teacherProfile ?: TeacherProfile::firstOrCreate(['user_id' => $user->id]);
+        $previousBySubject = $profile->subjects()->get()->keyBy(
+            fn (TeacherSubject $subject) => (int) ($subject->curriculum_subject_id ?? 0)
+                .':'.mb_strtolower(trim((string) $subject->name))
+        );
+        // Simpan-replace seluruh baris mapel membuat flag yang tidak dikirim
+        // klien hilang. Pertahankan nilai lama, dan untuk mapel baru ikuti
+        // default registrasi (kedua mode aktif).
+        $normalizedSubjects = collect($normalizedSubjects)
+            ->map(function (array $subject) use ($previousBySubject) {
+                $previous = $previousBySubject->get(
+                    $subject['curriculum_subject_id'].':'.mb_strtolower(trim((string) $subject['name']))
+                );
+                if ($subject['is_private_active'] === null) {
+                    $subject['is_private_active'] = $previous ? (bool) $previous->is_private_active : true;
+                }
+                if ($subject['is_group_active'] === null) {
+                    $subject['is_group_active'] = $previous ? (bool) $previous->is_group_active : true;
+                }
+
+                return $subject;
+            })
+            ->all();
         $reverificationRequired = false;
         $matchingEligibilityChanged = false;
 

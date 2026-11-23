@@ -1103,9 +1103,9 @@ export default function PaymentPage() {
                 <div className="text-left sm:text-right">
                   {Boolean(order.discountAmount && order.discountAmount > 0) && (
                     <div className="mb-1 flex items-center gap-2 sm:justify-end">
-                      <span className="text-xs font-semibold text-slate-500 line-through">{rupiah(order.subtotalAmount || order.price)}</span>
+                      <span className="text-xs font-semibold text-slate-500 line-through">{rupiah(order.subtotalAmount || ((order.price || 0) + (order.discountAmount || 0)))}</span>
                       <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-700">
-                        {Math.round(((order.discountAmount || 0) / Math.max(order.subtotalAmount || order.price, 1)) * 100)}%
+                        {Math.round(((order.discountAmount || 0) / Math.max(order.subtotalAmount || ((order.price || 0) + (order.discountAmount || 0)), 1)) * 100)}%
                       </span>
                     </div>
                   )}

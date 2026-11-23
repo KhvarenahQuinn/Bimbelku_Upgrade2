@@ -46,6 +46,23 @@ class StuckPayoutAlertTest extends TestCase
         $this->assertSame(0, Notification::query()->where('unique_key', 'like', 'payout-stuck:%')->count());
     }
 
+    public function test_every_active_admin_is_alerted_and_inactive_admins_are_skipped(): void
+    {
+        $first = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        $second = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        $inactive = User::factory()->create(['role' => 'admin', 'status' => 'inactive']);
+        $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active']);
+        $this->payout($teacher, 'processing', now()->subMinutes(45));
+
+        $this->artisan('payments:alert-stuck-payouts')->assertSuccessful();
+        $this->artisan('payments:alert-stuck-payouts')->assertSuccessful();
+
+        $alerts = Notification::query()->where('unique_key', 'like', 'payout-stuck:%')->get();
+        $this->assertCount(2, $alerts);
+        $this->assertEqualsCanonicalizing([$first->id, $second->id], $alerts->pluck('user_id')->all());
+        $this->assertNotContains($inactive->id, $alerts->pluck('user_id')->all());
+    }
+
     private function payout(User $teacher, string $status, $createdAt): Payout
     {
         $payout = new Payout([

@@ -197,6 +197,8 @@ function ClassCard({ item, working, onJoin, onCancel }: { item: CheapClass; work
   const payable = enrollment && ["seat_held", "payment_rejected", "partially_paid"].includes(enrollment.status) && ["pending", "rejected", "partially_paid"].includes(enrollment.order_status || "");
   const needsProofReview = enrollment?.status === "payment_submitted";
   const hasAcceptedPayment = enrollment?.status === "confirmed" && enrollment?.order_status === "paid";
+  const normalPackagePrice = item.price_per_session * item.session_count;
+  const hasPriceDiscount = normalPackagePrice > item.price_per_student + 0.009;
   const hasLearningAccess = ["confirmed", "completed"].includes(item.status) && hasAcceptedPayment;
   const waitingForClassConfirmation = hasAcceptedPayment && !["confirmed", "completed"].includes(item.status);
   const sessions = item.sessions.length ? item.sessions : [{ id: item.id, session_number: 1, starts_at: item.starts_at, ends_at: item.ends_at, status: "scheduled" }];
@@ -221,13 +223,13 @@ function ClassCard({ item, working, onJoin, onCancel }: { item: CheapClass; work
 
       <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-indigo-600 shadow-sm"><CreditCard size={18} /></span><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-indigo-500">Sekali bayar</p><p className="mt-0.5 text-lg font-black text-slate-900">{money(item.price_per_student)}</p></div></div>
+          <div className="flex min-w-0 items-center gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-indigo-600 shadow-sm"><CreditCard size={18} /></span><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-indigo-500">Sekali bayar</p><p className="mt-0.5 flex flex-wrap items-baseline gap-2"><span className="text-lg font-black text-slate-900">{money(item.price_per_student)}</span>{hasPriceDiscount && <span className="text-xs font-semibold text-slate-400 line-through">{money(normalPackagePrice)}</span>}</p></div></div>
           <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-indigo-700 shadow-sm">{item.session_count} sesi</span>
         </div>
         <p className="mt-3 text-xs font-semibold leading-5 text-indigo-800">Satu pembayaran mencakup seluruh paket. Tidak ada tagihan baru pada sesi berikutnya.</p>
       </div>
 
-      {item.custom_price_per_student !== null && item.custom_price_per_student !== undefined && <div className="rounded-xl bg-emerald-50 p-3 text-xs font-bold text-emerald-800"><span className="mr-2 text-slate-400 line-through">{money(item.price_per_session * item.session_count)}</span>Harga custom admin: {money(item.price_per_student)}</div>}
+      {item.custom_price_per_student !== null && item.custom_price_per_student !== undefined && <div className="rounded-xl bg-emerald-50 p-3 text-xs font-bold text-emerald-800">Harga custom admin: {money(item.price_per_student)}</div>}
 
       <div className="rounded-2xl border border-indigo-100 bg-indigo-50/45 p-4">
         <div className="flex items-center justify-between gap-3"><p className="text-xs font-black text-indigo-950">{sessions.length > 1 ? "Jadwal semua sesi" : "Jadwal sesi"}</p><span className="text-[10px] font-black uppercase tracking-wider text-indigo-500">{sessions.length} sesi</span></div>

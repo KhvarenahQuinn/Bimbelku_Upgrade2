@@ -103,7 +103,7 @@ const initialState: ProfileState = {
   userStatus: "",
   documentUrls: {},
   documentFiles: {},
-  teachingSubjects: [{ name: "", levels: [], is_online: true, is_offline: true, is_private_active: true, is_group_active: false }],
+  teachingSubjects: [{ name: "", levels: [], is_online: true, is_offline: true, is_private_active: true, is_group_active: true }],
 };
 
 export default function TeacherProfile() {
@@ -148,9 +148,9 @@ export default function TeacherProfile() {
             is_online: subject?.is_online ?? true,
             is_offline: subject?.is_offline ?? true,
             is_private_active: subject?.is_private_active ?? true,
-            is_group_active: subject?.is_group_active ?? false,
+            is_group_active: subject?.is_group_active ?? true,
           }))
-        : [{ name: "", levels: [], is_online: true, is_offline: true, is_private_active: true, is_group_active: false }];
+        : [{ name: "", levels: [], is_online: true, is_offline: true, is_private_active: true, is_group_active: true }];
       setProfile({
         name: sanitizePersonName(user.name || ""),
         email: user.email || "",
@@ -411,7 +411,7 @@ export default function TeacherProfile() {
         ...current,
         teachingSubjects: [
           ...current.teachingSubjects,
-          { name: "", levels: [], is_online: true, is_offline: true, is_private_active: true, is_group_active: false },
+          { name: "", levels: [], is_online: true, is_offline: true, is_private_active: true, is_group_active: true },
         ],
       };
     });
