@@ -10,6 +10,7 @@ use App\Models\PackageRenewal;
 use App\Models\ScheduleChangeRequest;
 use App\Models\Setting;
 use App\Models\TeacherOffer;
+use App\Models\User;
 use App\Services\CheapClassService;
 use App\Services\PaymentReconciliationService;
 use App\Services\TeacherMatchingService;
@@ -363,6 +364,9 @@ class ExpireBookingWorkflow extends Command
             $locked->update([
                 'status' => 'admin_review_required',
                 'admin_review_required_at' => now(),
+                // Jangan biarkan hak tutor terlihat siap cair saat sesi masih
+                // menunggu keputusan admin.
+                'payout_status' => 'locked',
             ]);
 
             $locked->participants
@@ -371,6 +375,48 @@ class ExpireBookingWorkflow extends Command
                     $participant->update(['status' => 'admin_review_required']);
                     $participant->bookingRequest?->update(['status' => 'admin_review_required']);
                 });
+
+            // Sesi yang telat disetujui tidak boleh mengendap tanpa kabar.
+            $message = 'Sesi melewati batas persetujuan murid dan sekarang menunggu keputusan admin. Hak tutor ditahan sampai admin memutuskan.';
+            Notification::updateOrCreate(
+                ['unique_key' => "session-review-lapsed:{$locked->id}:{$locked->teacher_id}"],
+                [
+                    'user_id' => $locked->teacher_id,
+                    'title' => 'Sesi menunggu pemeriksaan admin',
+                    'message' => $message,
+                    'type' => 'warning',
+                    'target_url' => '/guru/kelas',
+                    'is_read' => false,
+                ]
+            );
+            $locked->participants
+                ->pluck('student_id')
+                ->filter()
+                ->unique()
+                ->each(fn ($studentId) => Notification::updateOrCreate(
+                    ['unique_key' => "session-review-lapsed:{$locked->id}:{$studentId}"],
+                    [
+                        'user_id' => (int) $studentId,
+                        'title' => 'Sesi menunggu pemeriksaan admin',
+                        'message' => $message,
+                        'type' => 'warning',
+                        'target_url' => '/student/history',
+                        'is_read' => false,
+                    ]
+                ));
+            User::query()->where('role', 'admin')->pluck('id')->each(
+                fn ($adminId) => Notification::updateOrCreate(
+                    ['unique_key' => "session-review-lapsed:{$locked->id}:admin:{$adminId}"],
+                    [
+                        'user_id' => (int) $adminId,
+                        'title' => 'Sesi telat disetujui',
+                        'message' => "Sesi #{$locked->id} lewat batas persetujuan murid. Periksa dan putuskan.",
+                        'type' => 'warning',
+                        'target_url' => '/admin/sessions',
+                        'is_read' => false,
+                    ]
+                )
+            );
 
             return true;
         });

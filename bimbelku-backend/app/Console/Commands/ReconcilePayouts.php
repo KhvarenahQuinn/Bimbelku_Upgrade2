@@ -50,7 +50,40 @@ class ReconcilePayouts extends Command
                         ->update(['gateway_last_checked_at' => now()]);
                 }
             });
-        $this->info("Pencairan diperiksa: {$checked}; gagal: {$failed}.");
+
+        // Payout yang POST-nya timeout tidak punya gateway_payout_id sehingga
+        // tidak pernah masuk pemeriksaan di atas. Kirim ulang dengan referensi
+        // yang sama; idempotency-key membuat gateway tidak mentransfer dua kali.
+        $resumed = 0;
+        Payout::query()
+            ->where('status', 'processing')
+            ->whereNull('gateway_payout_id')
+            ->where('gateway_status', 'SUBMITTING')
+            ->whereNotNull('gateway_reference_id')
+            ->where('created_at', '<=', now()->subMinutes(5))
+            ->where(fn ($query) => $query->whereNull('gateway_last_checked_at')
+                ->orWhere('gateway_last_checked_at', '<=', now()->subMinutes(10)))
+            ->orderBy('gateway_last_checked_at')
+            ->orderBy('id')
+            ->limit($limit)
+            ->get()
+            ->each(function (Payout $payout) use ($gateway, &$resumed, &$failed, $startedAt) {
+                if (microtime(true) - $startedAt >= 45) {
+                    return false;
+                }
+                try {
+                    $gateway->resumePayoutSubmission($payout);
+                    $resumed++;
+                } catch (\Throwable $exception) {
+                    report($exception);
+                    $failed++;
+                } finally {
+                    DB::table('payouts')->where('id', $payout->id)
+                        ->update(['gateway_last_checked_at' => now()]);
+                }
+            });
+
+        $this->info("Pencairan diperiksa: {$checked}; dikirim ulang: {$resumed}; gagal: {$failed}.");
 
         return $failed > 0 ? self::FAILURE : self::SUCCESS;
     }

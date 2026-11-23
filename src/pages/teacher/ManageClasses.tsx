@@ -105,7 +105,7 @@ type ScheduleSort = "nearest" | "farthest";
 type ClassScope = "active" | "history";
 type ClassKind = "all" | "private" | "group";
 
-const teacherHistoryStatuses = new Set(["completed", "refunded"]);
+const teacherHistoryStatuses = new Set(["completed", "refunded", "refund_pending", "emergency_refund_pending", "partially_refunded"]);
 
 const statusLabels: Record<string, string> = {
   awaiting_payment: "Menunggu pembayaran",
@@ -119,6 +119,7 @@ const statusLabels: Record<string, string> = {
   completed: "Selesai",
   emergency_refund_pending: "Refund darurat",
   refund_pending: "Refund diproses",
+  partially_refunded: "Sebagian direfund",
   refunded: "Direfund",
 };
 
@@ -431,7 +432,7 @@ export default function ManageClasses() {
     if (action.type === "emergency") {
       const accepted = await confirm({
         title: "Laporkan keadaan darurat?",
-        description: "Sesi akan dihentikan dan refund penuh murid langsung masuk antrean transfer admin. Admin tetap memeriksa kebenaran laporan.",
+        description: "Sesi akan dibekukan dan menunggu pemeriksaan admin. Dana murid tidak dikembalikan otomatis dan hak mengajar ditahan sampai admin memutuskan berdasarkan bukti.",
         confirmText: "Kirim laporan",
         tone: "warning",
       });

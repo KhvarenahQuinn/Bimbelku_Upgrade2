@@ -305,6 +305,24 @@ class XenditMoneyMovementService
         return $this->payoutPayload($payout->fresh());
     }
 
+    /**
+     * POST yang kehabisan waktu bisa menyisakan baris `processing` tanpa
+     * `gateway_payout_id`. Kirim ulang dengan `idempotency-key` yang sama supaya
+     * gateway mengembalikan payout yang sudah ada, bukan membuat transfer kedua.
+     */
+    public function resumePayoutSubmission(Payout $payout): array
+    {
+        $payout->refresh();
+        if ($payout->status !== 'processing' || filled($payout->gateway_payout_id)) {
+            return $this->payoutPayload($payout);
+        }
+        if (strtoupper((string) $payout->gateway_status) !== 'SUBMITTING' || blank($payout->gateway_reference_id)) {
+            throw new RuntimeException('Pencairan ini tidak sedang menunggu pengiriman ulang.');
+        }
+
+        return $this->createPayout($payout, User::query()->findOrFail($payout->user_id));
+    }
+
     public function retrievePayout(Payout $payout): array
     {
         $payout->refresh();

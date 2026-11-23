@@ -284,7 +284,16 @@ class AdminFinanceOperationsController extends Controller
     {
         abort_unless(in_array($payout->status, ['processing', 'on_hold'], true), 422, 'Pencairan ini sudah final.');
         try {
-            $gateway->retrievePayout($payout);
+            // Baris yang POST-nya timeout belum punya ID gateway, jadi tidak bisa
+            // di-GET. Kirim ulang dengan referensi yang sama dan biarkan
+            // idempotency-key gateway yang mencegah transfer kedua.
+            if (blank($payout->gateway_payout_id)
+                && strtoupper((string) $payout->gateway_status) === 'SUBMITTING'
+                && filled($payout->gateway_reference_id)) {
+                $gateway->resumePayoutSubmission($payout);
+            } else {
+                $gateway->retrievePayout($payout);
+            }
         } catch (\Throwable $exception) {
             report($exception);
 

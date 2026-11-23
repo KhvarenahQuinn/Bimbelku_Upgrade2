@@ -2,12 +2,16 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Booking;
 use App\Models\FinancialAuditLog;
 use App\Models\FinancialJournal;
 use App\Models\IdempotencyRecord;
+use App\Models\Order;
 use App\Models\PayoutApproval;
+use App\Models\Refund;
 use App\Services\WalletIntegrityService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 class VerifyFinancialLedger extends Command
 {
@@ -103,6 +107,7 @@ class VerifyFinancialLedger extends Command
             ->where('expires_at', '<=', now())
             ->update(['status' => 'expired']);
 
+        $errors = [...$errors, ...$this->sourceDriftErrors()];
         $errors = [...$errors, ...$walletIntegrity->errors()];
 
         if ($errors !== []) {
@@ -116,5 +121,108 @@ class VerifyFinancialLedger extends Command
         $this->info('Jurnal keuangan seimbang, rantai jurnal/audit valid, dan Saldo BimbelKu konsisten.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Jurnal yang seimbang tetap bisa salah kalau nominalnya tidak sama dengan
+     * data sumbernya. Tiap pemeriksaan membandingkan angka ledger dengan tabel
+     * asal supaya drift ketahuan sebelum dipakai mengambil keputusan uang.
+     *
+     * @return list<string>
+     */
+    private function sourceDriftErrors(): array
+    {
+        $errors = [];
+
+        $entriesQuery = fn (string $eventType, string $referenceType, string $account, string $side) => DB::table('financial_journals as journals')
+            ->join('financial_ledger_entries as entries', 'entries.financial_journal_id', '=', 'journals.id')
+            ->where('journals.event_type', $eventType)
+            ->where('journals.reference_type', $referenceType)
+            ->where('entries.account_code', $account)
+            ->where('entries.side', $side);
+
+        foreach ($entriesQuery('booking_settled', Booking::class, 'tutor_payable', 'credit')
+            ->join('bookings', 'bookings.id', '=', 'journals.reference_id')
+            // Refund sesi sengaja mengurangi angka di tabel booking tanpa menulis
+            // ulang jurnal yang sudah terbit, jadi sesi seperti itu dibandingkan
+            // lewat jurnal penyesuaiannya sendiri.
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('financial_journals as adjustments')
+                    ->where('adjustments.event_type', 'refund_session_adjusted')
+                    ->where('adjustments.reference_type', Booking::class)
+                    ->whereColumn('adjustments.reference_id', 'bookings.id');
+            })
+            ->whereRaw('ABS(entries.amount - bookings.teacher_net_amount) > 0.009')
+            ->select('journals.id', 'bookings.id as booking_id', 'entries.amount', 'bookings.teacher_net_amount')
+            ->limit(10)
+            ->get() as $row) {
+            $errors[] = "Jurnal {$row->id} mengkredit tutor_payable {$row->amount} untuk sesi {$row->booking_id}, padahal teacher_net_amount sesi itu {$row->teacher_net_amount}.";
+        }
+
+        foreach ($entriesQuery('payment_received', Order::class, 'customer_funds', 'credit')
+            ->join('orders', 'orders.id', '=', 'journals.reference_id')
+            ->whereRaw('ABS(entries.amount - orders.amount) > 0.009')
+            ->select('journals.id', 'orders.id as order_id', 'entries.amount', 'orders.amount as order_amount')
+            ->limit(10)
+            ->get() as $row) {
+            $errors[] = "Jurnal {$row->id} mengkredit customer_funds {$row->amount} untuk pesanan {$row->order_id}, padahal nilai pesanan itu {$row->order_amount}.";
+        }
+
+        foreach ($entriesQuery('refund_queued', Refund::class, 'refunds_payable', 'credit')
+            ->join('refunds', 'refunds.id', '=', 'journals.reference_id')
+            ->whereRaw('ABS(entries.amount - refunds.amount) > 0.009')
+            ->select('journals.id', 'refunds.id as refund_id', 'entries.amount', 'refunds.amount as refund_amount')
+            ->limit(10)
+            ->get() as $row) {
+            $errors[] = "Jurnal {$row->id} menahan refunds_payable {$row->amount} untuk refund {$row->refund_id}, padahal nilai refund itu {$row->refund_amount}.";
+        }
+
+        $refundEvents = DB::table('financial_journals')
+            ->where('reference_type', Refund::class)
+            ->whereIn('event_type', ['refund_queued', 'refund_paid', 'refund_wallet_credited'])
+            ->select('reference_id', 'event_type')
+            ->get();
+        $settledRefundIds = $refundEvents
+            ->whereIn('event_type', ['refund_paid', 'refund_wallet_credited'])
+            ->pluck('reference_id')
+            ->unique();
+        $outstandingRefundIds = $refundEvents
+            ->where('event_type', 'refund_queued')
+            ->pluck('reference_id')
+            ->unique()
+            ->diff($settledRefundIds)
+            ->values()
+            ->all();
+        $ledgerRefundsPayable = $this->accountBalance('refunds_payable');
+        $outstandingRefunds = round((float) DB::table('refunds')->whereIn('id', $outstandingRefundIds)->sum('amount'), 2);
+        if (abs($ledgerRefundsPayable - $outstandingRefunds) > 0.01) {
+            $errors[] = "Saldo refunds_payable {$ledgerRefundsPayable} tidak cocok dengan total refund yang belum dibayar {$outstandingRefunds}.";
+        }
+
+        $clearing = $this->signedBalance('customer_payment_deposits', 'debit');
+        if ($clearing < -0.01) {
+            $errors[] = "Saldo customer_payment_deposits negatif ({$clearing}): ada dana gateway yang didebitkan ke akun transfer manual.";
+        }
+
+        return $errors;
+    }
+
+    private function accountBalance(string $account): float
+    {
+        return round((float) DB::table('financial_ledger_entries')
+            ->where('account_code', $account)
+            ->selectRaw("SUM(CASE WHEN side = 'credit' THEN amount ELSE -amount END) AS balance")
+            ->value('balance'), 2);
+    }
+
+    private function signedBalance(string $account, string $normalSide): float
+    {
+        $subtracted = $normalSide === 'debit' ? 'credit' : 'debit';
+
+        return round((float) DB::table('financial_ledger_entries')
+            ->where('account_code', $account)
+            ->selectRaw('SUM(CASE WHEN side = ? THEN -amount ELSE amount END) AS balance', [$subtracted])
+            ->value('balance'), 2);
     }
 }

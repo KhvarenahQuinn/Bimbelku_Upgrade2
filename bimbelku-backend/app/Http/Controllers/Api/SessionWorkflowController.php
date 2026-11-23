@@ -24,6 +24,7 @@ use App\Services\ScheduleReleaseService;
 use App\Services\UploadSecurityService;
 use App\Services\XenditMoneyMovementService;
 use App\Support\RefundStatusPresenter;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -145,6 +146,19 @@ class SessionWorkflowController extends Controller
         if ($booking->reports()->where('type', 'teacher_emergency')->where('status', 'pending')->exists()) {
             return response()->json(['message' => 'Laporan keadaan darurat sesi ini sedang diperiksa.'], 422);
         }
+        // Sesi yang masih jauh di depan tidak boleh dibekukan lewat laporan darurat.
+        // Jendelanya mengikuti laporan ketidakhadiran: mulai 15 menit sebelum sesi.
+        $opensAt = $booking->start_at->copy()->subMinutes(15);
+        if (now()->lt($opensAt)) {
+            return response()->json([
+                'message' => 'Laporan keadaan darurat dapat dibuat mulai 15 menit sebelum sesi dimulai.',
+            ], 422);
+        }
+        if (Carbon::parse($validated['incident_at'])->lt($opensAt)) {
+            return response()->json([
+                'message' => 'Waktu kejadian harus berada di dalam jendela sesi ini.',
+            ], 422);
+        }
 
         $path = $uploads->store($request->file('evidence'), 'emergency_evidence', 'local');
 
@@ -162,6 +176,12 @@ class SessionWorkflowController extends Controller
                     ->where('status', 'pending')
                     ->exists()) {
                     abort(422, 'Laporan keadaan darurat sesi ini sedang diperiksa.');
+                }
+                if (now()->lt($lockedBooking->start_at->copy()->subMinutes(15))) {
+                    abort(422, 'Laporan keadaan darurat dapat dibuat mulai 15 menit sebelum sesi dimulai.');
+                }
+                if (Carbon::parse($validated['incident_at'])->lt($lockedBooking->start_at->copy()->subMinutes(15))) {
+                    abort(422, 'Waktu kejadian harus berada di dalam jendela sesi ini.');
                 }
 
                 $report = SessionReport::create([

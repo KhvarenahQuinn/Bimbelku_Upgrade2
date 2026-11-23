@@ -16,8 +16,9 @@ class AlertStuckPayouts extends Command
     public function handle(): int
     {
         $minutes = max(5, (int) $this->option('minutes'));
-        $admins = User::query()->where('role', 'admin')->pluck('id');
-        if ($admins->isEmpty()) {
+        // Peringatan harus sampai ke semua admin aktif, bukan hanya yang pertama.
+        $adminIds = User::query()->where('role', 'admin')->where('status', 'active')->pluck('id');
+        if ($adminIds->isEmpty()) {
             return self::SUCCESS;
         }
 
@@ -28,23 +29,25 @@ class AlertStuckPayouts extends Command
 
         $alerted = 0;
         foreach ($stuck as $payout) {
-            // One alert per payout per hour, so a 15-minute schedule does not
-            // turn a single stuck payout into four notifications.
-            $uniqueKey = "payout-stuck:{$payout->id}:".now()->format('YmdH');
-            $created = Notification::query()->firstOrCreate(
-                ['unique_key' => $uniqueKey],
-                [
-                    'user_id' => $admins->first(),
-                    'title' => 'Pencairan tertahan',
-                    'message' => 'Pencairan Rp'.number_format((float) $payout->amount, 0, ',', '.').
-                        ' untuk tutor #'.$payout->user_id.' sudah '.$minutes.' menit tanpa status final.',
-                    'type' => 'warning',
-                    'target_url' => '/admin/finance?tab=payouts',
-                    'is_read' => false,
-                ]
-            );
-            if ($created->wasRecentlyCreated) {
-                $alerted++;
+            foreach ($adminIds as $adminId) {
+                // One alert per payout per admin per hour, so a 15-minute schedule
+                // does not turn a single stuck payout into four notifications.
+                $uniqueKey = "payout-stuck:{$payout->id}:{$adminId}:".now()->format('YmdH');
+                $created = Notification::query()->firstOrCreate(
+                    ['unique_key' => $uniqueKey],
+                    [
+                        'user_id' => $adminId,
+                        'title' => 'Pencairan tertahan',
+                        'message' => 'Pencairan Rp'.number_format((float) $payout->amount, 0, ',', '.').
+                            ' untuk tutor #'.$payout->user_id.' sudah '.$minutes.' menit tanpa status final.',
+                        'type' => 'warning',
+                        'target_url' => '/admin/finance?tab=payouts',
+                        'is_read' => false,
+                    ]
+                );
+                if ($created->wasRecentlyCreated) {
+                    $alerted++;
+                }
             }
         }
 

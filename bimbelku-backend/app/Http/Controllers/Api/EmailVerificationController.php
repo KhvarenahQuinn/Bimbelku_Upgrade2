@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\OneTimeCodeService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class EmailVerificationController extends Controller
 {
@@ -42,13 +43,22 @@ class EmailVerificationController extends Controller
         ]);
         $email = mb_strtolower(trim((string) $data['email']));
         $user = User::query()->where('email', $email)->first();
-        if (! $user || ! $user->email_verification_required_at) {
-            return response()->json(['message' => 'Permintaan verifikasi tidak valid.'], 422);
+
+        // Email tak dikenal, akun tanpa verifikasi tertunda, akun yang sudah
+        // terverifikasi, dan kode salah harus menghasilkan jawaban yang sama.
+        // Kalau tiap kondisi punya pesan sendiri, endpoint publik ini menjadi
+        // alat untuk menebak alamat email mana yang terdaftar.
+        if (! $user || ! $user->email_verification_required_at || $user->email_verified_at) {
+            return $this->rejectedCode();
         }
-        if (! $user->email_verified_at) {
+
+        try {
             $codes->verify($user, OneTimeCodeService::EMAIL_VERIFICATION, $data['code']);
-            $user->forceFill(['email_verified_at' => now()])->save();
+        } catch (ValidationException $exception) {
+            return $this->rejectedCode();
         }
+
+        $user->forceFill(['email_verified_at' => now()])->save();
 
         return response()->json([
             'message' => $user->role === 'teacher'
@@ -56,5 +66,13 @@ class EmailVerificationController extends Controller
                 : 'Email berhasil diverifikasi. Silakan masuk ke akun Anda.',
             'role' => $user->role,
         ]);
+    }
+
+    private function rejectedCode()
+    {
+        return response()->json([
+            'message' => 'Kode verifikasi tidak valid atau sudah kedaluwarsa. Minta kode baru lalu coba lagi.',
+            'error_code' => 'email_verification_code_invalid',
+        ], 422);
     }
 }

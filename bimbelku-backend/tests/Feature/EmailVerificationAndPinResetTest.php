@@ -201,6 +201,45 @@ class EmailVerificationAndPinResetTest extends TestCase
         $this->assertEquals(0, $newCodeRecord->attempts);
     }
 
+    public function test_every_failed_code_check_returns_the_same_response(): void
+    {
+        $pending = User::factory()->create([
+            'email' => 'menunggu@gmail.com',
+            'email_verified_at' => null,
+            'email_verification_required_at' => now(),
+        ]);
+        $this->storeCode($pending, OneTimeCodeService::EMAIL_VERIFICATION, '123456');
+        $alreadyVerified = User::factory()->create([
+            'email' => 'sudah@gmail.com',
+            'email_verified_at' => now()->subDay(),
+            'email_verification_required_at' => now()->subDays(2),
+        ]);
+        $neverAsked = User::factory()->create([
+            'email' => 'tanpa-flag@gmail.com',
+            'email_verified_at' => null,
+            'email_verification_required_at' => null,
+        ]);
+
+        $cases = [
+            'unknown' => ['email' => 'tidak-terdaftar@gmail.com', 'code' => '123456'],
+            'no_pending_flag' => ['email' => $neverAsked->email, 'code' => '123456'],
+            'already_verified' => ['email' => $alreadyVerified->email, 'code' => '123456'],
+            'wrong_code' => ['email' => $pending->email, 'code' => '000000'],
+        ];
+
+        $shapes = collect($cases)->map(function (array $payload) {
+            $response = $this->postJson('/api/email/verification/verify', $payload)->assertUnprocessable();
+
+            return [$response->status(), $response->json('message'), $response->json('error_code')];
+        });
+
+        // Empat kegagalan berbeda tidak boleh bisa dibedakan dari responsnya,
+        // kalau tidak endpoint ini menjadi alat menebak email terdaftar.
+        $this->assertCount(1, $shapes->unique()->values());
+        $this->assertSame('email_verification_code_invalid', $shapes->first()[2]);
+        $this->assertNull($pending->fresh()->email_verified_at);
+    }
+
     private function storeCode(User $user, string $purpose, string $code): void
     {
         DB::table('verification_codes')->insert([
