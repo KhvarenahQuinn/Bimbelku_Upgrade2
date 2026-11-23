@@ -37,6 +37,8 @@ class TeacherMatchingService
         'confirmed',
         'in_progress',
         'awaiting_student_approval',
+        // Sesi yang menunggu keputusan admin tetap memegang slot waktunya.
+        'admin_review_required',
         'disputed',
         'absence_review',
     ];

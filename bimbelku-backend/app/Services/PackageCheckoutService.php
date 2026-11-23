@@ -278,6 +278,11 @@ class PackageCheckoutService
                 422,
                 'Profil tutor sedang tidak dapat menerima permintaan.'
             );
+            // Penawaran bisa dikirim sebelum tutor dihentikan sementara,
+            // jadi penerimaan harus memeriksa ulang batasnya.
+            if ($profile?->suspended_until?->isFuture()) {
+                abort(422, 'Tutor sedang dibatasi sampai '.$profile->suspended_until->translatedFormat('d M Y, H:i').' WIB.');
+            }
             $profile->setRelation('user', $teacher);
             abort_if(
                 $error = $this->matchingService->compatibilityError($profile, $request),

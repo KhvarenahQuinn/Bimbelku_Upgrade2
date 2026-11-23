@@ -266,6 +266,30 @@ class PackageRescheduleMatchingRetryTest extends TestCase
             ->assertUnprocessable();
     }
 
+    public function test_a_tutor_suspended_after_the_offer_was_sent_cannot_accept_it(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-30 09:00:00', 'Asia/Jakarta'));
+        [$student, , $package, , $request] = $this->fixture('2026-10-05 14:00:00');
+        $this->addEligibleTeacher();
+        Sanctum::actingAs($student);
+
+        $this->postJson("/api/student/packages/{$package->id}/retry")->assertOk();
+        $offer = TeacherOffer::query()
+            ->where('booking_request_id', $request->id)
+            ->where('status', 'pending')
+            ->firstOrFail();
+
+        TeacherProfile::query()->where('user_id', $offer->teacher_id)->update([
+            'suspended_until' => now()->addHours(6),
+        ]);
+
+        Sanctum::actingAs(User::query()->findOrFail($offer->teacher_id));
+        $this->postJson("/api/teacher/offers/{$offer->id}/accept")->assertUnprocessable();
+
+        $this->assertSame('pending', $offer->fresh()->status);
+        $this->assertSame('teacher_pending', $request->fresh()->status);
+    }
+
     private function addEligibleTeacher(
         string $subject = 'Bahasa Indonesia',
         array $levels = ['SMA']

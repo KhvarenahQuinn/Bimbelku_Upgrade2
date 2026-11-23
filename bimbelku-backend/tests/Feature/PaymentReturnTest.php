@@ -101,6 +101,33 @@ class PaymentReturnTest extends TestCase
         $this->assertStringNotContainsString('48 jam', $notification->message);
     }
 
+    public function test_order_status_reports_only_the_amount_still_needing_an_external_transfer(): void
+    {
+        $order = $this->invoice();
+        $order->forceFill([
+            'status' => 'partially_paid',
+            'amount' => 150000,
+            'wallet_reserved_amount' => 40000,
+            'wallet_applied_amount' => 0,
+            'external_received_amount' => 60000,
+        ])->save();
+        Sanctum::actingAs($order->user);
+
+        $response = $this->getJson("/api/student/orders/{$order->id}/status")->assertOk();
+        // 150.000 - 40.000 saldo tertahan - 60.000 transfer yang sudah masuk.
+        $this->assertSame(50000.0, (float) $response->json('external_payment_amount'));
+
+        // Setelah saldo benar-benar terpakai, tidak ada sisa yang perlu ditransfer.
+        $order->forceFill([
+            'status' => 'paid',
+            'wallet_reserved_amount' => 0,
+            'wallet_applied_amount' => 40000,
+            'external_received_amount' => 110000,
+        ])->save();
+        $paid = $this->getJson("/api/student/orders/{$order->id}/status")->assertOk();
+        $this->assertSame(0.0, (float) $paid->json('external_payment_amount'));
+    }
+
     private function fakeSession(): void
     {
         Http::fake(['*/sessions' => Http::response(['payment_session_id' => 'ps-return', 'status' => 'ACTIVE',

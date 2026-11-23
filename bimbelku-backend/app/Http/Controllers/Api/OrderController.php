@@ -392,7 +392,7 @@ class OrderController extends Controller
                 'discount_amount' => $order->discount_amount,
                 'wallet_reserved_amount' => (float) $order->wallet_reserved_amount,
                 'wallet_applied_amount' => (float) $order->wallet_applied_amount,
-                'external_payment_amount' => round(max(0, (float) $order->amount - (float) ($order->status === 'submitted' ? $order->wallet_reserved_amount : $order->wallet_applied_amount)), 2),
+                'external_payment_amount' => round(max(0, (float) $order->amount - (float) $order->wallet_reserved_amount - (float) $order->wallet_applied_amount - (float) $order->external_received_amount), 2),
                 'payment_provider' => $order->payment_provider,
                 'gateway_status' => $order->gateway_status,
                 'gateway_session_id' => $order->gateway_session_id,

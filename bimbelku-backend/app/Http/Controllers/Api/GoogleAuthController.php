@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\GuestPackageLinkService;
 use App\Services\PersistentLoginService;
+use App\Support\RegistrationEmailDomain;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -73,6 +74,11 @@ class GoogleAuthController extends Controller
             }
 
             if (! $user) {
+                // Akun baru wajib memakai domain yang diizinkan; akun lama tetap
+                // bisa masuk lewat google_id walau domainnya di luar daftar.
+                if (! RegistrationEmailDomain::allows($email)) {
+                    return $this->frontendError('Gunakan email pribadi atau email sekolah yang didukung untuk mendaftar.', $frontendOrigin);
+                }
                 $user = User::create([
                     'name' => trim((string) $googleUser->getName()) ?: Str::before($email, '@'),
                     'email' => $email,

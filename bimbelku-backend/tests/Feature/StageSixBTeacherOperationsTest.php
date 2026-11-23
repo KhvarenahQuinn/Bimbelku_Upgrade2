@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\BookingParticipant;
 use App\Models\BookingRequest;
 use App\Models\Order;
+use App\Models\ScheduleChangeRequest;
 use App\Models\TeacherAvailability;
 use App\Models\TeacherProfile;
 use App\Models\User;
@@ -106,6 +107,40 @@ class StageSixBTeacherOperationsTest extends TestCase
             'start_at' => '2026-08-03 14:00:00',
             'end_at' => '2026-08-03 15:00:00',
         ]);
+    }
+
+    public function test_expired_schedule_change_requests_do_not_block_a_new_proposal(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-01 08:00:00', 'Asia/Jakarta'));
+        [$student, $teacher, $booking] = $this->makeBooking(
+            Carbon::parse('2026-08-02 10:00:00', 'Asia/Jakarta'),
+            Carbon::parse('2026-08-02 11:00:00', 'Asia/Jakarta')
+        );
+        TeacherAvailability::create([
+            'user_id' => $teacher->id,
+            'day' => 'Senin',
+            'is_active' => true,
+            'start_time' => '08:00:00',
+            'end_time' => '20:00:00',
+        ]);
+
+        Sanctum::actingAs($student);
+        $expired = $this->postJson("/api/bookings/{$booking->id}/schedule-changes", [
+            'proposed_start_at' => '2026-08-03 14:00:00',
+            'reason' => 'Ada kegiatan sekolah wajib pada jadwal lama dan waktunya tidak dapat dipindahkan.',
+        ])->assertCreated()->json('data.id');
+
+        ScheduleChangeRequest::query()->whereKey($expired)->update(['expires_at' => now()->subMinute()]);
+
+        // Usulan yang lewat batas jawaban tidak boleh lagi memblokir sesi.
+        $this->postJson("/api/bookings/{$booking->id}/schedule-changes", [
+            'proposed_start_at' => '2026-08-03 16:00:00',
+            'reason' => 'Jadwal pengganti dari usulan sebelumnya karena batas jawaban sudah lewat.',
+        ])->assertCreated();
+
+        $this->artisan('bookings:expire')->assertSuccessful();
+        $this->assertSame('expired', ScheduleChangeRequest::query()->findOrFail($expired)->status);
+        $this->assertSame(1, ScheduleChangeRequest::query()->where('status', 'pending')->count());
     }
 
     public function test_teacher_payout_request_is_sent_automatically_and_reserves_only_requested_amount(): void

@@ -1234,12 +1234,21 @@ class StudentPackageController extends Controller
         $participantCount = (int) ($validated['participant_count'] ?? 1);
         $participantPricing->forCount($participantCount);
         $subjects = CurriculumSubject::query()
+            ->where('is_active', true)
             ->whereIn('id', collect($validated['subjects'])->pluck('curriculum_subject_id'))
             ->get()
             ->keyBy('id');
+        abort_if($subjects->count() !== count($validated['subjects']), 422, 'Salah satu mata pelajaran tidak aktif.');
         $lines = collect($validated['subjects'])->map(function (array $item) use ($subjects, $validated, $rateService, $durationHours, $participantCount, $participantPricing) {
             $subject = $subjects[$item['curriculum_subject_id']] ?? null;
             abort_unless($subject, 422, 'Mata pelajaran tidak ditemukan.');
+            // Pratinjau harus menolak kombinasi yang sama dengan checkout.
+            abort_if(
+                $subject->education_levels
+                    && ! in_array($validated['education_level'], $subject->education_levels, true),
+                422,
+                "{$subject->name} tidak tersedia pada jenjang ini."
+            );
 
             $unit = $rateService->resolve(
                 $subject->name,

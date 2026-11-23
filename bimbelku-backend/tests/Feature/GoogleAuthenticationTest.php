@@ -54,7 +54,7 @@ class GoogleAuthenticationTest extends TestCase
         Socialite::fake('google', SocialiteUser::fake([
             'id' => 'google-student-123',
             'name' => 'Murid Google',
-            'email' => 'murid.google@example.test',
+            'email' => 'murid.google@gmail.com',
             'verified_email' => true,
         ]));
 
@@ -73,7 +73,7 @@ class GoogleAuthenticationTest extends TestCase
 
         $this->postJson('/api/auth/google/exchange', ['code' => $query['code'] ?? ''])->assertUnprocessable();
         $this->assertDatabaseHas('users', [
-            'email' => 'murid.google@example.test',
+            'email' => 'murid.google@gmail.com',
             'google_id' => 'google-student-123',
             'role' => 'student',
             'status' => 'pending',
@@ -280,6 +280,52 @@ class GoogleAuthenticationTest extends TestCase
         }
     }
 
+    public function test_google_signup_rejects_unlisted_email_domains_but_existing_accounts_still_sign_in(): void
+    {
+        config()->set('services.google.client_id', 'test-client');
+        config()->set('services.google.client_secret', 'test-secret');
+
+        $state = 'state-for-domain-rejection';
+        Cache::put('google_oauth_state:'.hash('sha256', $state), ['redirect' => '/student/dashboard'], now()->addMinutes(10));
+        Socialite::fake('google', SocialiteUser::fake([
+            'id' => 'google-unlisted-1',
+            'name' => 'Pendaftar Baru',
+            'email' => 'pendaftar@mailinator.com',
+            'verified_email' => true,
+        ]));
+
+        $this->get('/api/auth/google/callback?state='.$state)->assertRedirect();
+
+        // Pendaftaran baru wajib memakai domain yang didukung (cek pendaftaran email).
+        $this->assertDatabaseMissing('users', ['email' => 'pendaftar@mailinator.com']);
+
+        // Akun yang sudah ada tetap boleh masuk lewat Google.
+        $existing = User::factory()->create([
+            'email' => 'pendaftar@mailinator.com',
+            'role' => 'student',
+            'status' => 'active',
+        ]);
+        $existingState = 'state-for-domain-existing';
+        Cache::put('google_oauth_state:'.hash('sha256', $existingState), ['redirect' => '/student/dashboard'], now()->addMinutes(10));
+        Socialite::fake('google', SocialiteUser::fake([
+            'id' => 'google-unlisted-existing',
+            'name' => 'Pendaftar Lama',
+            'email' => 'pendaftar@mailinator.com',
+            'verified_email' => true,
+        ]));
+
+        $callback = $this->get('/api/auth/google/callback?state='.$existingState);
+        $callback->assertRedirect();
+        parse_str((string) parse_url($callback->headers->get('Location'), PHP_URL_QUERY), $query);
+
+        $this->postJson('/api/auth/google/exchange', ['code' => $query['code'] ?? ''])
+            ->assertOk()
+            ->assertJsonPath('user.id', $existing->id);
+
+        $this->assertSame('google-unlisted-existing', $existing->fresh()->google_id);
+        $this->assertSame(1, User::query()->where('email', 'pendaftar@mailinator.com')->count());
+    }
+
     public function test_localhost_and_loopback_do_not_share_session(): void
     {
         config()->set('services.google.client_id', 'test-client');
@@ -292,7 +338,7 @@ class GoogleAuthenticationTest extends TestCase
         Socialite::fake('google', SocialiteUser::fake([
             'id' => 'google-loopback-123',
             'name' => 'Loopback User',
-            'email' => 'loopback.user@example.test',
+            'email' => 'loopback.user@gmail.com',
             'verified_email' => true,
         ]));
 
@@ -318,7 +364,7 @@ class GoogleAuthenticationTest extends TestCase
         Socialite::fake('google', SocialiteUser::fake([
             'id' => 'google-loopback-456',
             'name' => 'Loopback User 456',
-            'email' => 'loopback456@example.test',
+            'email' => 'loopback456@gmail.com',
             'verified_email' => true,
         ]));
         $callback2 = $this->get('/api/auth/google/callback?state='.$state2);
