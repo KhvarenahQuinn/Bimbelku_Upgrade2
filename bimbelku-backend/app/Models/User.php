@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\AdminPermissionCatalog;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -109,6 +110,8 @@ class User extends Authenticatable
         'teacher_rejection_streak' => 'integer',
         'admin_permissions' => 'array',
         'admin_permissions_updated_at' => 'datetime',
+        'payment_pin_failed_attempts' => 'integer',
+        'payment_pin_locked_until' => 'datetime',
     ];
 
     public function isPrimaryAdmin(): bool
@@ -150,9 +153,38 @@ class User extends Authenticatable
 
     public function hasAdminPermission(string $permission): bool
     {
-        // Parameter tetap diterima untuk kompatibilitas middleware dan audit,
-        // tetapi tidak ada lagi pembagian admin terbatas per modul.
-        return $this->role === 'admin' && $this->status === 'active';
+        if ($this->role !== 'admin' || $this->status !== 'active') {
+            return false;
+        }
+
+        // Admin utama selalu memegang seluruh modul. Admin lama yang belum
+        // pernah diberi daftar izin (`null`) juga tetap penuh agar tidak
+        // terkunci oleh kolom yang baru diisi belakangan.
+        if ($this->isPrimaryAdmin() || $this->admin_permissions === null) {
+            return true;
+        }
+
+        return in_array($permission, (array) $this->admin_permissions, true);
+    }
+
+    /**
+     * Daftar izin yang benar-benar berlaku untuk admin ini. Dipakai klien agar
+     * menu yang tampil sama dengan yang ditegakkan server.
+     *
+     * @return array<int,string>
+     */
+    public function effectiveAdminPermissions(): array
+    {
+        if ($this->role !== 'admin' || $this->status !== 'active') {
+            return [];
+        }
+
+        $all = AdminPermissionCatalog::allCodes();
+        if ($this->isPrimaryAdmin() || $this->admin_permissions === null) {
+            return $all;
+        }
+
+        return array_values(array_intersect($all, array_map('strval', (array) $this->admin_permissions)));
     }
 
     public function adminPermissionsUpdatedBy()

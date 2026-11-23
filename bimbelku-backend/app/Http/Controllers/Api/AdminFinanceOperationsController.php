@@ -308,6 +308,16 @@ class AdminFinanceOperationsController extends Controller
     public function forceFailPayout(Payout $payout, Request $request, TeacherPayoutService $payouts)
     {
         abort_unless(in_array($payout->status, ['processing', 'on_hold'], true), 422, 'Pencairan ini sudah final.');
+        // Transfer yang sudah punya ID gateway bisa tetap mendarat di bank walau
+        // lambat. Menandainya gagal di sini akan mengembalikan saldo tutor dan
+        // memungkinkan pencairan kedua — kerugian kas langsung.
+        $awaitingGateway = blank($payout->gateway_payout_id)
+            && in_array(strtoupper((string) $payout->gateway_status), ['', 'SUBMITTING'], true);
+        abort_unless(
+            $payout->status === 'on_hold' || $awaitingGateway,
+            422,
+            'Pencairan sudah dikirim ke penyedia pembayaran. Periksa statusnya, jangan tandai gagal sebelum transfer dipastikan batal.'
+        );
         $validated = $request->validate([
             'reason' => ['required', 'string', 'min:10', 'max:500'],
         ]);
@@ -387,7 +397,7 @@ class AdminFinanceOperationsController extends Controller
             ] : null,
             'wallet_reserved_amount' => (float) $order->wallet_reserved_amount,
             'wallet_applied_amount' => (float) $order->wallet_applied_amount,
-            'external_payment_amount' => round(max(0, (float) $order->amount - (float) ($order->status === 'submitted' ? $order->wallet_reserved_amount : $order->wallet_applied_amount)), 2),
+            'external_payment_amount' => round(max(0, (float) $order->amount - (float) $order->wallet_reserved_amount - (float) $order->wallet_applied_amount - (float) $order->external_received_amount), 2),
             'external_received_amount' => (float) $order->external_received_amount,
             'payment_outstanding_amount' => (float) $order->payment_outstanding_amount,
             'payment_surplus_amount' => (float) $order->payment_surplus_amount,

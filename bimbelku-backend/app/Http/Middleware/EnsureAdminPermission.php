@@ -27,7 +27,7 @@ class EnsureAdminPermission
 
         if (! $user->hasAdminPermission($required)) {
             return response()->json([
-                'message' => 'Akun admin utama tidak dapat membuka fitur ini.',
+                'message' => 'Akun admin ini tidak memiliki izin untuk membuka modul tersebut.',
                 'required_permission' => $required,
             ], 403);
         }

@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Mail\ResetPaymentPinMail;
+use App\Models\Notification;
 use App\Models\User;
 use App\Services\OneTimeCodeService;
+use App\Services\PaymentPinService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,7 +32,7 @@ class PaymentPinController extends Controller
         ]);
     }
 
-    public function set(Request $request)
+    public function set(Request $request, PaymentPinService $paymentPins)
     {
         $user = $request->user();
         $hasPassword = (bool) ($user->has_password ?? true);
@@ -59,6 +61,7 @@ class PaymentPinController extends Controller
         $user->forceFill([
             'payment_pin_hash' => Hash::make($validated['pin']),
         ])->save();
+        $paymentPins->clearFailures($user);
         $this->clearEmailResetTokens((string) $user->email);
 
         return response()->json([
@@ -108,7 +111,7 @@ class PaymentPinController extends Controller
         return $this->sendResetCode($user, $codes);
     }
 
-    public function reset(Request $request, OneTimeCodeService $codes)
+    public function reset(Request $request, OneTimeCodeService $codes, PaymentPinService $paymentPins)
     {
         $data = $request->validate([
             'code' => ['nullable', 'digits:6', 'required_without:current_password'],
@@ -142,6 +145,7 @@ class PaymentPinController extends Controller
         }
 
         $user->forceFill(['payment_pin_hash' => Hash::make($data['pin'])])->save();
+        $paymentPins->clearFailures($user);
         $this->clearEmailResetTokens((string) $user->email);
 
         return response()->json([
@@ -215,7 +219,7 @@ class PaymentPinController extends Controller
      * ini publik karena tautan email mungkin dibuka di perangkat lain, tetapi
      * token 60 karakter yang di-hash menjadi faktor verifikasinya.
      */
-    public function resetWithEmailToken(Request $request)
+    public function resetWithEmailToken(Request $request, PaymentPinService $paymentPins)
     {
         $data = $request->validate([
             'email' => ['required', 'email'],
@@ -255,6 +259,21 @@ class PaymentPinController extends Controller
         }
 
         $user->forceFill(['payment_pin_hash' => Hash::make($data['pin'])])->save();
+        // Tautan email bisa dibuka di perangkat lain, jadi semua token API lama
+        // dicabut. Sesi yang mungkin bocor tidak boleh memakai akun ini lagi.
+        $user->tokens()->delete();
+        $paymentPins->clearFailures($user);
+        Notification::updateOrCreate(
+            ['unique_key' => 'payment-pin-reset:'.$user->id.':'.now()->format('YmdHis')],
+            [
+                'user_id' => $user->id,
+                'title' => 'PIN pembayaran diatur ulang',
+                'message' => 'PIN pembayaran akun Anda baru saja diatur ulang lewat tautan email. '
+                    .'Semua sesi login lama sudah diakhiri. Jika bukan Anda yang melakukannya, segera hubungi admin.',
+                'type' => 'warning',
+                'is_read' => false,
+            ]
+        );
         $this->clearEmailResetTokens($email);
 
         return response()->json([

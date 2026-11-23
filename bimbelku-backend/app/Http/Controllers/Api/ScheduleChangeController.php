@@ -388,7 +388,11 @@ class ScheduleChangeController extends Controller
 
     private function hasPendingChangeFor(array $bookingIds): bool
     {
-        return ScheduleChangeRequest::query()->where('status', 'pending')->lockForUpdate()->get(['id', 'booking_id', 'affected_schedules'])
+        // Permintaan yang sudah lewat batas waktu jawaban tidak boleh lagi
+        // memblokir pengajuan jadwal baru.
+        return ScheduleChangeRequest::query()->where('status', 'pending')
+            ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->lockForUpdate()->get(['id', 'booking_id', 'affected_schedules'])
             ->contains(fn (ScheduleChangeRequest $change) => in_array((int) $change->booking_id, $bookingIds, true)
                 || collect($change->affected_schedules ?? [])->pluck('booking_id')->map(fn ($id) => (int) $id)->intersect($bookingIds)->isNotEmpty());
     }

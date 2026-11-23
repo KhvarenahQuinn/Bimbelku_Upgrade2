@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\UploadSecurityService;
-use App\Support\AdminPermissionCatalog;
 use App\Support\EducationCatalog;
 use App\Support\PublicMedia;
 use Illuminate\Http\Request;
@@ -48,7 +47,7 @@ class UserController extends Controller
             'admin_type' => $user->role === 'admin' ? ($user->isPrimaryAdmin() ? 'super_admin' : 'admin') : null,
             'is_primary_admin' => $user->role === 'admin' && $user->isPrimaryAdmin(),
             'admin_permissions' => $user->role === 'admin'
-                ? AdminPermissionCatalog::allCodes()
+                ? $user->effectiveAdminPermissions()
                 : [],
             'student_birth_date' => $user->role === 'student'
                 ? $user->date_of_birth?->toDateString()

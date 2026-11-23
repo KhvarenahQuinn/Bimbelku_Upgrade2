@@ -89,6 +89,10 @@ class RefundAdjustmentLedgerTest extends TestCase
     public function test_two_partial_refunds_on_one_order_stay_inside_the_external_cap(): void
     {
         $fixture = SessionFinanceFixture::make($this, 3, 30000);
+        // Kedua sesi sudah diselesaikan lebih dulu: hanya sesi yang punya
+        // jurnal settled yang boleh menghasilkan jurnal pembalik.
+        $this->recordSettlement($fixture['sessions'][0]['booking']);
+        $this->recordSettlement($fixture['sessions'][1]['booking']);
         $first = $this->queue($fixture['sessions'][0], 'booking_case', 11, 50000, 'tutor_share');
         $second = $this->queue($fixture['sessions'][1], 'booking_case', 12, 50000, 'tutor_share');
 

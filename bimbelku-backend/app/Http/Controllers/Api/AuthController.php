@@ -12,7 +12,6 @@ use App\Services\GuestPackageLinkService;
 use App\Services\OneTimeCodeService;
 use App\Services\PersistentLoginService;
 use App\Services\UploadSecurityService;
-use App\Support\AdminPermissionCatalog;
 use App\Support\EducationCatalog;
 use App\Support\RegistrationEmailDomain;
 use Carbon\Carbon;
@@ -469,7 +468,7 @@ class AuthController extends Controller
                 'is_primary_admin' => $user->isPrimaryAdmin(),
                 // Guard frontend membaca daftar ini saat login, bukan hanya
                 // saat memuat ulang profil.
-                'admin_permissions' => AdminPermissionCatalog::allCodes(),
+                'admin_permissions' => $user->effectiveAdminPermissions(),
             ],
         ])->withCookie($session['cookie']);
     }

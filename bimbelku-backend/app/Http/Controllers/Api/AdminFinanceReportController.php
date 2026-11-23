@@ -297,29 +297,36 @@ class AdminFinanceReportController extends Controller
 
             return round($credit - $debit, 2);
         };
-        $allAccount = function (string $account, string $side) use ($filters): float {
+        $allAccount = function (string $account, string $side, bool $respectRange = true) use ($filters): float {
             return round((float) FinancialLedgerEntry::query()
                 ->join('financial_journals', 'financial_journals.id', '=', 'financial_ledger_entries.financial_journal_id')
                 ->where('financial_ledger_entries.account_code', $account)
                 ->where('financial_ledger_entries.side', $side)
-                ->when(filled($filters['date_from'] ?? null), fn ($q) => $q->where('financial_journals.occurred_at', '>=', $filters['date_from'].' 00:00:00'))
-                ->when(filled($filters['date_to'] ?? null), fn ($q) => $q->where('financial_journals.occurred_at', '<=', $filters['date_to'].' 23:59:59'))
+                ->when($respectRange && filled($filters['date_from'] ?? null), fn ($q) => $q->where('financial_journals.occurred_at', '>=', $filters['date_from'].' 00:00:00'))
+                ->when($respectRange && filled($filters['date_to'] ?? null), fn ($q) => $q->where('financial_journals.occurred_at', '<=', $filters['date_to'].' 23:59:59'))
                 ->sum('financial_ledger_entries.amount'), 2);
         };
 
-        $tutorCredits = $allAccount('tutor_payable', 'credit');
-        $tutorDebits = $allAccount('tutor_payable', 'debit');
+        // Saldo adalah akumulasi sejak awal, bukan delta periode berjalan.
+        $tutorCredits = $allAccount('tutor_payable', 'credit', false);
+        $tutorDebits = $allAccount('tutor_payable', 'debit', false);
         // Clawback account: the tutor was already paid when a session refund
         // was decided, so the platform books a receivable instead of pushing
         // tutor_payable negative.
-        $tutorReceivableDebits = $allAccount('tutor_receivable', 'debit');
-        $tutorReceivableCredits = $allAccount('tutor_receivable', 'credit');
+        $tutorReceivableDebits = $allAccount('tutor_receivable', 'debit', false);
+        $tutorReceivableCredits = $allAccount('tutor_receivable', 'credit', false);
 
         return [
             'payments_received' => $sum(['payment_received'], 'customer_funds', 'credit'),
             'platform_revenue' => $netAccount(['booking_settled', 'refund_session_adjusted'], 'platform_revenue'),
             'refunds_completed' => $sum(['refund_paid', 'refund_wallet_credited'], 'refunds_payable', 'debit'),
-            'payouts_completed' => $sum(['payout_completed'], 'tutor_payable', 'debit'),
+            // Payout yang dibalik bank mengembalikan hak tutor, jadi harus
+            // mengurangi total pencairan yang benar-benar keluar.
+            'payouts_completed' => round(
+                $sum(['payout_completed'], 'tutor_payable', 'debit')
+                - $sum(['payout_reversed'], 'tutor_payable', 'credit'),
+                2
+            ),
             'tutor_payable_balance' => round($tutorCredits - $tutorDebits, 2),
             'tutor_receivable_balance' => round($tutorReceivableDebits - $tutorReceivableCredits, 2),
         ];

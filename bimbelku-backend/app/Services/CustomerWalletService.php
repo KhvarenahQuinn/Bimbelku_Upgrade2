@@ -215,7 +215,6 @@ class CustomerWalletService
             $lockedOrder = Order::query()->lockForUpdate()->findOrFail($order->id);
             abort_unless((int) $lockedOrder->user_id === $userId, 403);
             abort_unless($this->supportsOrder($lockedOrder), 422, 'Saldo BimbelKu belum tersedia untuk jenis tagihan lama ini.');
-            abort_unless(in_array($lockedOrder->status, ['pending', 'rejected'], true), 422, 'Tagihan ini sudah tidak dapat menggunakan saldo.');
             abort_if($this->money($lockedOrder->wallet_applied_amount) > 0, 422, 'Saldo sudah pernah diterapkan pada tagihan ini.');
 
             User::query()->whereKey($userId)->lockForUpdate()->firstOrFail();
@@ -233,6 +232,13 @@ class CustomerWalletService
 
                 return $existingReserved;
             }
+
+            // Hanya hold baru yang butuh tagihan berstatus terbuka. Pemeriksaan
+            // status sengaja diletakkan setelah short-circuit hold di atas:
+            // tagihan `partially_paid` yang sudah punya hold hanya memakai ulang
+            // hold tersebut, sedangkan `partially_paid` tanpa hold tetap ditolak
+            // dan tidak boleh membuka hold baru.
+            abort_unless(in_array($lockedOrder->status, ['pending', 'rejected'], true), 422, 'Tagihan ini sudah tidak dapat menggunakan saldo.');
 
             $available = $this->money($wallet->current_balance);
             $amount = min($available, $this->money($lockedOrder->amount));

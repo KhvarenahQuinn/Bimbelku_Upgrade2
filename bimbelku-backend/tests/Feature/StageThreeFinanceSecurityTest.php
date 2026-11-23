@@ -6,6 +6,7 @@ use App\Models\FinancialJournal;
 use App\Models\Order;
 use App\Models\TeacherProfile;
 use App\Models\User;
+use App\Services\OneTimeCodeService;
 use App\Support\EducationCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -86,7 +87,7 @@ class StageThreeFinanceSecurityTest extends TestCase
         $journal->update(['description' => 'Tidak boleh diubah']);
     }
 
-    public function test_teacher_bank_change_requires_password_and_holds_payout(): void
+    public function test_teacher_bank_change_requires_otp_and_holds_payout(): void
     {
         $teacher = User::factory()->create([
             'role' => 'teacher',
@@ -102,6 +103,16 @@ class StageThreeFinanceSecurityTest extends TestCase
             'account_name' => $teacher->name,
             'current_password' => 'TeacherPass123!',
         ], ['Idempotency-Key' => 'teacher-bank-change-0001'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Kode verifikasi email wajib diisi sebelum mengubah rekening.');
+        $this->assertNull($teacher->teacherProfile()->firstOrFail()->account_number);
+
+        $this->postJson('/api/teacher/bank', [
+            'bank_name' => 'BCA',
+            'account_number' => '1234567890',
+            'account_name' => $teacher->name,
+            'otp' => $this->payoutOtp($teacher),
+        ], ['Idempotency-Key' => 'teacher-bank-change-0002'])
             ->assertOk()
             ->assertJsonStructure(['payout_hold_until']);
 
@@ -121,11 +132,28 @@ class StageThreeFinanceSecurityTest extends TestCase
 
         $this->postJson('/api/teacher/bank', [
             'bank_name' => 'BCA', 'account_number' => '1234567890',
-            'account_name' => 'Nama Berbeda', 'current_password' => 'TeacherPass123!',
+            'account_name' => 'Nama Berbeda', 'otp' => $this->payoutOtp($teacher),
         ], ['Idempotency-Key' => 'bank-name-mismatch-0001'])
             ->assertStatus(422)
             ->assertJsonPath('message', 'Nama pemilik rekening harus sama dengan nama akun tutor. Pastikan nama akun sesuai KTP sebelum melanjutkan.');
         $this->assertNull($teacher->teacherProfile()->firstOrFail()->account_number);
+    }
+
+    private function payoutOtp(User $teacher): string
+    {
+        $code = '123456';
+        \DB::table('verification_codes')->insert([
+            'user_id' => $teacher->id,
+            'purpose' => OneTimeCodeService::PAYOUT_BANK_CHANGE,
+            'code_hash' => Hash::make($code),
+            'attempts' => 0,
+            'expires_at' => now()->addMinutes(10),
+            'sent_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return $code;
     }
 
     public function test_admin_cannot_manually_trigger_teacher_payout(): void

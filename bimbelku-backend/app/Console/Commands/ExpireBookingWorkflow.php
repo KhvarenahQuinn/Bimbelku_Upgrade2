@@ -7,6 +7,7 @@ use App\Models\BookingRequest;
 use App\Models\Notification;
 use App\Models\Order;
 use App\Models\PackageRenewal;
+use App\Models\ScheduleChangeRequest;
 use App\Models\Setting;
 use App\Models\TeacherOffer;
 use App\Services\CheapClassService;
@@ -36,6 +37,7 @@ class ExpireBookingWorkflow extends Command
             'matching' => $this->resumeMatching($matchingService),
             'matching_history' => $this->archivePastMatching(),
             'package_payments' => $this->expirePackagePayments($paymentReconciliation),
+            'schedule_changes' => $this->expireScheduleChanges(),
             'started' => $this->startDueBookings(),
             'reviews' => $this->queueCompletionReviews(),
         ];
@@ -127,6 +129,28 @@ class ExpireBookingWorkflow extends Command
                     if ($offer?->wasRecentlyCreated) {
                         $count++;
                     }
+                }
+            });
+
+        return $count;
+    }
+
+    private function expireScheduleChanges(): int
+    {
+        $count = 0;
+        ScheduleChangeRequest::query()
+            ->where('status', 'pending')
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<=', now())
+            ->select('id')
+            ->chunkById(100, function ($changes) use (&$count) {
+                foreach ($changes as $change) {
+                    // Permintaan kedaluwarsa tidak boleh terus memblokir
+                    // pengajuan jadwal baru untuk sesi yang sama.
+                    $count += ScheduleChangeRequest::query()
+                        ->whereKey($change->id)
+                        ->where('status', 'pending')
+                        ->update(['status' => 'expired', 'decided_at' => now()]);
                 }
             });
 

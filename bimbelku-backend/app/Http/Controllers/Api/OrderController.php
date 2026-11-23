@@ -15,6 +15,7 @@ use App\Services\CheapClassService;
 use App\Services\CustomerWalletService;
 use App\Services\GatewayPaymentSettlementService;
 use App\Services\PackageCheckoutService;
+use App\Services\PaymentPinService;
 use App\Services\PaymentReconciliationService;
 use App\Services\RefundSettlementService;
 use App\Services\ScheduleReleaseService;
@@ -24,7 +25,6 @@ use App\Support\RefundStatusPresenter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
@@ -37,7 +37,8 @@ class OrderController extends Controller
         PackageCheckoutService $packageCheckoutService,
         CustomerWalletService $wallets,
         PaymentReconciliationService $reconciliation,
-        UploadSecurityService $uploads
+        UploadSecurityService $uploads,
+        PaymentPinService $paymentPins
     ) {
         $walletInput = $request->validate([
             'use_wallet' => ['sometimes', 'boolean'],
@@ -69,8 +70,9 @@ class OrderController extends Controller
             if (! filled($request->user()->payment_pin_hash)) {
                 return $this->paymentError('Buat PIN pembayaran terlebih dahulu untuk menggunakan Saldo BimbelKu.', 409, 'payment_pin_setup_required');
             }
-            if ($paymentPin === '' || ! Hash::check($paymentPin, (string) $request->user()->payment_pin_hash)) {
-                return $this->paymentError('PIN pembayaran tidak sesuai.', 422, 'payment_pin_invalid');
+            $pinCheck = $paymentPins->verify($request->user(), $paymentPin);
+            if (! $pinCheck['ok']) {
+                return $this->paymentError($pinCheck['message'], $pinCheck['status'], $pinCheck['code']);
             }
         }
 
@@ -390,7 +392,7 @@ class OrderController extends Controller
                 'discount_amount' => $order->discount_amount,
                 'wallet_reserved_amount' => (float) $order->wallet_reserved_amount,
                 'wallet_applied_amount' => (float) $order->wallet_applied_amount,
-                'external_payment_amount' => round(max(0, (float) $order->amount - (float) ($order->status === 'submitted' ? $order->wallet_reserved_amount : $order->wallet_applied_amount)), 2),
+                'external_payment_amount' => round(max(0, (float) $order->amount - (float) $order->wallet_reserved_amount - (float) $order->wallet_applied_amount - (float) $order->external_received_amount), 2),
                 'payment_provider' => $order->payment_provider,
                 'gateway_status' => $order->gateway_status,
                 'gateway_session_id' => $order->gateway_session_id,

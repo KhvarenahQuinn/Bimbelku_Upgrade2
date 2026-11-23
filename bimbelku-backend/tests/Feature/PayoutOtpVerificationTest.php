@@ -187,6 +187,150 @@ class PayoutOtpVerificationTest extends TestCase
         ], ['Idempotency-Key' => 'payout-punctuation'])->assertAccepted();
     }
 
+    public function test_stored_bank_account_still_requires_a_valid_otp(): void
+    {
+        Http::fake();
+        $fixture = $this->earningTeacher();
+        $this->storeBank($fixture['teacher']);
+        Sanctum::actingAs($fixture['teacher']);
+        $this->issueOtp($fixture['teacher']);
+
+        $this->postJson('/api/teacher/payout-requests', [
+            'amount' => 20000,
+            'verification' => ['otp' => '000000'],
+        ], ['Idempotency-Key' => 'payout-stored-wrong-otp'])
+            ->assertStatus(422);
+
+        $this->assertDatabaseCount('payouts', 0);
+        $this->assertSame(0.0, (float) $fixture['booking']->fresh()->teacher_reserved_amount);
+        // Percobaan yang gagal harus tetap tercatat agar tidak bisa ditebak
+        // tanpa batas.
+        $this->assertSame(1, (int) \DB::table('verification_codes')->value('attempts'));
+        Http::assertNothingSent();
+    }
+
+    public function test_stored_bank_account_pays_with_a_valid_otp(): void
+    {
+        Http::fake(['https://api.xendit.test/*' => Http::response(['id' => 'payout-stored-1', 'status' => 'PROCESSING'], 202)]);
+        $fixture = $this->earningTeacher();
+        $this->storeBank($fixture['teacher']);
+        Sanctum::actingAs($fixture['teacher']);
+        $code = $this->issueOtp($fixture['teacher']);
+
+        $this->postJson('/api/teacher/payout-requests', [
+            'amount' => 20000,
+            'verification' => ['otp' => $code],
+        ], ['Idempotency-Key' => 'payout-stored-valid'])->assertAccepted();
+
+        $this->assertDatabaseCount('payouts', 1);
+        $this->assertNotNull(\DB::table('verification_codes')->value('used_at'));
+        $this->assertGreaterThan(0.0, (float) $fixture['booking']->fresh()->teacher_reserved_amount);
+    }
+
+    public function test_unvalidated_verification_code_alias_cannot_replace_the_otp_field(): void
+    {
+        Http::fake();
+        $fixture = $this->earningTeacher();
+        $this->storeBank($fixture['teacher']);
+        Sanctum::actingAs($fixture['teacher']);
+        $code = $this->issueOtp($fixture['teacher']);
+
+        $this->postJson('/api/teacher/payout-requests', [
+            'amount' => 20000,
+            'verification' => ['code' => $code],
+        ], ['Idempotency-Key' => 'payout-code-alias'])->assertStatus(422);
+
+        $this->assertDatabaseCount('payouts', 0);
+        $this->assertNull(\DB::table('verification_codes')->value('used_at'));
+    }
+
+    public function test_password_method_payout_verifies_the_password_without_a_class_error(): void
+    {
+        Http::fake(['https://api.xendit.test/*' => Http::response(['id' => 'payout-pass-1', 'status' => 'PROCESSING'], 202)]);
+        $fixture = $this->earningTeacher();
+        $this->storeBank($fixture['teacher'], 'password');
+        Sanctum::actingAs($fixture['teacher']);
+
+        $this->postJson('/api/teacher/payout-requests', [
+            'amount' => 20000,
+            'verification' => ['password' => 'wrong-password'],
+        ], ['Idempotency-Key' => 'payout-password-wrong'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Masukkan kata sandi akun yang benar untuk memverifikasi pencairan.');
+
+        $this->assertDatabaseCount('payouts', 0);
+
+        $this->postJson('/api/teacher/payout-requests', [
+            'amount' => 20000,
+            'verification' => ['password' => 'password'],
+        ], ['Idempotency-Key' => 'payout-password-valid'])->assertAccepted();
+
+        $this->assertDatabaseCount('payouts', 1);
+    }
+
+    public function test_bank_update_requires_the_configured_second_factor(): void
+    {
+        $fixture = $this->earningTeacher();
+        $profile = TeacherProfile::query()->where('user_id', $fixture['teacher']->id)->firstOrFail();
+        Sanctum::actingAs($fixture['teacher']);
+
+        $details = [
+            'payout_channel_code' => 'BCA',
+            'account_number' => '1234567890',
+            'account_name' => $fixture['teacher']->name,
+        ];
+
+        // Metode OTP (default): kata sandi akun saja tidak boleh mengubah rekening.
+        $this->postJson('/api/teacher/bank', $details + ['current_password' => 'password'], ['Idempotency-Key' => 'bank-otp-missing'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Kode verifikasi email wajib diisi sebelum mengubah rekening.');
+        $this->assertNull($profile->fresh()->account_number);
+
+        $code = $this->issueOtp($fixture['teacher']);
+        $this->postJson('/api/teacher/bank', $details + ['otp' => $code], ['Idempotency-Key' => 'bank-otp-valid'])
+            ->assertOk();
+
+        $this->assertSame('1234567890', $profile->fresh()->account_number);
+    }
+
+    public function test_bank_update_for_a_password_method_tutor_requires_the_password(): void
+    {
+        $fixture = $this->earningTeacher();
+        $this->storeBank($fixture['teacher'], 'password');
+        $profile = TeacherProfile::query()->where('user_id', $fixture['teacher']->id)->firstOrFail();
+        Sanctum::actingAs($fixture['teacher']);
+
+        $details = [
+            'payout_channel_code' => 'BCA',
+            'account_number' => '9999999999',
+            'account_name' => $fixture['teacher']->name,
+        ];
+
+        $this->postJson('/api/teacher/bank', $details + ['current_password' => 'wrong-password'], ['Idempotency-Key' => 'bank-password-wrong'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Kata sandi akun tidak sesuai.');
+        $this->assertSame('1234567890', $profile->fresh()->account_number);
+
+        $this->postJson('/api/teacher/bank', $details + ['current_password' => 'password'], ['Idempotency-Key' => 'bank-password-valid'])
+            ->assertOk();
+        $this->assertSame('9999999999', $profile->fresh()->account_number);
+    }
+
+    private function storeBank($teacher, string $method = 'otp'): TeacherProfile
+    {
+        $profile = TeacherProfile::query()->where('user_id', $teacher->id)->firstOrFail();
+        $profile->forceFill([
+            'bank_name' => 'BCA',
+            'payout_channel_code' => 'BCA',
+            'account_number' => '1234567890',
+            'account_name' => $teacher->name,
+            'payout_verification_method' => $method,
+            'payout_hold_until' => null,
+        ])->save();
+
+        return $profile;
+    }
+
     private function issueOtp($user): string
     {
         $code = '123456';

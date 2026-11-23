@@ -9,11 +9,11 @@ use App\Services\CheapClassService;
 use App\Services\CustomerWalletService;
 use App\Services\GatewayPaymentSettlementService;
 use App\Services\PackageCheckoutService;
+use App\Services\PaymentPinService;
 use App\Services\XenditPaymentService;
 use App\Services\XenditWebhookService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -26,7 +26,8 @@ class XenditPaymentController extends Controller
         Request $request,
         Order $order,
         XenditPaymentService $xendit,
-        CustomerWalletService $wallets
+        CustomerWalletService $wallets,
+        PaymentPinService $paymentPins
     ) {
         $validated = $request->validate([
             'mode' => 'sometimes|in:components,payment_link',
@@ -55,11 +56,12 @@ class XenditPaymentController extends Controller
                         'code' => 'payment_pin_setup_required',
                     ], 409);
                 }
-                if (! Hash::check((string) ($validated['payment_pin'] ?? ''), (string) $request->user()->payment_pin_hash)) {
+                $pinCheck = $paymentPins->verify($request->user(), (string) ($validated['payment_pin'] ?? ''));
+                if (! $pinCheck['ok']) {
                     return response()->json([
-                        'message' => 'PIN pembayaran tidak sesuai.',
-                        'code' => 'payment_pin_invalid',
-                    ], 422);
+                        'message' => $pinCheck['message'],
+                        'code' => $pinCheck['code'],
+                    ], $pinCheck['status']);
                 }
             }
 
@@ -70,9 +72,13 @@ class XenditPaymentController extends Controller
                     'code' => 'wallet_not_supported',
                 ], 422);
             }
-            if (! $reusesExistingHold && $quote['external_due'] <= $quote['usable_amount'] + 0.009) {
+            // Hanya tagihan yang benar-benar tertutup penuh yang tidak punya
+            // sisa untuk diinvoicekan lewat Xendit. Membandingkan dengan
+            // `usable_amount` menolak setiap tagihan yang saldonya menutupi
+            // separuh nilai tagihan atau lebih.
+            if ($quote['external_due'] <= 0.009) {
                 return response()->json([
-                    'message' => 'Saldo BimbelKu menutupi seluruh tagihan. Selesaikan pembayaran memakai saldo tanpa Xendit.',
+                    'message' => 'Sisa tagihan sudah tertutup penuh oleh Saldo BimbelKu.',
                     'code' => 'wallet_covers_full_invoice',
                 ], 422);
             }

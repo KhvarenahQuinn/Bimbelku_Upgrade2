@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\BookingDispute;
 use App\Models\BookingParticipant;
+use App\Models\FinancialJournal;
 use App\Models\Refund;
 use App\Models\SessionReport;
 use App\Models\User;
@@ -109,7 +110,7 @@ class SessionRefundDecisionTest extends TestCase
         $this->assertSame(0, Refund::query()->count());
     }
 
-    public function test_emergency_decision_with_session_refund_queues_one_adjustment(): void
+    public function test_emergency_decision_with_session_refund_queues_one_refund_without_a_phantom_adjustment(): void
     {
         $fixture = $this->emergencyFixture();
         $report = SessionReport::query()->firstOrFail();
@@ -128,8 +129,15 @@ class SessionRefundDecisionTest extends TestCase
         $this->assertSame('admin', $refund->decided_by);
         $this->assertSame($fixture['admin']->id, (int) $refund->decision_actor_id);
         $this->assertDatabaseHas('financial_journals', [
+            'event_key' => "refund:{$refund->id}:queued",
+        ]);
+        // Sesi ini belum pernah diselesaikan, jadi belum ada hak tutor yang
+        // bisa dibalik. Jurnal pembalik di sini akan menjadi debit
+        // tutor_payable tanpa lawan (phantom).
+        $this->assertDatabaseMissing('financial_journals', [
             'event_key' => "refund:{$refund->id}:adjust:{$fixture['first']['booking']->id}",
         ]);
+        $this->assertSame(0, FinancialJournal::query()->where('type', 'refund_session_adjusted')->count());
         $this->artisan('finance:verify-ledger')->assertSuccessful();
     }
 

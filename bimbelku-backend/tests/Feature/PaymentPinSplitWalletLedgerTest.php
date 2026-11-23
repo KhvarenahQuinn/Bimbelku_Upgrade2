@@ -390,6 +390,253 @@ class PaymentPinSplitWalletLedgerTest extends TestCase
         ]);
     }
 
+    public function test_split_payment_accepts_a_wallet_balance_of_half_the_invoice(): void
+    {
+        Http::fake([
+            'https://api.xendit.test/sessions' => Http::response([
+                'payment_session_id' => 'ps-split-half',
+                'status' => 'ACTIVE',
+                'payment_link_url' => 'https://checkout.xendit.test/split-half',
+            ]),
+        ]);
+
+        $student = User::factory()->create([
+            'role' => 'student',
+            'status' => 'active',
+            'payment_pin_hash' => Hash::make('123456'),
+        ]);
+        $this->creditWallet($student, 50000);
+        $order = $this->supportedOrder($student, 100000, 'INV-SPLIT-HALF');
+        Sanctum::actingAs($student);
+
+        $this->postJson("/api/orders/{$order->id}/xendit-session", [
+            'mode' => 'payment_link',
+            'use_wallet' => true,
+            'wallet_expected_amount' => 50000,
+            'payment_pin' => '123456',
+        ], ['Idempotency-Key' => 'split-half-1'])
+            ->assertOk()
+            ->assertJsonPath('data.wallet_amount', 50000)
+            ->assertJsonPath('data.xendit_amount', 50000);
+
+        // Regresi: saldo 50% dulu ditolak karena guard membandingkan
+        // external_due dengan usable_amount, bukan dengan nol.
+        Http::assertSent(fn (ClientRequest $request) => str_ends_with($request->url(), '/sessions')
+            && (int) $request['amount'] === 50000);
+
+        $this->assertSame('50000.00', $order->fresh()->wallet_reserved_amount);
+    }
+
+    public function test_full_wallet_coverage_rejects_the_xendit_session_with_an_accurate_message(): void
+    {
+        Http::fake();
+
+        $student = User::factory()->create([
+            'role' => 'student',
+            'status' => 'active',
+            'payment_pin_hash' => Hash::make('123456'),
+        ]);
+        $this->creditWallet($student, 100000);
+        $order = $this->supportedOrder($student, 100000, 'INV-SPLIT-FULL');
+        Sanctum::actingAs($student);
+
+        $this->postJson("/api/orders/{$order->id}/xendit-session", [
+            'mode' => 'payment_link',
+            'use_wallet' => true,
+            'wallet_expected_amount' => 100000,
+            'payment_pin' => '123456',
+        ], ['Idempotency-Key' => 'split-full-1'])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'wallet_covers_full_invoice')
+            ->assertJsonPath('message', 'Sisa tagihan sudah tertutup penuh oleh Saldo BimbelKu.');
+
+        $this->assertSame('0.00', $order->fresh()->wallet_reserved_amount);
+        $this->assertSame('100000.00', CustomerWallet::query()->where('user_id', $student->id)->firstOrFail()->current_balance);
+        Http::assertNothingSent();
+    }
+
+    public function test_partially_paid_top_up_reuses_the_existing_wallet_hold_without_a_pin(): void
+    {
+        Http::fake([
+            'https://api.xendit.test/sessions' => Http::response([
+                'payment_session_id' => 'ps-topup-reuse',
+                'status' => 'ACTIVE',
+                'payment_link_url' => 'https://checkout.xendit.test/topup-reuse',
+            ]),
+        ]);
+
+        // Tanpa PIN: pemakaian ulang hold tidak boleh meminta PIN lagi.
+        $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
+        $this->creditWallet($student, 40000);
+        $order = $this->supportedOrder($student, 100000, 'INV-TOPUP-REUSE');
+
+        $this->assertSame(40000.0, app(CustomerWalletService::class)->reserveForPayment($order, $student->id, null, $student->id));
+
+        // Admin memverifikasi transfer yang kurang: sisa tagihan tetap terbuka.
+        $order->refresh()->forceFill([
+            'status' => 'partially_paid',
+            'external_received_amount' => 20000,
+            'payment_outstanding_amount' => 40000,
+            'top_up_due_at' => now()->addHours(24),
+        ])->save();
+
+        Sanctum::actingAs($student);
+
+        $this->postJson("/api/orders/{$order->id}/xendit-session", [
+            'mode' => 'payment_link',
+        ], ['Idempotency-Key' => 'topup-reuse-1'])
+            ->assertOk()
+            ->assertJsonPath('data.wallet_amount', 40000)
+            ->assertJsonPath('data.xendit_amount', 40000);
+
+        Http::assertSent(fn (ClientRequest $request) => str_ends_with($request->url(), '/sessions')
+            && (int) $request['amount'] === 40000);
+
+        $order->refresh();
+        $wallet = CustomerWallet::query()->where('user_id', $student->id)->firstOrFail();
+        $this->assertSame('partially_paid', $order->status);
+        $this->assertSame('40000.00', $order->wallet_reserved_amount);
+        $this->assertSame('0.00', $wallet->current_balance);
+        $this->assertSame('40000.00', $wallet->reserved_balance);
+        // Satu hold, bukan dua: pemakaian ulang tidak boleh mereservasi lagi.
+        $this->assertSame(1, CustomerWalletTransaction::query()
+            ->where('order_id', $order->id)
+            ->where('type', 'payment_reserve')
+            ->count());
+    }
+
+    public function test_partially_paid_invoice_without_a_hold_cannot_open_a_new_reservation(): void
+    {
+        $student = User::factory()->create(['role' => 'student', 'status' => 'active']);
+        $this->creditWallet($student, 50000);
+        $order = $this->supportedOrder($student, 100000, 'INV-TOPUP-NOHOLD');
+        $order->forceFill([
+            'status' => 'partially_paid',
+            'payment_outstanding_amount' => 60000,
+            'top_up_due_at' => now()->addHours(24),
+        ])->save();
+
+        try {
+            app(CustomerWalletService::class)->reserveForPayment($order->fresh(), $student->id, null, $student->id);
+            $this->fail('Tagihan partially_paid tanpa hold tidak boleh membuka hold baru.');
+        } catch (HttpException $exception) {
+            $this->assertSame(422, $exception->getStatusCode());
+        }
+
+        $this->assertSame('0.00', $order->fresh()->wallet_reserved_amount);
+        $this->assertSame('50000.00', CustomerWallet::query()->where('user_id', $student->id)->firstOrFail()->current_balance);
+    }
+
+    public function test_five_wrong_pins_lock_the_wallet_payment_path_and_notify_the_student(): void
+    {
+        Http::fake([
+            'https://api.xendit.test/sessions' => Http::response([
+                'payment_session_id' => 'ps-pin-lock',
+                'status' => 'ACTIVE',
+                'payment_link_url' => 'https://checkout.xendit.test/pin-lock',
+            ]),
+        ]);
+
+        $student = User::factory()->create([
+            'role' => 'student',
+            'status' => 'active',
+            'payment_pin_hash' => Hash::make('123456'),
+        ]);
+        $this->creditWallet($student, 40000);
+        $order = $this->supportedOrder($student, 100000, 'INV-PIN-LOCK');
+        Sanctum::actingAs($student);
+
+        for ($strike = 1; $strike <= 5; $strike++) {
+            // Lima permintaan per menit masih di bawah throttle rute pembayaran.
+            $response = $this->postJson("/api/orders/{$order->id}/xendit-session", [
+                'use_wallet' => true,
+                'wallet_expected_amount' => 40000,
+                'payment_pin' => '000000',
+            ], ['Idempotency-Key' => 'pin-lock-wrong-'.$strike]);
+
+            if ($strike < 5) {
+                $response->assertStatus(422)->assertJsonPath('code', 'payment_pin_invalid');
+            } else {
+                $response->assertStatus(423)->assertJsonPath('code', 'payment_pin_locked');
+            }
+        }
+
+        $locked = $student->fresh();
+        $this->assertSame(5, $locked->payment_pin_failed_attempts);
+        $this->assertNotNull($locked->payment_pin_locked_until);
+        $this->assertTrue($locked->payment_pin_locked_until->isFuture());
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $student->id,
+            'title' => 'PIN pembayaran dikunci sementara',
+        ]);
+        $this->assertSame('0.00', $order->fresh()->wallet_reserved_amount);
+
+        // Jendela throttle selesai; permintaan berikutnya harus menguji kunci PIN.
+        $this->travel(61)->seconds();
+
+        $this->postJson("/api/orders/{$order->id}/xendit-session", [
+            'use_wallet' => true,
+            'wallet_expected_amount' => 40000,
+            'payment_pin' => '123456',
+        ], ['Idempotency-Key' => 'pin-lock-correct'])
+            ->assertStatus(423)
+            ->assertJsonPath('code', 'payment_pin_locked');
+        $this->assertSame(5, $student->fresh()->payment_pin_failed_attempts);
+        $this->assertSame('0.00', $order->fresh()->wallet_reserved_amount);
+
+        // Setelah masa kunci habis, PIN benar diterima dan penghitung direset.
+        $this->travel(16)->minutes();
+
+        $this->postJson("/api/orders/{$order->id}/xendit-session", [
+            'use_wallet' => true,
+            'wallet_expected_amount' => 40000,
+            'payment_pin' => '123456',
+        ], ['Idempotency-Key' => 'pin-lock-after-lock'])->assertOk();
+
+        $recovered = $student->fresh();
+        $this->assertSame(0, $recovered->payment_pin_failed_attempts);
+        $this->assertNull($recovered->payment_pin_locked_until);
+        $this->assertSame('40000.00', $order->fresh()->wallet_reserved_amount);
+    }
+
+    public function test_email_link_pin_reset_revokes_tokens_notifies_and_clears_the_lock(): void
+    {
+        $student = User::factory()->create([
+            'role' => 'student',
+            'status' => 'active',
+            'payment_pin_hash' => Hash::make('111111'),
+            'payment_pin_failed_attempts' => 5,
+            'payment_pin_locked_until' => now()->addMinutes(10),
+        ]);
+
+        $token = Str::random(60);
+        DB::table('payment_pin_reset_tokens')->insert([
+            'email' => $student->email,
+            'token' => Hash::make($token),
+            'created_at' => now(),
+        ]);
+        $student->createToken('device-lama');
+        $this->assertDatabaseCount('personal_access_tokens', 1);
+
+        $this->postJson('/api/payment-pin/reset-with-token', [
+            'email' => $student->email,
+            'token' => $token,
+            'pin' => '222222',
+            'pin_confirmation' => '222222',
+        ])->assertOk()->assertJsonPath('verified_with', 'email_link');
+
+        $fresh = $student->fresh();
+        $this->assertTrue(Hash::check('222222', (string) $fresh->payment_pin_hash));
+        $this->assertSame(0, $fresh->payment_pin_failed_attempts);
+        $this->assertNull($fresh->payment_pin_locked_until);
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $student->id,
+            'title' => 'PIN pembayaran diatur ulang',
+        ]);
+        $this->assertDatabaseCount('payment_pin_reset_tokens', 0);
+    }
+
     private function creditWallet(User $student, float $amount): void
     {
         $order = Order::create([

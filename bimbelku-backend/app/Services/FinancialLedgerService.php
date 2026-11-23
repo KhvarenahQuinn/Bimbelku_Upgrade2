@@ -40,13 +40,21 @@ class FinancialLedgerService
         $external = round(max(0, $total - $wallet), 2);
         $entries = [];
         if ($external > 0) {
-            $entries[] = [
-                'account' => $order->payment_reconciliation_status
-                    ? 'customer_payment_deposits'
-                    : 'platform_cash',
-                'side' => 'debit',
-                'amount' => $external,
-            ];
+            // Akun clearing hanya boleh didebit sebesar transfer manual yang
+            // benar-benar dikreditkan oleh `recordExternalPaymentReceipt`.
+            // Pembayaran gateway langsung masuk ke kas platform, sehingga dulu
+            // membuat `customer_payment_deposits` minus sebesar volume Xendit.
+            $clearing = min($external, max(0, round((float) PaymentSubmission::query()
+                ->where('order_id', $order->id)
+                ->where('status', 'verified')
+                ->sum('received_amount'), 2)));
+            $cash = round($external - $clearing, 2);
+            if ($clearing > 0) {
+                $entries[] = ['account' => 'customer_payment_deposits', 'side' => 'debit', 'amount' => $clearing];
+            }
+            if ($cash > 0) {
+                $entries[] = ['account' => 'platform_cash', 'side' => 'debit', 'amount' => $cash];
+            }
         }
         if ($wallet > 0) {
             $entries[] = ['account' => 'customer_wallet_liability', 'side' => 'debit', 'amount' => $wallet];
@@ -151,32 +159,64 @@ class FinancialLedgerService
 
     public function recordPayout(Payout $payout): FinancialJournal
     {
+        [$requested, $transferred, $tax] = $this->payoutAmounts($payout);
+        $entries = [
+            // Debit sebesar hak bruto agar `tutor_payable` benar-benar bersih;
+            // pajak yang dipotong dicatat sebagai kewajiban tersendiri.
+            ['account' => 'tutor_payable', 'side' => 'debit', 'amount' => $requested],
+            ['account' => 'platform_cash', 'side' => 'credit', 'amount' => $transferred],
+        ];
+        if ($tax > 0) {
+            $entries[] = ['account' => 'tax_payable', 'side' => 'credit', 'amount' => $tax];
+        }
+
         return $this->record(
             "payout:{$payout->id}:completed",
             'payout_completed',
             Payout::class,
             $payout->id,
             "Hak tutor {$payout->user_id} dicairkan",
-            [
-                ['account' => 'tutor_payable', 'side' => 'debit', 'amount' => $payout->amount],
-                ['account' => 'platform_cash', 'side' => 'credit', 'amount' => $payout->amount],
-            ]
+            $entries
         );
     }
 
     public function recordPayoutReversed(Payout $payout): FinancialJournal
     {
+        [$requested, $transferred, $tax] = $this->payoutAmounts($payout);
+        $entries = [
+            ['account' => 'platform_cash', 'side' => 'debit', 'amount' => $transferred],
+        ];
+        if ($tax > 0) {
+            $entries[] = ['account' => 'tax_payable', 'side' => 'debit', 'amount' => $tax];
+        }
+        $entries[] = ['account' => 'tutor_payable', 'side' => 'credit', 'amount' => $requested];
+
         return $this->record(
             "payout:{$payout->id}:reversed",
             'payout_reversed',
             Payout::class,
             $payout->id,
             "Payout tutor {$payout->user_id} dikembalikan oleh bank",
-            [
-                ['account' => 'platform_cash', 'side' => 'debit', 'amount' => $payout->amount],
-                ['account' => 'tutor_payable', 'side' => 'credit', 'amount' => $payout->amount],
-            ]
+            $entries
         );
+    }
+
+    /**
+     * Baris payout lama hanya menyimpan nominal transfer tanpa rincian pajak.
+     * Jangan mengarang potongan untuk data seperti itu.
+     *
+     * @return array{0:float,1:float,2:float} requested, transferred, tax
+     */
+    private function payoutAmounts(Payout $payout): array
+    {
+        $transferred = round((float) $payout->amount, 2);
+        $tax = round((float) ($payout->tax_amount ?? 0), 2);
+        $requested = round((float) ($payout->requested_amount ?? 0), 2);
+        if ($requested <= 0.009 || abs($requested - ($transferred + $tax)) > 0.009) {
+            return [$transferred, $transferred, 0.0];
+        }
+
+        return [$requested, $transferred, $tax];
     }
 
     public function recordRefundPaid(Refund $refund): FinancialJournal
@@ -231,8 +271,20 @@ class FinancialLedgerService
      * `booking:{id}:settled` journal is immutable, so the correction is always
      * a new journal keyed on the refund.
      */
-    public function recordSessionRefundAdjustment(Booking $booking, Refund $refund, float $grossDelta, float $netDelta): FinancialJournal
+    public function recordSessionRefundAdjustment(Booking $booking, Refund $refund, float $grossDelta, float $netDelta): ?FinancialJournal
     {
+        // Sesi yang belum pernah diselesaikan belum punya jurnal
+        // `booking:{id}:settled`, jadi tidak ada tutor_payable atau
+        // platform_revenue yang bisa dibalik. Tanpa penjagaan ini, refund sesi
+        // yang belum terlaksana (mis. tutor keluar) memposting debit negatif
+        // yang tidak pernah punya lawan.
+        $settled = FinancialJournal::query()
+            ->where('event_key', "booking:{$booking->id}:settled")
+            ->exists();
+        if (! $settled) {
+            return null;
+        }
+
         $gross = round($grossDelta, 2);
         $net = round(min(max(0, $netDelta), $gross), 2);
         $commission = round($gross - $net, 2);
