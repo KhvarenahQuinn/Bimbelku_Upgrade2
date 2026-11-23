@@ -3,7 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Refund;
+use App\Models\SessionReport;
+use App\Models\User;
 use App\Services\PartialPackageRefundService;
+use App\Support\AdminPermissionCatalog;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -78,6 +81,64 @@ class TutorExitRefundTest extends TestCase
             'confirm_token' => 'REFUND_SISA_PAKET',
             'booking_ids' => [$fixture['sessions'][0]['booking']->id],
         ], ['Idempotency-Key' => 'tutor-exit-attended-01'])->assertStatus(422);
+
+        $this->assertSame(0, Refund::query()->count());
+    }
+
+    public function test_case_center_exposes_the_package_that_owns_the_remaining_sessions(): void
+    {
+        $fixture = SessionFinanceFixture::make($this, 3);
+        SessionReport::create([
+            'booking_id' => $fixture['first']['booking']->id,
+            'teacher_id' => $fixture['teacher']->id,
+            'reported_by' => $fixture['student']->id,
+            'reported_student_id' => $fixture['student']->id,
+            'type' => 'teacher_emergency',
+            'chronology' => 'Tutor menyatakan berhenti mengajar sehingga sisa paket harus direfund.',
+            'status' => 'pending',
+        ]);
+        Sanctum::actingAs($fixture['admin']);
+
+        // Pusat kasus harus memberi id paket; tanpa itu UI tidak dapat memanggil
+        // pratinjau refund sisa paket dan alur tutor-exit tetap menggantung.
+        $cases = $this->getJson('/api/admin/cases?scope=active')->assertOk();
+        $report = collect($cases->json('session_reports'))->firstWhere('type', 'teacher_emergency');
+        $this->assertNotNull($report);
+        $this->assertSame($fixture['package']->id, (int) $report['package_id']);
+
+        // Kontrak pratinjau yang dipakai kartu konfirmasi admin.
+        $preview = $this->postJson("/api/admin/packages/{$fixture['package']->id}/tutor-exit-preview")
+            ->assertOk();
+        $preview->assertJsonPath('data.total_amount', 150000)
+            ->assertJsonPath('data.already_queued', false)
+            ->assertJsonCount(3, 'data.sessions')
+            ->assertJsonStructure(['data' => ['sessions' => [['booking_id', 'start_at', 'end_at', 'subject', 'amount']], 'total_amount', 'wallet_amount', 'external_amount', 'already_queued']]);
+        $this->assertSame(0, Refund::query()->count());
+    }
+
+    public function test_tutor_exit_endpoints_stay_closed_for_an_admin_without_refund_permission(): void
+    {
+        config()->set('bimbelku.primary_admin_email', '');
+        $fixture = SessionFinanceFixture::make($this, 3);
+        $limited = User::factory()->create([
+            'role' => 'admin',
+            'status' => 'active',
+            'admin_permissions' => [AdminPermissionCatalog::CONTENT_MANAGE],
+        ]);
+        Sanctum::actingAs($limited);
+
+        $this->postJson("/api/admin/packages/{$fixture['package']->id}/tutor-exit-preview")
+            ->assertForbidden()
+            ->assertJsonPath('required_permission', AdminPermissionCatalog::FINANCE_REFUNDS);
+
+        $this->postJson("/api/admin/packages/{$fixture['package']->id}/tutor-exit", [
+            'reason' => 'Tutor berhenti mengajar dan tidak dapat melanjutkan paket.',
+            'evidence_note' => 'Tutor menyampaikan pengunduran diri tertulis dan seluruh sesi tersisa belum terlaksana sama sekali.',
+            'confirm_token' => 'REFUND_SISA_PAKET',
+            'booking_ids' => [$fixture['first']['booking']->id],
+        ], ['Idempotency-Key' => 'tutor-exit-denied-01'])
+            ->assertForbidden()
+            ->assertJsonPath('required_permission', AdminPermissionCatalog::FINANCE_REFUNDS);
 
         $this->assertSame(0, Refund::query()->count());
     }

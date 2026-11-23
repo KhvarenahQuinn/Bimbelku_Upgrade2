@@ -486,25 +486,28 @@ class SessionWorkflowController extends Controller
             'session_reports' => SessionReport::query()
                 ->when($active, fn ($query) => $query->where('status', 'pending'))
                 ->when(! $active, fn ($query) => $query->where('status', '!=', 'pending'))
-                ->with(['booking.teacher', 'booking.participants.order', 'reportedStudent', 'reporter', 'teacher', 'reviewer'])
+                ->with(['booking.teacher', 'booking.order:id,learning_package_id', 'booking.participants.order', 'reportedStudent', 'reporter', 'teacher', 'reviewer'])
                 ->latest()
                 ->limit(200)
-                ->get(),
+                ->get()
+                ->each(fn (SessionReport $report) => $report->setAttribute('package_id', $report->booking?->order?->learning_package_id)),
             'disputes' => BookingDispute::query()
                 ->when($active, fn ($query) => $query->where('status', 'pending'))
                 ->when(! $active, fn ($query) => $query->where('status', '!=', 'pending'))
-                ->with(['booking.teacher', 'booking.participants.order', 'booking.latestLearningProgressReport', 'student', 'resolver'])
+                ->with(['booking.teacher', 'booking.order:id,learning_package_id', 'booking.participants.order', 'booking.latestLearningProgressReport', 'student', 'resolver'])
                 ->latest()
                 ->limit(200)
-                ->get(),
+                ->get()
+                ->each(fn (BookingDispute $dispute) => $dispute->setAttribute('package_id', $dispute->booking?->order?->learning_package_id)),
             'completion_reviews' => Booking::query()
                 ->whereNotNull('admin_review_required_at')
                 ->when($active, fn ($query) => $query->where('status', 'admin_review_required'))
                 ->when(! $active, fn ($query) => $query->where('status', '!=', 'admin_review_required'))
-                ->with(['teacher', 'participants.student', 'latestLearningProgressReport'])
+                ->with(['teacher', 'order:id,learning_package_id', 'participants.student', 'latestLearningProgressReport'])
                 ->latest('admin_review_required_at')
                 ->limit(200)
-                ->get(),
+                ->get()
+                ->each(fn (Booking $booking) => $booking->setAttribute('package_id', $booking->order?->learning_package_id)),
             'refunds' => Refund::query()
                 ->where('status', 'pending')
                 ->with(['user', 'booking.teacher', 'order'])
