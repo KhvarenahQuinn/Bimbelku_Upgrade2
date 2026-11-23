@@ -231,8 +231,20 @@ class FinancialLedgerService
      * `booking:{id}:settled` journal is immutable, so the correction is always
      * a new journal keyed on the refund.
      */
-    public function recordSessionRefundAdjustment(Booking $booking, Refund $refund, float $grossDelta, float $netDelta): FinancialJournal
+    public function recordSessionRefundAdjustment(Booking $booking, Refund $refund, float $grossDelta, float $netDelta): ?FinancialJournal
     {
+        // Sesi yang belum pernah diselesaikan belum punya jurnal
+        // `booking:{id}:settled`, jadi tidak ada tutor_payable atau
+        // platform_revenue yang bisa dibalik. Tanpa penjagaan ini, refund sesi
+        // yang belum terlaksana (mis. tutor keluar) memposting debit negatif
+        // yang tidak pernah punya lawan.
+        $settled = FinancialJournal::query()
+            ->where('event_key', "booking:{$booking->id}:settled")
+            ->exists();
+        if (! $settled) {
+            return null;
+        }
+
         $gross = round($grossDelta, 2);
         $net = round(min(max(0, $netDelta), $gross), 2);
         $commission = round($gross - $net, 2);

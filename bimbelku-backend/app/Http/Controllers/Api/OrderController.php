@@ -15,6 +15,7 @@ use App\Services\CheapClassService;
 use App\Services\CustomerWalletService;
 use App\Services\GatewayPaymentSettlementService;
 use App\Services\PackageCheckoutService;
+use App\Services\PaymentPinService;
 use App\Services\PaymentReconciliationService;
 use App\Services\RefundSettlementService;
 use App\Services\ScheduleReleaseService;
@@ -24,7 +25,6 @@ use App\Support\RefundStatusPresenter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
@@ -37,7 +37,8 @@ class OrderController extends Controller
         PackageCheckoutService $packageCheckoutService,
         CustomerWalletService $wallets,
         PaymentReconciliationService $reconciliation,
-        UploadSecurityService $uploads
+        UploadSecurityService $uploads,
+        PaymentPinService $paymentPins
     ) {
         $walletInput = $request->validate([
             'use_wallet' => ['sometimes', 'boolean'],
@@ -69,8 +70,9 @@ class OrderController extends Controller
             if (! filled($request->user()->payment_pin_hash)) {
                 return $this->paymentError('Buat PIN pembayaran terlebih dahulu untuk menggunakan Saldo BimbelKu.', 409, 'payment_pin_setup_required');
             }
-            if ($paymentPin === '' || ! Hash::check($paymentPin, (string) $request->user()->payment_pin_hash)) {
-                return $this->paymentError('PIN pembayaran tidak sesuai.', 422, 'payment_pin_invalid');
+            $pinCheck = $paymentPins->verify($request->user(), $paymentPin);
+            if (! $pinCheck['ok']) {
+                return $this->paymentError($pinCheck['message'], $pinCheck['status'], $pinCheck['code']);
             }
         }
 

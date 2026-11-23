@@ -1329,6 +1329,7 @@ class SessionWorkflowController extends Controller
                 $requestedDestinationMethod,
                 $requestedDestinationVersion,
                 $partialPackageRefunds,
+                $settlement,
                 &$walletTransaction,
                 &$completedBreakdown
             ) {
@@ -1428,29 +1429,16 @@ class SessionWorkflowController extends Controller
 
                 $remainingRefunds = $lockedRefund->booking?->refunds()->where('status', 'pending')->count() ?? 0;
                 if ($lockedRefund->booking && $remainingRefunds === 0) {
-                    $settledStatuses = [
-                        'approved', 'no_show_confirmed', 'refunded', 'cancelled', 'teacher_rejected',
-                    ];
-                    $unsettled = $lockedRefund->booking->participants()
-                        ->whereNotIn('status', $settledStatuses)
-                        ->exists();
-                    $earningParticipants = $lockedRefund->booking->participants()
-                        ->whereIn('status', ['approved', 'no_show_confirmed'])
-                        ->count();
-                    $gross = $earningParticipants * (float) $lockedRefund->booking->total_amount;
-                    $net = round(
-                        $gross * (100 - (float) $lockedRefund->booking->commission_percent) / 100
-                    );
+                    // Satu sumber hitungan untuk refund manual, Xendit, dan
+                    // saldo: nilai sesi dikurangi porsi refund yang ditanggung
+                    // tutor supaya angka tersimpan sama dengan jurnal yang ada.
+                    $figures = $settlement->recomputeBookingFigures($lockedRefund->booking->fresh());
 
                     $lockedRefund->booking->update([
-                        'status' => $unsettled
-                            ? 'partially_refunded'
-                            : ($earningParticipants > 0 ? 'completed' : 'refunded'),
-                        'gross_amount' => $gross,
-                        'teacher_net_amount' => $net,
-                        'payout_status' => $unsettled
-                            ? 'locked'
-                            : ($earningParticipants > 0 ? 'ready' : 'cancelled'),
+                        'status' => $figures['status'],
+                        'gross_amount' => $figures['gross'],
+                        'teacher_net_amount' => $figures['net'],
+                        'payout_status' => $figures['payout_status'],
                     ]);
                 }
 
@@ -1657,16 +1645,17 @@ class SessionWorkflowController extends Controller
         $earningParticipants = $booking->participants()
             ->whereIn('status', ['approved', 'no_show_confirmed'])
             ->count();
-        $gross = $earningParticipants * (float) $booking->total_amount;
-        $net = round($gross * (100 - (float) $booking->commission_percent) / 100);
+        // Hitungan yang sama dengan refund manual dan Xendit: hak tutor selalu
+        // bersih dari refund yang ditanggung tutor.
+        $figures = app(RefundSettlementService::class)->recomputeBookingFigures($booking);
 
         $booking->update([
-            'status' => $earningParticipants > 0 ? 'completed' : 'refunded',
+            'status' => $figures['status'],
             'completed_at' => now(),
             'student_approved_at' => now(),
-            'gross_amount' => $gross,
-            'teacher_net_amount' => $net,
-            'payout_status' => $earningParticipants > 0 ? 'ready' : 'cancelled',
+            'gross_amount' => $figures['gross'],
+            'teacher_net_amount' => $figures['net'],
+            'payout_status' => $figures['payout_status'],
         ]);
         $booking->order?->classroom?->sessions()->update(['is_completed' => true]);
 
