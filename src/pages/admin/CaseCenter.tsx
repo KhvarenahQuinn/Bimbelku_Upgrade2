@@ -9,9 +9,12 @@ import {
   ExternalLink,
   FileSearch,
   Gavel,
+  ListChecks,
   Loader2,
+  PackageX,
   RefreshCw,
   RotateCcw,
+  Scissors,
   ScrollText,
   ShieldAlert,
   UserRoundX,
@@ -27,6 +30,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import http, { getApiError } from "@/lib/http";
+import {
+  TUTOR_EXIT_CONFIRM_TOKEN,
+  fetchTutorExitPreview,
+  hasRemainingRefundableSessions,
+  submitTutorExit,
+  type TutorExitPreview,
+} from "@/lib/tutorExit";
 
 interface CaseData {
   session_reports: any[];
@@ -37,6 +47,8 @@ interface CaseData {
 }
 
 type CaseType = "report" | "dispute" | "completion" | "replacement";
+
+type RefundScope = "none" | "session" | "remaining_package";
 
 const emptyCases: CaseData = { session_reports: [], disputes: [], completion_reviews: [], teacher_replacements: [], features: { teacher_replacement: false } };
 
@@ -50,6 +62,7 @@ export default function CaseCenter() {
   const [notes, setNotes] = useState("");
   const [refundAmount, setRefundAmount] = useState("");
   const [costBearer, setCostBearer] = useState("tutor_share");
+  const [refundScope, setRefundScope] = useState<RefundScope>("session");
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
@@ -94,14 +107,16 @@ export default function CaseCenter() {
           : type === "completion" ? "approve" : "approve",
     );
     setCostBearer("tutor_share");
+    setRefundScope("session");
     setNotes("");
   };
 
   const isLapsedAppeal = selected?.type === "dispute" && selected.item?.kind === "lapsed_session";
   const isEmergencyReport = selected?.type === "report" && selected.item?.type === "teacher_emergency";
+  const selectedPackageId = itemPackageId(selected?.item);
   const needsRefundAmount = isLapsedAppeal && decision === "partial_refund";
   const needsCostBearer = (isLapsedAppeal && (decision === "full_refund" || decision === "partial_refund"))
-    || (isEmergencyReport && decision === "accepted" && itemRefundScope(selected?.item) !== "none");
+    || (isEmergencyReport && decision === "accepted" && refundScope !== "none");
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -122,7 +137,7 @@ export default function CaseCenter() {
       if (type === "report") {
         const emergencyPayload = item.type === "teacher_emergency"
           ? {
-              refund_scope: decision === "rejected" ? "none" : itemRefundScope(item),
+              refund_scope: decision === "rejected" ? "none" : refundScope,
               cost_bearer: costBearer,
             }
           : {};
@@ -189,11 +204,15 @@ export default function CaseCenter() {
               </div>
             </DialogHeader>
             <CaseDetail type={selected.type} item={selected.item} />
+            {scope === "active" && selectedPackageId && (
+              <TutorExitPanel packageId={selectedPackageId} onQueued={load} />
+            )}
             {scope === "history" && <HistoryDecision item={selected.item} />}
             <fieldset disabled={scope === "history"} className={scope === "history" ? "hidden" : "space-y-5"}>
             <div><Label>Keputusan</Label><Select value={decision} onValueChange={setDecision}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{selected.type === "report" ? (isEmergencyReport ? <><SelectItem value="accepted">Laporan valid · refund sesi</SelectItem><SelectItem value="rejected">Laporan ditolak · sesi tetap berjalan</SelectItem></> : <><SelectItem value="accepted">Laporan valid</SelectItem><SelectItem value="rejected">Laporan ditolak</SelectItem></>) : selected.type === "dispute" ? (isLapsedAppeal ? <><SelectItem value="full_refund">Refund penuh nilai sesi</SelectItem><SelectItem value="partial_refund">Refund sebagian</SelectItem><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem></> : <><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem><SelectItem value="student_refund">Refund penuh murid</SelectItem></>) : selected.type === "replacement" ? <><SelectItem value="approve">Setujui dan mulai pencarian</SelectItem><SelectItem value="reject">Tolak pengajuan</SelectItem></> : <><SelectItem value="approve">Sahkan sesi</SelectItem><SelectItem value="refund">Refund penuh</SelectItem></>}</SelectContent></Select></div>
             {needsRefundAmount && <div><Label>Nominal Refund (Rp)</Label><Input inputMode="numeric" type="number" min={1} max={itemRefundCap(selected?.item)} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value.replace(/[^0-9]/g, ""))} className="mt-2 h-11 rounded-xl" placeholder="1" required /><p className="mt-1 text-xs text-slate-500">Maksimal {new Intl.NumberFormat("id-ID").format(itemRefundCap(selected?.item))} sesuai nilai sesi. Nominal harus lebih dari Rp0.</p></div>}
             {isEmergencyReport && decision === "accepted" && selected && <SessionRefundSummary item={selected.item} />}
+            {isEmergencyReport && decision === "accepted" && selectedPackageId && <div><Label>Cakupan refund</Label><Select value={refundScope} onValueChange={(value) => setRefundScope(value as RefundScope)}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="session">Refund sesi yang terdampak saja</SelectItem><SelectItem value="remaining_package">Refund seluruh sisa paket</SelectItem><SelectItem value="none">Tanpa refund</SelectItem></SelectContent></Select><p className="mt-1 text-xs text-slate-500">Rincian sesi dan nominal sisa paket ada pada kartu &quot;Hentikan tutor &amp; refund sisa paket&quot; di atas.</p></div>}
             {needsCostBearer && <div><Label>Penanggung biaya</Label><Select value={costBearer} onValueChange={setCostBearer}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="tutor_share">Potong hak tutor</SelectItem><SelectItem value="platform">Ditanggung platform</SelectItem></SelectContent></Select></div>}
             {(isLapsedAppeal || isEmergencyReport) && selected && <AttendanceEvidence bookingId={isLapsedAppeal ? selected.item.booking_id ?? selected.item.booking?.id : selected.item.booking_id ?? selected.item.booking?.id} />}
             <div><Label>Catatan keputusan</Label><Textarea required minLength={20} className="mt-2 min-h-32 rounded-xl" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Dasar pemeriksaan dan keputusan admin" /></div>
@@ -206,8 +225,109 @@ export default function CaseCenter() {
   );
 }
 
-function itemRefundScope(item: any): "session" | "none" {
-  return item?.type === "teacher_emergency" ? "session" : "none";
+function itemPackageId(item: any): number | null {
+  const value = Number(item?.package_id);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * Satu-satunya pemanggil `tutor-exit-preview` dan `tutor-exit`. Muncul hanya
+ * ketika sesi kasus berasal dari paket dan masih ada sesi tersisa yang
+ * memenuhi syarat refund; pratinjau dimuat lebih dulu agar admin melihat
+ * sesi dan nominal persis sebelum menghentikan tutor.
+ */
+function TutorExitPanel({ packageId, onQueued }: { packageId: number; onQueued: () => Promise<void> | void }) {
+  const [preview, setPreview] = useState<TutorExitPreview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [hidden, setHidden] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const loadPreview = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchTutorExitPreview(packageId);
+      setPreview(data);
+      setHidden(false);
+    } catch {
+      // Admin tanpa izin `finance.refunds`: kartu tidak ditampilkan, kasus
+      // tetap bisa diputuskan seperti biasa.
+      setHidden(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [packageId]);
+
+  useEffect(() => { void loadPreview(); }, [loadPreview]);
+
+  if (hidden) return null;
+  if (loading) return <div className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-xs font-bold text-slate-500"><Loader2 className="animate-spin" size={15} /> Memeriksa sesi sisa paket...</div>;
+  if (!preview) return null;
+
+  if (preview.already_queued) {
+    return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="flex items-center gap-2 font-black"><PackageX size={16} /> Refund sisa paket sudah dibuat</p><p className="mt-1 text-xs font-semibold leading-5 text-amber-800">Paket ini sudah punya antrean refund sisa paket. Selesaikan lewat menu Refund &amp; Saldo BimbelKu, bukan dengan menghentikan tutor lagi.</p><Button asChild type="button" variant="outline" size="sm" className="mt-2 rounded-xl bg-white"><Link to="/admin/refunds">Buka refund &amp; saldo</Link></Button></div>;
+  }
+
+  if (!hasRemainingRefundableSessions(preview)) return null;
+
+  return <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-950">
+    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.14em] text-rose-600"><PackageX size={14} /> Sisa paket</p>
+    <p className="mt-2 font-black">Hentikan tutor &amp; refund sisa paket</p>
+    <p className="mt-1 text-xs font-semibold leading-5 text-rose-900">Pakai tindakan ini bila tutor berhenti mengajar. Refund mencakup seluruh sesi paket yang belum terlaksana, bukan hanya sesi pada kasus ini.</p>
+    <TutorExitBreakdown preview={preview} />
+    {open
+      ? <TutorExitForm packageId={packageId} preview={preview} onCancel={() => setOpen(false)} onQueued={async () => { setOpen(false); await loadPreview(); await onQueued(); }} />
+      : <Button type="button" variant="outline" className="mt-3 rounded-xl border-rose-300 bg-white text-rose-700 hover:bg-rose-100" onClick={() => setOpen(true)}><Scissors size={15} className="mr-2" />Hentikan tutor &amp; refund sisa paket</Button>}
+  </div>;
+}
+
+function TutorExitBreakdown({ preview }: { preview: TutorExitPreview }) {
+  return <div className="mt-3 rounded-xl border border-rose-200 bg-white p-3">
+    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.14em] text-rose-500"><ListChecks size={13} /> {preview.sessions.length} sesi tersisa</p>
+    <div className="mt-2 space-y-1 text-xs">
+      {preview.sessions.map((session) => <div key={session.booking_id} className="flex flex-wrap items-baseline justify-between gap-2 border-b border-dashed border-slate-100 pb-1 last:border-0">
+        <span className="min-w-0 font-semibold text-slate-700">{session.subject || "Sesi"} · {session.start_at ? new Date(session.start_at).toLocaleString("id-ID") : "jadwal menyusul"}</span>
+        <span className="font-black text-slate-900">{rupiah(session.amount)}</span>
+      </div>)}
+    </div>
+    <div className="mt-2 grid gap-1 rounded-lg bg-slate-50 p-2 text-xs">
+      <p className="flex justify-between"><span>Total refund</span><strong>{rupiah(preview.total_amount)}</strong></p>
+      <p className="flex justify-between text-slate-500"><span>Dari Saldo BimbelKu</span><span>{rupiah(preview.wallet_amount)}</span></p>
+      <p className="flex justify-between text-slate-500"><span>Dari pembayaran Xendit/transfer</span><span>{rupiah(preview.external_amount)}</span></p>
+    </div>
+    <p className="mt-2 text-[11px] font-semibold leading-5 text-slate-500">Tujuan refund dipilih murid setelah antrean dibuat.</p>
+  </div>;
+}
+
+function TutorExitForm({ packageId, preview, onCancel, onQueued }: { packageId: number; preview: TutorExitPreview; onCancel: () => void; onQueued: () => Promise<void> | void }) {
+  const [reason, setReason] = useState("");
+  const [evidence, setEvidence] = useState("");
+  const [token, setToken] = useState("");
+  const [processing, setProcessing] = useState(false);
+
+  const submit = async () => {
+    setProcessing(true);
+    try {
+      const result = await submitTutorExit(packageId, {
+        reason,
+        evidenceNote: evidence,
+        bookingIds: preview.sessions.map((session) => session.booking_id),
+      });
+      notify.success(result.message);
+      await onQueued();
+    } catch (error) {
+      notify.error(getApiError(error, "Refund sisa paket gagal dibuat."));
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  return <div className="mt-3 space-y-3 rounded-xl border border-rose-300 bg-white p-3">
+    <p className="text-xs font-semibold leading-5 text-rose-900">Tindakan ini menghentikan tutor untuk {preview.sessions.length} sesi tersisa sekaligus dan mengantrekan refund sebesar {rupiah(preview.total_amount)}.</p>
+    <div><Label>Alasan penghentian</Label><Textarea minLength={20} maxLength={500} className="mt-2 min-h-20 rounded-xl" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Contoh: tutor mengundurkan diri dan tidak dapat melanjutkan paket" /></div>
+    <div><Label>Catatan bukti</Label><Textarea minLength={50} maxLength={3000} className="mt-2 min-h-28 rounded-xl" value={evidence} onChange={(event) => setEvidence(event.target.value)} placeholder="Uraikan bukti penghentian: pesan tutor, tanggal, dan sesi yang belum terlaksana" /><p className="mt-1 text-xs text-slate-500">Minimal 50 karakter. Tersimpan pada jejak audit dan keputusan refund.</p></div>
+    <div><Label>Konfirmasi</Label><Input className="mt-2 h-11 rounded-xl" value={token} onChange={(event) => setToken(event.target.value)} placeholder={TUTOR_EXIT_CONFIRM_TOKEN} /><p className="mt-1 text-xs text-slate-500">Ketik <strong>{TUTOR_EXIT_CONFIRM_TOKEN}</strong> untuk mengonfirmasi refund seluruh sisa paket.</p></div>
+    <div className="flex flex-col gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" className="h-11 rounded-xl" onClick={onCancel}>Batal</Button><Button type="button" disabled={processing || token.trim() !== TUTOR_EXIT_CONFIRM_TOKEN || reason.trim().length < 20 || evidence.trim().length < 50} onClick={() => void submit()} className="h-11 rounded-xl bg-rose-600 font-black hover:bg-rose-700">{processing && <Loader2 size={16} className="mr-2 animate-spin" />}Hentikan tutor &amp; refund</Button></div>
+  </div>;
 }
 
 function paidParticipantAmounts(item: any): number[] {

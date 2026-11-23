@@ -174,6 +174,7 @@ http.interceptors.request.use((config) => {
     || url.includes("/admin/commission-setting")
     || url.includes("/admin/payout")
     || url.includes("/admin/refunds/")
+    || /\/admin\/packages\/\d+\/tutor-exit$/.test(url)
     || /\/student\/refunds\/\d+\/destination$/.test(url)
     || /\/student\/packages\/\d+\/subjects\/\d+\/teacher-replacements$/.test(url)
     || /\/student\/teacher-replacements\/\d+\/(?:cancel|retry|reschedule|request-refund)$/.test(url)
