@@ -318,7 +318,7 @@ export const AppContent = () => (
               <Route path="/admin/website" element={<PublicWebsiteSettings />} />
               <Route path="/admin/website-media" element={<WebsiteMediaSettings />} />
               <Route path="/admin/public-tutors" element={<PublicTutorDirectoryAdmin />} />
-              <Route element={<RouteGuard allowedRoles={['admin']} requiredPermissions={['finance.payouts', 'finance.refunds', 'finance.payments']} />}>
+              <Route element={<RouteGuard allowedRoles={['admin']} requiredAnyPermissions={[ADMIN_PERMISSIONS.FINANCE_PAYMENTS, ADMIN_PERMISSIONS.FINANCE_PAYOUTS, ADMIN_PERMISSIONS.FINANCE_REFUNDS, ADMIN_PERMISSIONS.FINANCE_REPORTS]} />}>
                 <Route path="/admin/finance" element={<FinanceCenter />} />
                 <Route path="/admin/pembayaran" element={<Navigate to="/admin/finance?tab=payments" replace />} />
                 <Route path="/admin/settings-payment" element={<Navigate to="/admin/finance?tab=payments" replace />} />

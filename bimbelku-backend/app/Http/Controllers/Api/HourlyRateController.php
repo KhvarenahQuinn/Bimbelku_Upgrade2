@@ -18,7 +18,11 @@ class HourlyRateController extends Controller
     public function index()
     {
         return response()->json([
-            'rates' => HourlyRate::query()->where('class_type', 'private')->orderBy('subject_name')->orderBy('education_level')->get(),
+            'rates' => HourlyRate::query()
+                ->where('class_type', 'private')
+                ->orderBy('subject_name')
+                ->orderBy('education_level')
+                ->get(['id', 'subject_name', 'education_level', 'class_type', 'learning_mode', 'amount', 'is_active']),
             'defaults' => [
                 'private_online' => (int) (Setting::where('key', 'default_private_online_rate')->value('value') ?? 40000),
                 'private_offline' => (int) (Setting::where('key', 'default_private_offline_rate')->value('value') ?? 40000),

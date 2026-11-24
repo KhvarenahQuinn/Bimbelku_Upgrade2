@@ -6,6 +6,7 @@ import PrivateParticipantPricingEditor from "@/components/PrivateParticipantPric
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import SubjectCombobox, { SubjectOption } from "@/components/SubjectCombobox";
 import { EDUCATION_LEVELS } from "@/lib/educationCatalog";
+import { hourlyRateAmountError, MAX_HOURLY_RATE } from "@/lib/hourlyRates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +37,10 @@ export default function HourlyRates() {
   const [subjectOptions, setSubjectOptions] = useState<SubjectOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [defaultsError, setDefaultsError] = useState("");
+  const customAmount = parseMoney(form.amount);
+  const customAmountError = formError || (form.amount.trim() ? hourlyRateAmountError(customAmount) : "");
 
   const loadRates = useCallback(async () => {
     setLoading(true);
@@ -83,10 +88,14 @@ export default function HourlyRates() {
   const saveRate = async (event: FormEvent) => {
     event.preventDefault();
     const amount = parseMoney(form.amount);
-    if (!amount || amount < 1000) {
-      notify.error("Nominal harus minimal Rp1.000.");
+    const amountError = hourlyRateAmountError(amount);
+    if (!amount || amountError) {
+      const message = amountError || "Nominal minimal Rp1.000 per jam.";
+      setFormError(message);
+      notify.error(message);
       return;
     }
+    setFormError("");
     setSaving(true);
     try {
       const response = await http.post("/admin/hourly-rates", {
@@ -107,10 +116,11 @@ export default function HourlyRates() {
   };
 
   const saveDefaults = async () => {
-    if (defaults.private_online < 1000 || defaults.private_offline < 1000) {
-      notify.error("Tarif bawaan harus minimal Rp1.000.");
+    if ([defaults.private_online, defaults.private_offline].some((amount) => hourlyRateAmountError(amount))) {
+      setDefaultsError("Tarif bawaan harus antara Rp1.000 dan Rp10.000.000 per jam.");
       return;
     }
+    setDefaultsError("");
     try {
       const response = await http.post("/admin/hourly-rates/defaults", defaults);
       notify.success(response.data.message);
@@ -156,8 +166,9 @@ export default function HourlyRates() {
               <h2 className="text-xl font-black text-slate-900">Tarif bawaan</h2>
               <p className="mt-1 text-sm text-slate-500">Dipakai ketika tarif khusus belum dibuat.</p>
               <div className="mt-5 space-y-4">
-                <MoneyInput label="Privat online / jam" value={defaults.private_online} onChange={(value) => setDefaults((current) => ({ ...current, private_online: value }))} />
-                <MoneyInput label="Privat offline / jam" value={defaults.private_offline} onChange={(value) => setDefaults((current) => ({ ...current, private_offline: value }))} />
+                <MoneyInput label="Privat online / jam" value={defaults.private_online} onChange={(value) => { setDefaults((current) => ({ ...current, private_online: value })); setDefaultsError(""); }} />
+                <MoneyInput label="Privat offline / jam" value={defaults.private_offline} onChange={(value) => { setDefaults((current) => ({ ...current, private_offline: value })); setDefaultsError(""); }} />
+                {defaultsError && <p role="alert" className="text-sm font-semibold text-rose-700">{defaultsError}</p>}
                 <Button onClick={saveDefaults} className="h-12 w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 font-bold"><Save size={17} className="mr-2" /> Simpan tarif bawaan</Button>
               </div>
             </section>
@@ -180,7 +191,7 @@ export default function HourlyRates() {
                 </div>
                 <div><Label className="mb-2 block font-bold">Jenjang</Label><Select value={form.education_level} onValueChange={(value) => setForm((current) => ({ ...current, education_level: value }))}><SelectTrigger className="h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua jenjang</SelectItem>{EDUCATION_LEVELS.map((level) => <SelectItem key={level} value={level}>{level}</SelectItem>)}</SelectContent></Select></div>
                 <div><Label className="mb-2 block font-bold">Mode</Label><Select value={form.learning_mode} onValueChange={(value) => setForm((current) => ({ ...current, learning_mode: value }))}><SelectTrigger className="h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="online">Online</SelectItem><SelectItem value="offline">Offline</SelectItem></SelectContent></Select></div>
-                <div><Label className="mb-2 block font-bold">Nominal per jam</Label><Input type="text" inputMode="numeric" min="1000" step="1000" value={form.amount} onChange={(event) => setForm((current) => ({ ...current, amount: sanitizeMoney(event.target.value) }))} className="h-12 rounded-xl" required /></div>
+                <div><Label htmlFor="custom-hourly-rate" className="mb-2 block font-bold">Nominal per jam</Label><Input id="custom-hourly-rate" type="text" inputMode="numeric" min="1000" max={MAX_HOURLY_RATE} step="1000" aria-invalid={Boolean(customAmountError)} aria-describedby={customAmountError ? "custom-hourly-rate-error" : undefined} value={form.amount} onChange={(event) => { setForm((current) => ({ ...current, amount: sanitizeMoney(event.target.value) })); setFormError(""); }} className="h-12 rounded-xl" required />{customAmountError && <p id="custom-hourly-rate-error" role="alert" className="mt-1 text-sm font-semibold text-rose-700">{customAmountError}</p>}<p className="mt-1 text-xs text-slate-500">Rp1.000–Rp10.000.000 per jam.</p></div>
                 <Button type="submit" disabled={saving} className="h-12 w-full rounded-xl bg-slate-950 hover:bg-indigo-700 font-bold">{saving ? <Loader2 size={17} className="mr-2 animate-spin" /> : <Plus size={17} className="mr-2" />} Simpan tarif</Button>
               </div>
             </form>
@@ -188,7 +199,7 @@ export default function HourlyRates() {
 
           <section className="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-4">
-              <div><h2 className="text-xl font-black text-slate-900">Daftar tarif khusus</h2><p className="mt-1 text-sm text-slate-500">Tarif khusus mengalahkan tarif bawaan.</p></div>
+              <div><h2 className="text-xl font-black text-slate-900">Daftar tarif khusus</h2><p className="mt-1 text-sm text-slate-500">Hanya override aktif yang dipertimbangkan; harga bawaan dipakai jika tidak ada override aktif yang cocok.</p></div>
               <div className="h-11 w-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><BookOpen size={20} /></div>
             </div>
 
@@ -198,8 +209,8 @@ export default function HourlyRates() {
               <div className="mt-6 space-y-3">
                 {rates.map((rate) => (
                   <div key={rate.id} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 transition hover:bg-white hover-shadow-sm">
-                    <div className="min-w-0"><p className="truncate font-black text-slate-900">{rate.subject_name}</p><p className="mt-1 text-xs text-slate-500">{rate.education_level || "Semua jenjang"} • Privat • {rate.learning_mode === "online" ? "Online" : "Offline"}</p></div>
-                    <div className="flex items-center gap-3"><p className="whitespace-nowrap font-black text-indigo-700">{formatCurrency(Number(rate.amount))}</p><Button aria-label={`Hapus tarif ${rate.subject_name}`} variant="ghost" size="icon" onClick={() => deleteRate(rate.id)} className="rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={17} /></Button></div>
+                    <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-black text-slate-900">{rate.subject_name}</p><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${rate.is_active ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{rate.is_active ? "Aktif · dapat digunakan" : "Nonaktif · tidak diterapkan"}</span></div><p className="mt-1 text-xs text-slate-500">{rate.education_level || "Semua jenjang"} • Privat • {rate.learning_mode === "online" ? "Online" : "Offline"}</p></div>
+                    <div className="flex items-center gap-3"><p className="whitespace-nowrap font-black text-indigo-700">{formatCurrency(Number(rate.amount))}</p><Button aria-label={`Hapus tarif ${rate.subject_name}`} variant="ghost" size="icon" onClick={() => deleteRate(rate.id)} className="min-h-[44px] min-w-[44px] rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={17} /></Button></div>
                   </div>
                 ))}
               </div>
@@ -219,7 +230,12 @@ function MoneyInput({ label, value, min = 1000, step = 1000, onChange }: { label
     if (!focused) setDraft(value > 0 ? formatMoney(value) : "");
   }, [focused, value]);
 
-  return <div><Label className="mb-2 block font-bold">{label}</Label><Input type="text" inputMode="numeric" min={min} step={step} value={focused ? draft : (value > 0 ? formatMoney(value) : "")} onFocus={() => { setFocused(true); setDraft(value > 0 ? String(value) : ""); }} onChange={(event) => { const raw = sanitizeMoney(event.target.value); setDraft(raw); onChange(parseMoney(raw)); }} onBlur={() => { setFocused(false); const normalized = parseMoney(draft); onChange(normalized); setDraft(normalized > 0 ? formatMoney(normalized) : ""); }} className="h-12 rounded-xl" /></div>;
+  const id = `money-input-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const errorId = `${id}-error`;
+  const amount = focused ? parseMoney(draft) : value;
+  const error = hourlyRateAmountError(amount);
+
+  return <div><Label htmlFor={id} className="mb-2 block font-bold">{label}</Label><Input id={id} type="text" inputMode="numeric" min={min} max={10_000_000} step={step} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} value={focused ? draft : (value > 0 ? formatMoney(value) : "")} onFocus={() => { setFocused(true); setDraft(value > 0 ? String(value) : ""); }} onChange={(event) => { const raw = sanitizeMoney(event.target.value); setDraft(raw); onChange(parseMoney(raw)); }} onBlur={() => { setFocused(false); const normalized = parseMoney(draft); onChange(normalized); setDraft(normalized > 0 ? formatMoney(normalized) : ""); }} className="h-12 rounded-xl" />{error && <p id={errorId} role="alert" className="mt-1 text-sm font-semibold text-rose-700">{error}</p>}<p className="mt-1 text-xs text-slate-500">Rp1.000–Rp10.000.000 per jam.</p></div>;
 }
 
 function sanitizeMoney(value: string) {

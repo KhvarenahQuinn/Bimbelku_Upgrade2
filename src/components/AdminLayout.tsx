@@ -175,7 +175,9 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
     () => navigation
       .map((section) => ({
         ...section,
-        items: section.items.filter((item) => canAdmin(admin, item.permission)),
+        items: section.items.filter((item) => item.to === "/admin/finance"
+          ? [ADMIN_PERMISSIONS.FINANCE_REPORTS, ADMIN_PERMISSIONS.FINANCE_PAYMENTS, ADMIN_PERMISSIONS.FINANCE_REFUNDS, ADMIN_PERMISSIONS.FINANCE_PAYOUTS].some((permission) => canAdmin(admin, permission))
+          : canAdmin(admin, item.permission)),
       }))
       .filter((section) => section.items.length > 0),
     [admin],
@@ -387,8 +389,6 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
               accent="admin"
               roleLabel="Admin"
               profileTo="/admin/profile"
-              accountTo="/admin/settings-display"
-
             />
           </div>
         </header>
