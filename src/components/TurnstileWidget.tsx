@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
+type TurnstileStatus = "idle" | "loading" | "ready" | "verified" | "expired" | "error" | "bypassed" | "stalled";
+
 interface TurnstileWidgetProps {
   onTokenChange: (token: string) => void;
   resetTrigger?: number;
+  retryTrigger?: number;
+  onStatusChange?: (status: TurnstileStatus) => void;
   action?: string;
 }
-
-type TurnstileStatus = "idle" | "loading" | "ready" | "verified" | "expired" | "error" | "bypassed";
 
 declare global {
   interface Window {
@@ -25,7 +27,12 @@ declare global {
   }
 }
 
-export default function TurnstileWidget({ onTokenChange, resetTrigger, action = "register" }: TurnstileWidgetProps) {
+export type { TurnstileStatus };
+
+export const TURNSTILE_STALL_MESSAGE =
+  "Verifikasi keamanan Cloudflare tidak dapat dimuat. Skripnya terblokir ekstensi peramban, pengaturan privasi, atau kebijakan CSP jaringan ini.";
+
+export default function TurnstileWidget({ onTokenChange, resetTrigger, retryTrigger, onStatusChange, action = "register" }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<number | null>(null);
   const scriptLoadedRef = useRef(false);
@@ -39,6 +46,8 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger, action = 
 
   // Keep callbacks current without tying the widget lifecycle to parent renders.
   const onTokenChangeRef = useRef(onTokenChange);
+  const onStatusChangeRef = useRef(onStatusChange);
+  onStatusChangeRef.current = onStatusChange;
   const onVerifyRef = useRef<(token: string) => void>(() => {});
   const onExpireRef = useRef<() => void>(() => {});
   const onErrorRef = useRef<(errorCode: string) => void>(() => {});
@@ -70,6 +79,36 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger, action = 
       setErrorMessage("");
     }
   }, [resetTrigger]);
+
+  // Status keluar ke form induk agar tombol kirim bisa menjelaskan kegagalan,
+  // bukan menyuruh pengguna menyelesaikan tantangan yang tidak pernah muncul.
+  useEffect(() => {
+    onStatusChangeRef.current?.(status);
+  }, [status]);
+
+  /**
+   * Cloudflare bisa memuat skripnya tanpa pernah memasang iframe tantangan:
+   * kunci situs tidak cocok dengan hostname, CSP memblokir frame, atau ekstensi
+   * memblokirnya. Tanpa pengawasan, status tetap "ready" dan tombol kirim
+   * terkunci selamanya tanpa penjelasan. Deteksi iframe yang tidak pernah lahir.
+   */
+  useEffect(() => {
+    if (status !== "ready") return;
+    const detectStall = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      if (container.querySelector("iframe") === null) {
+        setStatus("stalled");
+        setErrorMessage(TURNSTILE_STALL_MESSAGE);
+      }
+    };
+    const first = setTimeout(detectStall, 8_000);
+    const second = setTimeout(detectStall, 15_000);
+    return () => {
+      clearTimeout(first);
+      clearTimeout(second);
+    };
+  }, [status]);
 
   // Load Turnstile script with timeout fallback
   useEffect(() => {
@@ -274,6 +313,14 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger, action = 
     }, 0);
   };
 
+  // Form induk bisa meminta percobaan ulang (mis. tombol pada kartu galat).
+  const retryHandlerRef = useRef(handleRetry);
+  retryHandlerRef.current = handleRetry;
+  useEffect(() => {
+    if (!retryTrigger) return;
+    retryHandlerRef.current();
+  }, [retryTrigger]);
+
   // Keep the Turnstile host stable so Cloudflare's challenge state is not remounted.
   return (
     <div className="cf-turnstile" data-sitekey={siteKey}>
@@ -294,13 +341,16 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger, action = 
           <span>Memuat verifikasi keamanan…</span>
         </div>
       )}
-      {(status === "error" || status === "expired") && (
+      {(status === "error" || status === "expired" || status === "stalled") && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center">
           <p className="text-sm font-semibold text-red-700">{errorMessage || "Verifikasi keamanan Cloudflare gagal atau kedaluwarsa. Silakan coba lagi."}</p>
+          {status === "stalled" && (
+            <p className="mt-2 text-xs font-semibold leading-5 text-red-700/80">Muat ulang verifikasi di bawah. Bila tetap gagal, matikan pemblokir iklan untuk situs ini atau coba peramban lain.</p>
+          )}
           <button
             type="button"
             onClick={handleRetry}
-            className="mt-3 text-sm font-bold text-orange-600 hover:underline focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+            className="mt-3 min-h-11 text-sm font-bold text-orange-600 hover:underline focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
           >
             Muat ulang verifikasi
           </button>

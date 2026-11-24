@@ -68,3 +68,56 @@ export const permissionForAdminPath = (pathname: string): AdminPermission | null
   }
   return null;
 };
+
+export type StoredAdmin = {
+  name: string;
+  email: string;
+  role: string;
+  admin_type?: string | null;
+  admin_permissions?: string[];
+  is_primary_admin?: boolean;
+};
+
+/** Profil admin dari sesi browser. Dipakai sidebar dan halaman pendaratan. */
+export const readStoredAdmin = (): StoredAdmin => {
+  try {
+    const value = JSON.parse(localStorage.getItem("user") || "null") as StoredAdmin | null;
+    return {
+      name: value?.name || "Administrator",
+      email: value?.email || "Admin BimbelKu",
+      role: value?.role || "admin",
+      admin_type: value?.admin_type,
+      admin_permissions: value?.admin_permissions,
+      is_primary_admin: value?.is_primary_admin,
+    };
+  } catch {
+    return { name: "Administrator", email: "Admin BimbelKu", role: "admin", admin_type: null, admin_permissions: undefined, is_primary_admin: false };
+  }
+};
+
+/**
+ * Urutan modul mengikuti sidebar. Admin yang tidak memegang
+ * `operations.dashboard` tidak boleh mendarat di ringkasan kerja yang kosong,
+ * jadi dialihkan ke modul pertama yang ia boleh buka.
+ */
+const ADMIN_LANDING_ORDER: ReadonlyArray<{ path: string; permission: string }> = [
+  { path: "/admin/tutor-searches", permission: ADMIN_PERMISSIONS.MATCHING_MANAGE },
+  { path: "/admin/classes", permission: ADMIN_PERMISSIONS.CLASSES_MANAGE },
+  { path: "/admin/cases", permission: ADMIN_PERMISSIONS.CASES_MANAGE },
+  { path: "/admin/finance", permission: ADMIN_PERMISSIONS.FINANCE_PAYOUTS },
+  { path: "/admin/finance?tab=refunds", permission: ADMIN_PERMISSIONS.FINANCE_REFUNDS },
+  { path: "/admin/finance?tab=payments", permission: ADMIN_PERMISSIONS.FINANCE_PAYMENTS },
+  { path: "/admin/guru", permission: ADMIN_PERMISSIONS.TEACHERS_MANAGE },
+  { path: "/admin/users", permission: ADMIN_PERMISSIONS.USERS_MANAGE },
+  { path: "/admin/notifikasi", permission: ADMIN_PERMISSIONS.SUPPORT_MANAGE },
+  { path: "/admin/subjects", permission: ADMIN_PERMISSIONS.CONTENT_MANAGE },
+  { path: "/admin/ratings", permission: ADMIN_PERMISSIONS.CLASSES_MANAGE },
+  { path: "/admin/settings-display", permission: ADMIN_PERMISSIONS.SETTINGS_MANAGE },
+  { path: "/admin/audit-log", permission: ADMIN_PERMISSIONS.AUDIT_VIEW },
+];
+
+/** `null` berarti admin tidak memegang satu pun izin yang punya halaman. */
+export const firstAllowedAdminPath = (user: StoredAdminUser | null | undefined): string | null => {
+  const allowed = ADMIN_LANDING_ORDER.find((entry) => canAdmin(user, entry.permission));
+  return allowed ? allowed.path : null;
+};

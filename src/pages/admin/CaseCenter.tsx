@@ -194,7 +194,11 @@ export default function CaseCenter() {
       </div>
 
       <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent layer="detail" hideCloseButton className="max-h-[92dvh] overflow-y-auto rounded-[2rem] sm:max-w-2xl">
+        {/* Padding bawah wajib: pada layar <640px `index.css` memaksa
+            `[role="dialog"] { max-height: calc(100dvh - 1rem) }`, sehingga dialog
+            menjulur ~69px di balik navigasi bawah. Tanpa `pb-24` tombol kirim
+            form tutor-exit tertutup navigasi. */}
+        <DialogContent layer="detail" hideCloseButton className="max-h-[92dvh] overflow-y-auto rounded-[2rem] pb-24 sm:max-w-2xl sm:pb-6">
           {selected && <form onSubmit={submit} className="space-y-5">
             <DialogHeader>
               <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-start gap-2">

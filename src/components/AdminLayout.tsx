@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import ProfileQuickMenu from "@/components/ProfileQuickMenu";
 import RoleQuickGuide from "@/components/RoleQuickGuide";
-import { ADMIN_PERMISSIONS, canAdmin } from "@/lib/adminPermissions";
+import { ADMIN_PERMISSIONS, canAdmin, readStoredAdmin } from "@/lib/adminPermissions";
 import { scheduleNonCriticalTask } from "@/lib/schedule";
 import { usePersistentSidebarScroll } from "@/hooks/usePersistentSidebarScroll";
 import {
@@ -164,29 +164,13 @@ const navigation: NavigationSection[] = [
   },
 ];
 
-const readAdmin = () => {
-  try {
-    const value = JSON.parse(localStorage.getItem("user") || "null") as { name?: string; email?: string; role?: string; admin_type?: string | null; admin_permissions?: string[]; is_primary_admin?: boolean } | null;
-    return {
-      name: value?.name || "Administrator",
-      email: value?.email || "Admin BimbelKu",
-      role: value?.role || "admin",
-      admin_type: value?.admin_type,
-      admin_permissions: value?.admin_permissions,
-      is_primary_admin: value?.is_primary_admin,
-    };
-  } catch {
-    return { name: "Administrator", email: "Admin BimbelKu", role: "admin", admin_type: null, admin_permissions: undefined, is_primary_admin: false };
-  }
-};
-
 export default function AdminLayout({ children, title, subtitle = "Pusat operasional BimbelKu", lockContentScroll = false }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [attentionNotifications, setAttentionNotifications] = useState<AttentionNotification[]>([]);
   const [operationalCounts, setOperationalCounts] = useState<OperationalAttentionCounts>(emptyOperationalCounts);
   const location = useLocation();
   const { sidebarScrollRef, handleSidebarScroll } = usePersistentSidebarScroll("admin", location.pathname);
-  const admin = useMemo(readAdmin, []);
+  const admin = useMemo(readStoredAdmin, []);
   const visibleNavigation = useMemo(
     () => navigation
       .map((section) => ({
@@ -220,16 +204,21 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
     if (!localStorage.getItem("token")) return;
     try {
       const { getCached } = await import("@/lib/http");
+      // `dashboard-stats` dijaga izin `operations.dashboard`; memanggilnya dari
+      // akun tanpa izin hanya menghasilkan 403 di konsol setiap 60 detik.
+      const statsRequest = canAdmin(admin, ADMIN_PERMISSIONS.OPERATIONS_DASHBOARD)
+        ? getCached<{ counts?: Partial<OperationalAttentionCounts> }>("/admin/dashboard-stats", {
+          maxAgeMs: force ? 5_000 : 15_000,
+          force,
+        })
+        : Promise.resolve({ data: { counts: {} as Partial<OperationalAttentionCounts> } });
       const [notificationsResult, statsResult] = await Promise.allSettled([
         getCached<{ attention_notifications?: AttentionNotification[] }>("/notifications", {
           params: { per_page: 1 },
           maxAgeMs: force ? 5_000 : 15_000,
           force,
         }),
-        getCached<{ counts?: Partial<OperationalAttentionCounts> }>("/admin/dashboard-stats", {
-          maxAgeMs: force ? 5_000 : 15_000,
-          force,
-        }),
+        statsRequest,
       ]);
       if (notificationsResult.status === "fulfilled") {
         const notifications = notificationsResult.value.data.attention_notifications;
@@ -253,7 +242,7 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
     } catch {
       // Badge navigasi bersifat pendukung dan tidak boleh mengganggu halaman admin.
     }
-  }, []);
+  }, [admin]);
 
   useEffect(() => {
     setSidebarOpen(false);
