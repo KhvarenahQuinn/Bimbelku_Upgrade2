@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import GoogleAuthButton from "@/components/GoogleAuthButton";
 import AuthExperience from "@/components/AuthExperience";
-import TurnstileWidget from "@/components/TurnstileWidget";
+import TurnstileWidget, { type TurnstileStatus } from "@/components/TurnstileWidget";
 import { storeBrowserSession } from "@/lib/session";
 import { isValidEmail } from "@/lib/validation";
 
@@ -24,7 +24,10 @@ export default function Login() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [summaryError, setSummaryError] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileStatus, setTurnstileStatus] = useState<TurnstileStatus>("idle");
+  const [turnstileRetry, setTurnstileRetry] = useState(0);
   const turnstileEnabled = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() !== "";
+  const turnstileFailed = turnstileStatus === "error" || turnstileStatus === "expired" || turnstileStatus === "stalled";
   const googleError = searchParams.get("google_error");
 
   const handleLogin = async (event: React.FormEvent) => {
@@ -38,8 +41,11 @@ export default function Login() {
     // Verifikasi keamanan ikut dikirim bersama kredensial; server menolak
     // permintaan tanpa token saat Turnstile diaktifkan.
     if (turnstileEnabled && !turnstileToken.trim()) {
-      setErrors({ turnstile: "Selesaikan verifikasi keamanan Cloudflare terlebih dahulu." });
-      setSummaryError("Selesaikan verifikasi keamanan Cloudflare terlebih dahulu.");
+      const message = turnstileFailed
+        ? "Verifikasi keamanan Cloudflare gagal dimuat. Muat ulang verifikasi, lalu coba lagi."
+        : "Selesaikan verifikasi keamanan Cloudflare terlebih dahulu.";
+      setErrors({ turnstile: message });
+      setSummaryError(message);
       return;
     }
     loadingRef.current = true;
@@ -127,9 +133,23 @@ export default function Login() {
           <label htmlFor="login-password" className="block text-sm font-bold text-slate-700">Kata sandi<div className="auth-control mt-2" data-invalid={Boolean(errors.password)}><span className="auth-control-icon" aria-hidden="true"><Lock size={19} /></span><input id="login-password" name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" required aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? "login-password-error" : undefined} value={formData.password} onChange={(event) => { setFormData((value) => ({ ...value, password: event.target.value })); setErrors((value) => ({ ...value, password: "" })); }} placeholder="Masukkan kata sandi" /><button type="button" onClick={() => setShowPassword((value) => !value)} className="auth-control-action" aria-controls="login-password" aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>{errors.password && <span id="login-password-error" className="mt-1 block text-xs font-semibold text-red-700">{errors.password}</span>}</label>
           <div className="flex flex-wrap items-center justify-between gap-3"><label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-bold text-slate-600"><input type="checkbox" checked={rememberDevice} onChange={(event) => setRememberDevice(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500" /><span>Ingat perangkat ini selama 30 hari</span></label><Link to="/forgot-password" className="inline-flex min-h-11 items-center text-sm font-bold text-orange-700">Lupa kata sandi?</Link></div>
           <div>
-            <TurnstileWidget onTokenChange={setTurnstileToken} action="login" />
-            {turnstileEnabled && !turnstileToken.trim() && (
+            <TurnstileWidget
+              onTokenChange={setTurnstileToken}
+              onStatusChange={setTurnstileStatus}
+              retryTrigger={turnstileRetry}
+              action="login"
+            />
+            {turnstileEnabled && !turnstileToken.trim() && !turnstileFailed && (
               <p className="mt-1 text-xs font-semibold text-red-700" role="alert">{errors.turnstile || "Selesaikan verifikasi keamanan Cloudflare terlebih dahulu."}</p>
+            )}
+            {turnstileEnabled && turnstileFailed && (
+              <button
+                type="button"
+                onClick={() => setTurnstileRetry((value) => value + 1)}
+                className="mt-2 min-h-11 w-full rounded-xl border border-orange-200 bg-orange-50 px-4 text-sm font-bold text-orange-800 hover:bg-orange-100"
+              >
+                Coba muat ulang verifikasi keamanan
+              </button>
             )}
           </div>
           <button disabled={isLoading || (turnstileEnabled && !turnstileToken.trim())} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#14213D] px-5 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50">{isLoading ? <Loader2 className="animate-spin" size={18} /> : <ArrowRight size={18} />}{isLoading ? "Memproses…" : "Masuk"}</button>

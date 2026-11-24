@@ -1,4 +1,5 @@
 import type { StoredSessionUser } from "@/lib/session";
+import { ADMIN_PERMISSIONS, canAdmin, firstAllowedAdminPath } from "@/lib/adminPermissions";
 
 /** Role yang dikenal aplikasi. */
 export type AppRole = "admin" | "teacher" | "student";
@@ -14,8 +15,15 @@ export type AppRole = "admin" | "teacher" | "student";
  */
 export function getHomeRedirectPath(user: StoredSessionUser | null | undefined): string {
   switch (user?.role) {
-    case "admin":
-      return "/admin";
+    case "admin": {
+      // `/admin` sendiri dijaga izin `operations.dashboard` (lihat
+      // `permissionForAdminPath`). Memantulkan admin tanpa izin itu kembali ke
+      // `/admin` membuat `Navigate` menuju lokasi yang sama: guard menolak lagi,
+      // tidak ada yang dirender, dan layar berakhir kosong tanpa pesan. Admin
+      // seperti itu diarahkan ke modul pertama yang izinnya benar-benar ada.
+      if (canAdmin(user, ADMIN_PERMISSIONS.OPERATIONS_DASHBOARD)) return "/admin";
+      return firstAllowedAdminPath(user) ?? "/access-denied";
+    }
     case "teacher":
       return "/guru";
     case "student":

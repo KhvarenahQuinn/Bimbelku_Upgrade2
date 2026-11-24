@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useMemo, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 
 // --- IMPORT KOMPONEN KEAMANAN & GLOBAL (Tetap Import Biasa) ---
@@ -8,6 +8,7 @@ import DeferredToaster from "./components/DeferredToaster";
 import { WebsiteContentProvider } from "./components/WebsiteContentProvider";
 import { useSessionReady } from "./hooks/useSessionReady";
 import RouteSeoManager from "./components/RouteSeoManager";
+import { ADMIN_PERMISSIONS, canAdmin, firstAllowedAdminPath, readStoredAdmin } from "./lib/adminPermissions";
 
 // =================================================================
 // KONFIGURASI LAZY LOAD (Code Splitting)
@@ -28,6 +29,22 @@ const routeLazy = <T extends React.ComponentType<any>>(
   const preloadedModule = matchesCurrentRoute(CURRENT_PATH) ? importer() : null;
   return lazy(() => preloadedModule ?? importer());
 };
+
+/**
+ * `/admin` adalah pendaratan bawaan setelah login admin. Ringkasan kerja hanya
+ * untuk pemegang izin `operations.dashboard`; sebelumnya admin lain berakhir di
+ * layar kosong karena `dashboard-stats` menjawab 403. Sekarang mereka diarahkan
+ * ke modul pertama yang izinnya benar-benar dimiliki.
+ */
+function AdminLandingRoute() {
+  const admin = useMemo(readStoredAdmin, []);
+
+  if (!canAdmin(admin, ADMIN_PERMISSIONS.OPERATIONS_DASHBOARD)) {
+    return <Navigate to={firstAllowedAdminPath(admin) ?? "/access-denied"} replace />;
+  }
+
+  return <DashboardOverview />;
+}
 
 const Index = routeLazy(exactPath("/"), () => import("./pages/Index"));
 
@@ -292,7 +309,7 @@ export const AppContent = () => (
                 2. RUTE ADMIN (Role: admin)
                ========================================= */}
             <Route element={<RouteGuard allowedRoles={['admin']} />}>
-              <Route path="/admin" element={<DashboardOverview />} />
+              <Route path="/admin" element={<AdminLandingRoute />} />
               <Route path="/admin/profile" element={<AdminProfile />} />
               <Route path="/admin/tutor-searches" element={<TutorSearchMonitoring />} />
               <Route path="/admin/guru" element={<TeacherVerification />} />
