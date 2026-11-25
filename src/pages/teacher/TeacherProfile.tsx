@@ -1,6 +1,6 @@
 import { notify } from "@/lib/notify";
 import { clearBrowserSession } from "@/lib/session";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   BookOpen,
@@ -640,7 +640,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function ModeRow({ icon: Icon, title, description, checked, onChange }: { icon: typeof Monitor; title: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
-  return <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 flex items-center justify-between gap-4"><div className="flex items-start gap-3"><div className="h-10 w-10 shrink-0 rounded-xl bg-white text-indigo-600 flex items-center justify-center"><Icon size={19} /></div><div><p className="font-bold text-slate-800">{title}</p><p className="mt-1 text-xs leading-5 text-slate-500">{description}</p></div></div><Switch checked={checked} onCheckedChange={onChange} /></div>;
+  const id = useId();
+  const titleId = `${id}-title`;
+  const descriptionId = `${id}-description`;
+
+  return <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 flex items-center justify-between gap-4"><div className="flex items-start gap-3"><div className="h-10 w-10 shrink-0 rounded-xl bg-white text-indigo-600 flex items-center justify-center"><Icon size={19} /></div><div><p id={titleId} className="font-bold text-slate-800">{title}</p><p id={descriptionId} className="mt-1 text-xs leading-5 text-slate-500">{description}</p></div></div><Switch checked={checked} onCheckedChange={onChange} aria-labelledby={titleId} aria-describedby={descriptionId} /></div>;
 }
 
 function DocumentInput({ label, icon: Icon, current, accept, capture, onChange }: { label: string; icon: typeof IdCard; current?: string; accept: string; capture?: "user" | "environment"; onChange: (file: File | null) => void }) {
