@@ -86,24 +86,81 @@ class AdminAccountPermissionsTest extends TestCase
         $this->assertSame([AdminPermissionCatalog::CONTENT_MANAGE], $admin->fresh()->admin_permissions);
     }
 
-    public function test_configured_primary_admin_permission_list_cannot_be_restricted(): void
+    public function test_configured_primary_admin_account_cannot_be_updated_through_admin_list(): void
     {
         $primary = $this->admin('primary@example.test', [AdminPermissionCatalog::CONTENT_MANAGE]);
         config()->set('bimbelku.primary_admin_email', $primary->email);
-        $primary->unsetRelation('adminPermissionsUpdatedBy');
         Sanctum::actingAs($primary);
 
         $this->putJson('/api/admin/accounts/'.$primary->id, [
-            'name' => 'Primary Admin',
-            'email' => 'primary@example.test',
+            'name' => 'Changed Primary Admin',
+            'email' => 'changed-primary@example.test',
             'password' => null,
             'admin_permissions' => [AdminPermissionCatalog::AUDIT_VIEW],
             'super_admin_password' => 'password',
-        ])->assertOk()
-            ->assertJsonPath('data.admin_permissions', AdminPermissionCatalog::allCodes());
+        ])->assertUnprocessable()
+            ->assertJsonPath('message', 'Akun Admin Utama tidak dapat diubah, dinonaktifkan, atau dihapus melalui daftar admin.');
 
-        $this->assertNull($primary->fresh()->admin_permissions);
-        $this->assertTrue($primary->fresh()->hasAdminPermission(AdminPermissionCatalog::FINANCE_PAYOUTS));
+        $this->assertSame('primary@example.test', $primary->fresh()->email);
+        $this->assertSame([AdminPermissionCatalog::CONTENT_MANAGE], $primary->fresh()->admin_permissions);
+    }
+
+    public function test_non_primary_admin_is_forbidden_from_all_admin_account_management_actions(): void
+    {
+        $primary = $this->admin('primary@example.test');
+        $delegated = $this->admin('delegated@example.test', [AdminPermissionCatalog::USERS_MANAGE]);
+        $target = $this->admin('target@example.test', [AdminPermissionCatalog::CONTENT_MANAGE]);
+        Sanctum::actingAs($delegated);
+
+        $this->getJson('/api/admin/accounts')->assertForbidden();
+        $this->getJson('/api/admin/accounts/permission-catalog')->assertForbidden();
+        $this->postJson('/api/admin/accounts', [])->assertForbidden();
+        $this->putJson('/api/admin/accounts/'.$target->id, [])->assertForbidden();
+        $this->patchJson('/api/admin/accounts/'.$target->id.'/status', [])->assertForbidden();
+        $this->deleteJson('/api/admin/accounts/'.$target->id, [])->assertForbidden();
+
+        $this->assertDatabaseHas('users', ['id' => $primary->id, 'role' => 'admin']);
+        $this->assertDatabaseHas('users', ['id' => $target->id, 'role' => 'admin']);
+    }
+
+    public function test_primary_admin_cannot_edit_deactivate_or_delete_own_account_from_admin_list(): void
+    {
+        $primary = $this->admin('primary@example.test');
+        $target = $this->admin('target@example.test', [AdminPermissionCatalog::CONTENT_MANAGE]);
+        Sanctum::actingAs($primary);
+
+        $message = 'Akun Admin Utama tidak dapat diubah, dinonaktifkan, atau dihapus melalui daftar admin.';
+        $this->putJson('/api/admin/accounts/'.$primary->id, [
+            'name' => 'Changed Primary Admin',
+            'email' => 'changed-primary@example.test',
+            'password' => null,
+            'super_admin_password' => 'password',
+        ])->assertUnprocessable()->assertJsonPath('message', $message);
+
+        $this->patchJson('/api/admin/accounts/'.$primary->id.'/status', [
+            'status' => 'banned',
+            'super_admin_password' => 'password',
+        ])->assertUnprocessable()->assertJsonPath('message', $message);
+
+        $this->deleteJson('/api/admin/accounts/'.$primary->id, [
+            'super_admin_password' => 'password',
+        ])->assertUnprocessable()->assertJsonPath('message', $message);
+
+        $this->assertSame('primary@example.test', $primary->fresh()->email);
+        $this->assertSame('active', $primary->fresh()->status);
+        $this->assertDatabaseHas('users', ['id' => $target->id, 'role' => 'admin']);
+    }
+
+    public function test_admin_list_exposes_explicit_primary_admin_flag(): void
+    {
+        config()->set('bimbelku.primary_admin_email', 'primary@example.test');
+        $primary = $this->admin('primary@example.test');
+        $this->admin('delegated@example.test', [AdminPermissionCatalog::USERS_MANAGE]);
+        Sanctum::actingAs($primary);
+
+        $response = $this->getJson('/api/admin/accounts')->assertOk();
+        $this->assertTrue($response->json('0.is_primary_admin'));
+        $this->assertFalse($response->json('1.is_primary_admin'));
     }
 
     public function test_admin_permission_catalog_is_returned_for_primary_admin(): void

@@ -1,9 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Loader2, Pencil, Plus, ShieldCheck, Trash2, UserCog, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Loader2, Plus, UserCog, X } from "lucide-react";
 
 import http, { getApiError } from "@/lib/http";
 import { notify } from "@/lib/notify";
 import PasswordInput from "@/components/PasswordInput";
+import AdminAccountRow from "@/components/AdminAccountRow";
+import { isSuperAdmin, readStoredAdmin } from "@/lib/adminPermissions";
 import { ADMIN_ROLE_PRESET_OPTIONS, adminPresetForPermissions, permissionsForAdminPreset, type AdminRolePreset } from "@/lib/adminRolePresets";
 
 type AdminAccount = {
@@ -12,6 +14,7 @@ type AdminAccount = {
   email: string;
   status: string;
   is_primary: boolean;
+  is_primary_admin?: boolean;
   admin_permissions: string[];
   created_at?: string;
 };
@@ -27,6 +30,8 @@ type EditForm = {
 };
 
 export default function AdminAccountsPanel() {
+  const currentAdmin = useMemo(readStoredAdmin, []);
+  const isPrimaryAdmin = isSuperAdmin(currentAdmin);
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [permissionGroups, setPermissionGroups] = useState<PermissionGroup[]>([]);
   const [allowed, setAllowed] = useState(true);
@@ -49,7 +54,7 @@ export default function AdminAccountsPanel() {
   const [deleteTarget, setDeleteTarget] = useState<AdminAccount | null>(null);
   const [deletePassword, setDeletePassword] = useState("");
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     setLoading(true);
     try {
       const [response, catalog] = await Promise.all([
@@ -66,9 +71,9 @@ export default function AdminAccountsPanel() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { void reload(); }, []);
+  useEffect(() => { if (isPrimaryAdmin) void reload(); }, [isPrimaryAdmin, reload]);
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
@@ -170,7 +175,7 @@ export default function AdminAccountsPanel() {
     }
   };
 
-  if (!allowed) {
+  if (!isPrimaryAdmin || !allowed) {
     return <section className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Hanya admin utama yang dapat melihat dan mengelola akun admin.</section>;
   }
 
@@ -223,19 +228,16 @@ export default function AdminAccountsPanel() {
 
         <div className="mt-5 space-y-3">
           {loading ? <div className="grid min-h-32 place-items-center text-sm font-bold text-slate-500"><Loader2 className="animate-spin" /></div> : accounts.map((admin) => (
-            <article key={admin.id} className="flex min-w-0 flex-col gap-4 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2"><p className="truncate font-black text-slate-900">{admin.name}</p>{admin.is_primary && <span className="rounded-full bg-orange-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-orange-800">Admin utama</span>}</div>
-                <p className="mt-1 break-all text-sm text-slate-500">{admin.email}</p>
-                <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${admin.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{admin.status === "active" ? "Aktif" : "Nonaktif"}</span>
-                <span className="ml-2 mt-2 inline-flex rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-black text-indigo-800">Admin · {admin.is_primary ? "Full Admin · Admin utama" : `${adminPresetForPermissions(admin.admin_permissions || [])} · ${admin.admin_permissions?.length || 0} izin`}</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={busy} onClick={() => openEdit(admin)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Pencil size={14} />Edit</button>
-                {!admin.is_primary && <button type="button" disabled={busy} onClick={() => setStatusTarget(admin)} className="min-h-10 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50">{admin.status === "active" ? "Nonaktifkan" : "Aktifkan"}</button>}
-                {!admin.is_primary && <button type="button" disabled={busy} onClick={() => setDeleteTarget(admin)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-rose-200 px-3 text-xs font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 size={14} />Hapus</button>}
-              </div>
-            </article>
+            <AdminAccountRow
+              key={admin.id}
+              admin={admin}
+              busy={busy}
+              currentAdminEmail={currentAdmin.email}
+              presetForPermissions={adminPresetForPermissions}
+              onEdit={openEdit}
+              onStatus={setStatusTarget}
+              onDelete={setDeleteTarget}
+            />
           ))}
         </div>
       </section>

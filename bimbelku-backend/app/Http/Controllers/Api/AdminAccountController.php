@@ -20,13 +20,14 @@ class AdminAccountController extends Controller
         return response()->json(User::query()
             ->where('role', 'admin')
             ->orderBy('id')
-            ->get(['id', 'name', 'email', 'status', 'admin_permissions', 'created_at'])
+            ->get(['id', 'name', 'email', 'role', 'status', 'admin_permissions', 'created_at'])
             ->map(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'status' => $user->status,
                 'is_primary' => $user->isPrimaryAdmin(),
+                'is_primary_admin' => $user->isPrimaryAdmin(),
                 'admin_permissions' => $user->effectiveAdminPermissions(),
                 'created_at' => $user->created_at,
             ]));
@@ -83,6 +84,7 @@ class AdminAccountController extends Controller
     {
         $this->authorizePrimary($request);
         abort_unless($admin->role === 'admin', 404);
+        $this->abortIfProtectedAdmin($request, $admin);
         $validated = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($admin->id)],
@@ -151,8 +153,7 @@ class AdminAccountController extends Controller
     {
         $this->authorizePrimary($request);
         abort_unless($admin->role === 'admin', 404);
-        abort_if($admin->isPrimaryAdmin(), 422, 'Admin utama tidak dapat dihapus.');
-        abort_if((int) $request->user()->id === (int) $admin->id, 422, 'Akun yang sedang digunakan tidak dapat dihapus.');
+        $this->abortIfProtectedAdmin($request, $admin);
         $validated = $request->validate(['super_admin_password' => ['required', 'string']]);
         $this->verifyPassword($request, $validated['super_admin_password']);
 
@@ -175,7 +176,7 @@ class AdminAccountController extends Controller
     {
         $this->authorizePrimary($request);
         abort_unless($admin->role === 'admin', 404);
-        abort_if($admin->isPrimaryAdmin(), 422, 'Admin utama tidak dapat dinonaktifkan.');
+        $this->abortIfProtectedAdmin($request, $admin);
         $validated = $request->validate([
             'status' => ['required', Rule::in(['active', 'banned'])],
             'super_admin_password' => ['required', 'string'],
@@ -198,6 +199,15 @@ class AdminAccountController extends Controller
     private function authorizePrimary(Request $request): void
     {
         abort_unless($request->user()?->isPrimaryAdmin(), 403, 'Hanya admin utama yang dapat mengelola akun admin.');
+    }
+
+    private function abortIfProtectedAdmin(Request $request, User $admin): void
+    {
+        abort_if(
+            $admin->isPrimaryAdmin() || (int) $request->user()->id === (int) $admin->id,
+            422,
+            'Akun Admin Utama tidak dapat diubah, dinonaktifkan, atau dihapus melalui daftar admin.'
+        );
     }
 
     private function verifyPassword(Request $request, string $password): void
