@@ -280,6 +280,16 @@
     overscroll-behavior-y: contain;
   }
 
+  /* Root halaman sering memakai `mx-auto max-w-*`. Margin auto di sumbu silang
+     flex mematikan stretch, jadi root memakai ukuran fit-content yang lantainya
+     adalah min-content: tabel lebar (min-width 42rem) melebarkan seluruh
+     halaman, lalu overflow-x-hidden memotongnya tanpa bisa digeser. Paksa root
+     memakai lebar kontainer agar tabel menggulir di wadahnya sendiri. */
+  .mobile-app-content > div > [class*="mx-auto"] {
+    width: 100%;
+    min-width: 0;
+  }
+
   .mobile-app-content :where(table) {
     min-width: 42rem;
   }

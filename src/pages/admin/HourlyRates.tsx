@@ -148,7 +148,7 @@ export default function HourlyRates() {
 
   return (
     <AdminLayout title="Tarif Per Jam">
-      <div className="max-w-7xl mx-auto space-y-7 pb-12">
+      <div className="mx-auto w-full min-w-0 max-w-7xl space-y-7 pb-12">
         <section className="rounded-[2rem] bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-900 px-7 py-8 text-white shadow-xl">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div>
