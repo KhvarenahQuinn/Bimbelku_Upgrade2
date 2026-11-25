@@ -37,6 +37,7 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger, retryTrig
   const widgetIdRef = useRef<number | null>(null);
   const scriptLoadedRef = useRef(false);
   const scriptLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const renderAttemptedRef = useRef(false);
   const scriptReadyRef = useRef(false);
   const renderWidgetRef = useRef<() => void>(() => {});
@@ -250,6 +251,10 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger, retryTrig
     renderWidgetRef.current();
 
     return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
       if (widgetIdRef.current !== null && window.turnstile) {
         window.turnstile.remove(widgetIdRef.current);
         widgetIdRef.current = null;
@@ -264,8 +269,12 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger, retryTrig
   }, [token]);
 
   const handleRetry = () => {
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
     if (widgetIdRef.current !== null && window.turnstile) {
-      window.turnstile.reset(widgetIdRef.current);
+      window.turnstile.remove(widgetIdRef.current);
       widgetIdRef.current = null;
     }
     renderAttemptedRef.current = false;
@@ -274,7 +283,8 @@ export default function TurnstileWidget({ onTokenChange, resetTrigger, retryTrig
     // Do NOT remove the global script tag
     setStatus("idle");
     setErrorMessage("");
-    setTimeout(() => {
+    retryTimeoutRef.current = setTimeout(() => {
+      retryTimeoutRef.current = null;
       const siteKeyRetry = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim();
       if (!siteKeyRetry || !window.turnstile) {
         // If no site key or turnstile not loaded, reload script

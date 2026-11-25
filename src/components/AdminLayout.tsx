@@ -1,5 +1,5 @@
 import DashboardBrand from "@/components/DashboardBrand";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
@@ -30,6 +30,7 @@ import ProfileQuickMenu from "@/components/ProfileQuickMenu";
 import RoleQuickGuide from "@/components/RoleQuickGuide";
 import { ADMIN_PERMISSIONS, canAdmin, readStoredAdmin } from "@/lib/adminPermissions";
 import { scheduleNonCriticalTask } from "@/lib/schedule";
+import { hasActiveBrowserSession, isLoggingOut, SESSION_UPDATED_EVENT } from "@/lib/session";
 import { usePersistentSidebarScroll } from "@/hooks/usePersistentSidebarScroll";
 import {
   hasAdminMobileMenuAttention,
@@ -168,6 +169,7 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [attentionNotifications, setAttentionNotifications] = useState<AttentionNotification[]>([]);
   const [operationalCounts, setOperationalCounts] = useState<OperationalAttentionCounts>(emptyOperationalCounts);
+  const attentionRequestsRef = useRef(new Set<AbortController>());
   const location = useLocation();
   const { sidebarScrollRef, handleSidebarScroll } = usePersistentSidebarScroll("admin", location.pathname);
   const admin = useMemo(readStoredAdmin, []);
@@ -203,15 +205,23 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
   };
 
   const fetchAttentionData = useCallback(async (force = false) => {
-    if (!localStorage.getItem("token")) return;
+    if (!hasActiveBrowserSession() || isLoggingOut()) return;
+    const requestToken = localStorage.getItem("token");
+    if (!requestToken) return;
+    const controller = new AbortController();
+    attentionRequestsRef.current.add(controller);
+    const isCurrentSession = () => hasActiveBrowserSession()
+      && !isLoggingOut()
+      && localStorage.getItem("token") === requestToken;
     try {
       const { getCached } = await import("@/lib/http");
-      // `dashboard-stats` dijaga izin `operations.dashboard`; memanggilnya dari
-      // akun tanpa izin hanya menghasilkan 403 di konsol setiap 60 detik.
+      if (!isCurrentSession() || controller.signal.aborted) return;
+      // `dashboard-stats` hanya tersedia bagi admin dengan izin operasional.
       const statsRequest = canAdmin(admin, ADMIN_PERMISSIONS.OPERATIONS_DASHBOARD)
         ? getCached<{ counts?: Partial<OperationalAttentionCounts> }>("/admin/dashboard-stats", {
           maxAgeMs: force ? 5_000 : 15_000,
           force,
+          signal: controller.signal,
         })
         : Promise.resolve({ data: { counts: {} as Partial<OperationalAttentionCounts> } });
       const [notificationsResult, statsResult] = await Promise.allSettled([
@@ -219,9 +229,11 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
           params: { per_page: 1 },
           maxAgeMs: force ? 5_000 : 15_000,
           force,
+          signal: controller.signal,
         }),
         statsRequest,
       ]);
+      if (!isCurrentSession() || controller.signal.aborted) return;
       if (notificationsResult.status === "fulfilled") {
         const notifications = notificationsResult.value.data.attention_notifications;
         setAttentionNotifications(Array.isArray(notifications) ? notifications : []);
@@ -243,6 +255,8 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
       }
     } catch {
       // Badge navigasi bersifat pendukung dan tidak boleh mengganggu halaman admin.
+    } finally {
+      attentionRequestsRef.current.delete(controller);
     }
   }, [admin]);
 
@@ -252,19 +266,39 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
 
   useEffect(() => {
     let disposed = false;
-    const start = () => { if (!disposed) void fetchAttentionData(false); };
+    const abortAttentionRequests = () => {
+      attentionRequestsRef.current.forEach((controller) => controller.abort());
+      attentionRequestsRef.current.clear();
+    };
+    const start = () => {
+      if (!disposed && hasActiveBrowserSession() && !isLoggingOut()) void fetchAttentionData(false);
+    };
     const cancelScheduledStart = scheduleNonCriticalTask(start);
-    const refreshAttention = () => { if (!disposed) void fetchAttentionData(true); };
+    const refreshAttention = () => {
+      if (!disposed && hasActiveBrowserSession() && !isLoggingOut()) void fetchAttentionData(true);
+    };
+    const handleSessionChange = () => {
+      if (!hasActiveBrowserSession() || isLoggingOut()) {
+        abortAttentionRequests();
+        return;
+      }
+      refreshAttention();
+    };
     window.addEventListener("bimbelku:data-changed", refreshAttention);
     window.addEventListener("bimbelku:navigation-attention-changed", refreshAttention);
+    window.addEventListener(SESSION_UPDATED_EVENT, handleSessionChange);
+    window.addEventListener("storage", handleSessionChange);
     const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") void fetchAttentionData(true);
+      if (document.visibilityState === "visible") refreshAttention();
     }, 60_000);
     return () => {
       disposed = true;
+      abortAttentionRequests();
       cancelScheduledStart();
       window.removeEventListener("bimbelku:data-changed", refreshAttention);
       window.removeEventListener("bimbelku:navigation-attention-changed", refreshAttention);
+      window.removeEventListener(SESSION_UPDATED_EVENT, handleSessionChange);
+      window.removeEventListener("storage", handleSessionChange);
       window.clearInterval(interval);
     };
   }, [fetchAttentionData]);

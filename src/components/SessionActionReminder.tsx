@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import http, { getCached } from "@/lib/http";
-import { hasActiveBrowserSession, SESSION_UPDATED_EVENT } from "@/lib/session";
+import { hasActiveBrowserSession, isLoggingOut, SESSION_UPDATED_EVENT } from "@/lib/session";
 
 type SessionActionKind =
   | "student_confirm_presence"
@@ -240,6 +240,8 @@ export default function SessionActionReminder() {
   const [pendingCount, setPendingCount] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const reminderRequestsRef = useRef(new Set<AbortController>());
+  const latestRequestRef = useRef(0);
 
   const role = (() => {
     try {
@@ -251,12 +253,25 @@ export default function SessionActionReminder() {
   })();
 
   const load = useCallback(async (force = false) => {
-    if (!hasActiveBrowserSession() || !["student", "teacher", "admin"].includes(role)) {
+    if (!hasActiveBrowserSession() || isLoggingOut() || !["student", "teacher", "admin"].includes(role)) {
+      latestRequestRef.current += 1;
+      reminderRequestsRef.current.forEach((controller) => controller.abort());
+      reminderRequestsRef.current.clear();
       setAction(null);
       setPendingCount(0);
       setLoaded(true);
       return;
     }
+
+    const requestToken = localStorage.getItem("token");
+    if (!requestToken) return;
+    const requestId = ++latestRequestRef.current;
+    const controller = new AbortController();
+    reminderRequestsRef.current.add(controller);
+    const isCurrentSession = () => requestId === latestRequestRef.current
+      && hasActiveBrowserSession()
+      && !isLoggingOut()
+      && localStorage.getItem("token") === requestToken;
 
     try {
       // maxAgeMs sudah meredam polling 8 detik. `force` hanya dipakai saat aksi
@@ -265,7 +280,9 @@ export default function SessionActionReminder() {
       const response = await getCached<SessionActionResponse>("/session-action/next", {
         maxAgeMs: 5_000,
         force,
+        signal: controller.signal,
       });
+      if (!isCurrentSession() || controller.signal.aborted) return;
       const rawNext = response.data?.data || null;
       const next = rawNext && acknowledgeOnOpen.has(rawNext.kind)
         && sessionStorage.getItem(`bimbelku:session-action:ack:${rawNext.action_key}`) === "1"
@@ -283,11 +300,13 @@ export default function SessionActionReminder() {
     } catch {
       // Reminder tidak boleh mengganggu halaman utama saat jaringan sedang bermasalah.
     } finally {
-      setLoaded(true);
+      reminderRequestsRef.current.delete(controller);
+      if (isCurrentSession()) setLoaded(true);
     }
   }, [role]);
 
   useEffect(() => {
+    const reminderRequests = reminderRequestsRef.current;
     void load();
     // Fokus jendela dan event data sering datang beruntun; debounce supaya
     // satu burst hanya menghasilkan satu request.
@@ -303,18 +322,28 @@ export default function SessionActionReminder() {
       void load(true);
     };
     const onFocus = () => refresh();
+    const clearForInactiveSession = () => {
+      latestRequestRef.current += 1;
+      reminderRequestsRef.current.forEach((controller) => controller.abort());
+      reminderRequestsRef.current.clear();
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = null;
+      setAction(null);
+      setPendingCount(0);
+      setLoaded(true);
+    };
     const onSessionUpdated = () => {
-      if (!hasActiveBrowserSession()) {
-        if (debounceTimer) window.clearTimeout(debounceTimer);
-        debounceTimer = null;
-        setAction(null);
-        setPendingCount(0);
-        setLoaded(true);
+      if (!hasActiveBrowserSession() || isLoggingOut()) {
+        clearForInactiveSession();
         return;
       }
       refresh();
     };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "token" && !hasActiveBrowserSession()) clearForInactiveSession();
+    };
     window.addEventListener(SESSION_UPDATED_EVENT, onSessionUpdated);
+    window.addEventListener("storage", onStorage);
     window.addEventListener("bimbelku:data-changed", onDataChanged);
     window.addEventListener("focus", onFocus);
     const timer = window.setInterval(() => {
@@ -322,6 +351,10 @@ export default function SessionActionReminder() {
     }, 8_000);
     return () => {
       window.removeEventListener(SESSION_UPDATED_EVENT, onSessionUpdated);
+      window.removeEventListener("storage", onStorage);
+      latestRequestRef.current += 1;
+      reminderRequests.forEach((controller) => controller.abort());
+      reminderRequests.clear();
       window.removeEventListener("bimbelku:data-changed", onDataChanged);
       window.removeEventListener("focus", onFocus);
       window.clearInterval(timer);
