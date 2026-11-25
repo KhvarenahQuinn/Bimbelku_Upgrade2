@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from "react";
+import { getStoredHomeRedirectPath } from "@/components/auth/guardRedirects";
 import { clearBrowserSession } from "@/lib/session";
 
 type AppErrorBoundaryProps = {
@@ -34,7 +35,8 @@ export default class AppErrorBoundary extends Component<
   };
 
   private goHome = () => {
-    window.location.assign("/");
+    const destination = getStoredHomeRedirectPath();
+    this.setState({ hasError: false }, () => window.location.assign(destination));
   };
 
   private goToLogin = () => {

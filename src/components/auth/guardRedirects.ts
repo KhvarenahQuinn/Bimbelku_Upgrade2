@@ -33,6 +33,17 @@ export function getHomeRedirectPath(user: StoredSessionUser | null | undefined):
   }
 }
 
+export function getStoredHomeRedirectPath(storage?: Pick<Storage, "getItem">): string {
+  try {
+    const source = storage ?? (typeof window !== "undefined" ? window.localStorage : null);
+    if (!source?.getItem("token")) return "/";
+    const user = JSON.parse(source.getItem("user") || "null") as StoredSessionUser | null;
+    return user ? getHomeRedirectPath(user) : "/";
+  } catch {
+    return "/";
+  }
+}
+
 export const LOGIN_PATH_BY_AREA: Record<AppRole, string> = {
   admin: "/admin/login",
   teacher: "/login",

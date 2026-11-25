@@ -299,6 +299,7 @@ export const AppContent = () => (
 
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsConditions />} />
+            <Route path="/syarat-dan-ketentuan" element={<Navigate to="/terms" replace />} />
             <Route path="/why-us" element={<WebsiteContentProvider><WhyUs /></WebsiteContentProvider>} />
             <Route path="/access-denied" element={<AccessDenied />} />
             {import.meta.env.VITE_PAYMENT_DESIGN_PREVIEW === "true" && ["localhost", "127.0.0.1"].includes(window.location.hostname) && <Route path="/payment-preview" element={<PaymentPage />} />}
@@ -417,7 +418,7 @@ export const AppContent = () => (
             {/* =========================================
                 5. RUTE 404 
                ========================================= */}
-            <Route path="*" element={<HomeRedirectFallback />} />
+            <Route path="*" element={<NotFound />} />
 
           </Routes>
         </Suspense>

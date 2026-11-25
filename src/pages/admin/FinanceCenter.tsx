@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { Banknote, FileBarChart, Loader2, ReceiptText, Undo2, WalletCards } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import AdminLayout from "@/components/AdminLayout";
-import { allowedFinanceTabs, canAdmin, FINANCE_TAB_PERMISSIONS, readStoredAdmin, type FinanceTab } from "@/lib/adminPermissions";
+import { ADMIN_PERMISSIONS, allowedFinanceTabs, canAdmin, FINANCE_TAB_PERMISSIONS, readStoredAdmin, type FinanceTab } from "@/lib/adminPermissions";
 import { getCached } from "@/lib/http";
 
 const FinancialTransactionsReport = lazy(() => import("@/components/FinancialTransactionsReport"));
