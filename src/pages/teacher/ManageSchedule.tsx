@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import http, { getApiError } from "@/lib/http";
 import WorkspacePageIntro from "@/components/WorkspacePageIntro";
+import { exceptionDateRangeError, maxExceptionEndDate } from "@/lib/teacherScheduleExceptions";
 
 interface TimeRange {
   start_time: string;
@@ -181,6 +182,7 @@ export default function ManageSchedule() {
       notify.error("Pilih tanggal mulai dan selesai.");
       return;
     }
+    if (exceptionDateRangeError(exceptionForm.start_date, exceptionForm.end_date)) return;
     setSavingException(true);
     try {
       const response = await http.post("/teacher/schedule-exceptions", {
@@ -280,11 +282,12 @@ export default function ManageSchedule() {
             <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-black text-rose-700">{exceptions.length} pengecualian</span>
           </div>
           <div className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_1fr_1.4fr_auto] md:items-end">
-            <label><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Mulai</span><input type="date" min={localToday()} value={exceptionForm.start_date} onChange={(event) => setExceptionForm((current) => ({ ...current, start_date: event.target.value, end_date: current.end_date && current.end_date < event.target.value ? event.target.value : current.end_date }))} className="form-field" /></label>
-            <label><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Selesai</span><input type="date" min={exceptionForm.start_date || localToday()} value={exceptionForm.end_date} onChange={(event) => setExceptionForm((current) => ({ ...current, end_date: event.target.value }))} className="form-field" /></label>
+            <label><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Mulai</span><input type="date" min={localToday()} value={exceptionForm.start_date} onChange={(event) => setExceptionForm((current) => ({ ...current, start_date: event.target.value, end_date: current.end_date && (current.end_date < event.target.value || current.end_date > maxExceptionEndDate(event.target.value)) ? event.target.value : current.end_date }))} className="form-field" /></label>
+            <label><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Selesai</span><input type="date" min={exceptionForm.start_date || localToday()} max={maxExceptionEndDate(exceptionForm.start_date)} value={exceptionForm.end_date} onChange={(event) => setExceptionForm((current) => ({ ...current, end_date: event.target.value }))} aria-describedby={exceptionDateRangeError(exceptionForm.start_date, exceptionForm.end_date) ? "exception-date-range-error" : undefined} className="form-field" /></label>
             <label><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Alasan (opsional)</span><input value={exceptionForm.reason} maxLength={255} onChange={(event) => setExceptionForm((current) => ({ ...current, reason: event.target.value }))} className="form-field" placeholder="Contoh: cuti keluarga" /></label>
-            <Button type="button" onClick={() => void saveException()} disabled={savingException} className="h-12 rounded-xl bg-rose-600 px-5 hover:bg-rose-700">{savingException ? <Loader2 className="mr-2 animate-spin" size={17} /> : <Plus className="mr-2" size={17} />}Tambah</Button>
+            <Button type="button" onClick={() => void saveException()} disabled={savingException || Boolean(exceptionDateRangeError(exceptionForm.start_date, exceptionForm.end_date))} className="h-12 rounded-xl bg-rose-600 px-5 hover:bg-rose-700">{savingException ? <Loader2 className="mr-2 animate-spin" size={17} /> : <Plus className="mr-2" size={17} />}Tambah</Button>
           </div>
+          {exceptionDateRangeError(exceptionForm.start_date, exceptionForm.end_date) && <p id="exception-date-range-error" role="alert" className="mt-2 text-sm font-medium text-rose-700">{exceptionDateRangeError(exceptionForm.start_date, exceptionForm.end_date)}</p>}
           <div className="mt-4 space-y-2">
             {exceptions.length ? exceptions.map((item) => <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="font-black text-slate-900">{new Date(`${item.start_date}T00:00:00`).toLocaleDateString("id-ID", { dateStyle: "long" })}{item.end_date !== item.start_date ? ` – ${new Date(`${item.end_date}T00:00:00`).toLocaleDateString("id-ID", { dateStyle: "long" })}` : ""}</p><p className="mt-1 text-xs text-slate-500">{item.reason || "Tidak tersedia"}</p></div><button type="button" onClick={() => void deleteException(item.id)} className="grid min-h-11 place-items-center rounded-xl bg-rose-50 px-4 text-rose-600 hover:bg-rose-100 sm:w-11 sm:px-0" aria-label="Hapus tanggal tidak tersedia"><Trash2 size={17} /></button></div>) : <p className="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">Belum ada tanggal khusus yang diblokir.</p>}
           </div>

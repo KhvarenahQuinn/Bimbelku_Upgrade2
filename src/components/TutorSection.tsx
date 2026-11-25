@@ -24,6 +24,7 @@ type TutorCardData = {
 };
 
 type GalleryTutor = { id: number; display_name: string; degree: string; description: string | null; photo_url: string | null };
+type PublicTutor = { id: number; name: string; degree: string | null; credentials: string | null; experience: string | null; bio: string | null; photo_url: string | null };
 
 export default function TutorSection() {
   const { settings, section } = useWebsiteContent();
@@ -47,21 +48,44 @@ export default function TutorSection() {
 
   useEffect(() => {
     let mounted = true;
-    getCached<GalleryTutor[]>("/website-tutor-gallery", { maxAgeMs: 30_000 })
-      .then(({ data }) => {
+    const loadTutors = async () => {
+      try {
+        const gallery = await getCached<GalleryTutor[]>("/website-tutor-gallery", { maxAgeMs: 30_000 });
+        const galleryTutors = Array.isArray(gallery.data) ? gallery.data : [];
+        if (galleryTutors.length) {
+          if (mounted) setTutors(galleryTutors.map((tutor) => ({
+            id: tutor.id,
+            imageUrl: tutor.photo_url || null,
+            title: tutor.display_name,
+            degree: tutor.degree,
+            note: tutor.description || "Tutor BimbelKu",
+          })));
+          return;
+        }
+
+        const hasLegacyPhotos = [settings.trust_image_1_url, settings.trust_image_2_url, settings.trust_image_3_url, settings.trust_image_4_url, settings.trust_image_5_url, settings.trust_image_6_url].some(Boolean);
+        if (hasLegacyPhotos) return;
+        const publicResponse = await getCached<PublicTutor[]>("/public-tutors", { maxAgeMs: 30_000 });
         if (!mounted) return;
-        setTutors((Array.isArray(data) ? data : []).map((tutor) => ({
+        setTutors((Array.isArray(publicResponse.data) ? publicResponse.data : []).map((tutor) => ({
           id: tutor.id,
           imageUrl: tutor.photo_url || null,
-          title: tutor.display_name,
+          title: tutor.name,
           degree: tutor.degree,
-          note: tutor.description || "Tutor BimbelKu",
+          note: tutor.credentials || tutor.experience || tutor.bio || "Tutor BimbelKu",
         })));
-      })
-      .catch(() => { if (mounted) { setTutors([]); setFailed(true); } })
-      .finally(() => { if (mounted) setLoading(false); });
+      } catch {
+        if (mounted) {
+          setTutors([]);
+          setFailed(true);
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void loadTutors();
     return () => { mounted = false; };
-  }, []);
+  }, [settings.trust_image_1_url, settings.trust_image_2_url, settings.trust_image_3_url, settings.trust_image_4_url, settings.trust_image_5_url, settings.trust_image_6_url]);
 
   useEffect(() => {
     const element = tickerRef.current;

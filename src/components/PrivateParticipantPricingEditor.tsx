@@ -82,6 +82,7 @@ export default function PrivateParticipantPricingEditor() {
     </div>
 
     <p className="mt-4 flex gap-2 rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-900"><AlertCircle className="mt-0.5 shrink-0" size={18} />Semua diskon 2–{maximumParticipants} peserta harus terisi. Tidak ada lagi pengaturan “kenaikan bruto tutor”; pembagian transaksi selalu 80/20.</p>
+    <p className="mt-3 text-xs font-semibold text-slate-500 sm:hidden">Geser tabel ke samping untuk melihat semua kolom.</p>
     <div className="mt-5 max-h-[36rem] overflow-auto rounded-2xl border border-slate-100"><table className="w-full min-w-[640px] text-left text-sm"><thead className="sticky top-0 z-10 bg-white shadow-sm"><tr className="border-b border-slate-200 text-slate-500"><th className="px-4 py-3">Peserta</th><th className="px-4 py-3">Diskon total normal</th><th className="px-4 py-3">Pengali harga akhir</th><th className="px-4 py-3">Pembagian</th></tr></thead><tbody>{counts.map((count) => {
       const discount = Number(tiers[String(count)]?.discount_percent || 0);
       const multiplier = count * (1 - discount / 100);

@@ -299,6 +299,7 @@ export const AppContent = () => (
 
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsConditions />} />
+            <Route path="/syarat-dan-ketentuan" element={<Navigate to="/terms" replace />} />
             <Route path="/why-us" element={<WebsiteContentProvider><WhyUs /></WebsiteContentProvider>} />
             <Route path="/access-denied" element={<AccessDenied />} />
             {import.meta.env.VITE_PAYMENT_DESIGN_PREVIEW === "true" && ["localhost", "127.0.0.1"].includes(window.location.hostname) && <Route path="/payment-preview" element={<PaymentPage />} />}
@@ -318,7 +319,7 @@ export const AppContent = () => (
               <Route path="/admin/website" element={<PublicWebsiteSettings />} />
               <Route path="/admin/website-media" element={<WebsiteMediaSettings />} />
               <Route path="/admin/public-tutors" element={<PublicTutorDirectoryAdmin />} />
-              <Route element={<RouteGuard allowedRoles={['admin']} requiredPermissions={['finance.payouts', 'finance.refunds', 'finance.payments']} />}>
+              <Route element={<RouteGuard allowedRoles={['admin']} requiredAnyPermissions={[ADMIN_PERMISSIONS.FINANCE_PAYMENTS, ADMIN_PERMISSIONS.FINANCE_PAYOUTS, ADMIN_PERMISSIONS.FINANCE_REFUNDS, ADMIN_PERMISSIONS.FINANCE_REPORTS]} />}>
                 <Route path="/admin/finance" element={<FinanceCenter />} />
                 <Route path="/admin/pembayaran" element={<Navigate to="/admin/finance?tab=payments" replace />} />
                 <Route path="/admin/settings-payment" element={<Navigate to="/admin/finance?tab=payments" replace />} />
@@ -417,7 +418,7 @@ export const AppContent = () => (
             {/* =========================================
                 5. RUTE 404 
                ========================================= */}
-            <Route path="*" element={<HomeRedirectFallback />} />
+            <Route path="*" element={<NotFound />} />
 
           </Routes>
         </Suspense>

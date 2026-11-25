@@ -53,8 +53,10 @@ function GuardLoading() {
 
 interface ProtectedRouteProps {
   allowedRoles: AppRole[];
-  /** Izin admin spesifik untuk sub-halaman sensitif. */
+  /** Izin admin yang semuanya wajib untuk sub-halaman sensitif. */
   requiredPermissions?: AdminPermission[];
+  /** Salah satu izin admin ini è sufficiente per aprire un modulo condiviso. */
+  requiredAnyPermissions?: AdminPermission[];
   children?: ReactNode;
 }
 
@@ -65,6 +67,7 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({
   allowedRoles,
   requiredPermissions,
+  requiredAnyPermissions,
   children,
 }: ProtectedRouteProps) {
   const location = useLocation();
@@ -78,8 +81,17 @@ export function ProtectedRoute({
   // Izin admin diambil dari path agar guard tetap benar walau pemanggil lupa
   // mengisi requiredPermissions pada rute baru.
   const pathPermission = role === "admin" ? permissionForAdminPath(location.pathname) : null;
-  const needed = requiredPermissions?.length ? requiredPermissions : pathPermission ? [pathPermission] : [];
-  const permissionDenied = role === "admin" && needed.some((permission) => !canAdmin(user, permission));
+  const needed = requiredPermissions?.length
+    ? requiredPermissions
+    : requiredAnyPermissions?.length
+      ? []
+      : pathPermission
+        ? [pathPermission]
+        : [];
+  const permissionDenied = role === "admin" && (
+    needed.some((permission) => !canAdmin(user, permission))
+    || (requiredAnyPermissions?.length ? !requiredAnyPermissions.some((permission) => canAdmin(user, permission)) : false)
+  );
 
   const denied = signedIn && (!roleAllowed || permissionDenied);
 

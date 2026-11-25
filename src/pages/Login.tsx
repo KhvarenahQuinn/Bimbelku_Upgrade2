@@ -1,6 +1,6 @@
 import { notify } from "@/lib/notify";
 import { API_BASE_URL } from "@/lib/apiBase";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import GoogleAuthButton from "@/components/GoogleAuthButton";
@@ -23,11 +23,13 @@ export default function Login() {
   const [formData, setFormData] = useState({ email: searchParams.get("email") || guestEmail, password: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [summaryError, setSummaryError] = useState("");
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileStatus, setTurnstileStatus] = useState<TurnstileStatus>("idle");
   const [turnstileRetry, setTurnstileRetry] = useState(0);
   const turnstileEnabled = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() !== "";
   const turnstileFailed = turnstileStatus === "error" || turnstileStatus === "expired" || turnstileStatus === "stalled";
+  const countdownActive = remainingSeconds > 0;
   const googleError = searchParams.get("google_error");
 
   const handleLogin = async (event: React.FormEvent) => {
@@ -51,6 +53,7 @@ export default function Login() {
     loadingRef.current = true;
     setErrors({});
     setSummaryError("");
+    setRemainingSeconds(0);
     setIsLoading(true);
     let axiosModule: typeof import("axios") | null = null;
     try {
@@ -96,7 +99,8 @@ export default function Login() {
     } catch (error: unknown) {
       const axios = axiosModule?.default;
       const isAxiosError = axios ? axios.isAxiosError(error) : false;
-      const data = isAxiosError ? (error as { response?: { data?: { error_code?: string; email?: string; message?: string; resend_after_seconds?: number; errors?: Record<string, string[]> } } }).response?.data : undefined;
+      const responseDetails = isAxiosError ? (error as { response?: { status?: number; headers?: Record<string, string | number>; data?: { error_code?: string; email?: string; message?: string; resend_after_seconds?: number; retry_after_seconds?: number; errors?: Record<string, string[]> } } }).response : undefined;
+      const data = responseDetails?.data;
       if (data?.error_code === "email_not_verified" && data.email) {
         const params = new URLSearchParams({ email: data.email });
         if (requestedRedirect) params.set("redirect", requestedRedirect);
@@ -112,6 +116,10 @@ export default function Login() {
         return;
       }
       const message = data?.message || "Periksa email dan kata sandi, lalu coba lagi.";
+      const retryAfter = Number(data?.retry_after_seconds ?? responseDetails?.headers?.["retry-after"] ?? 0);
+      if (Number.isFinite(retryAfter) && retryAfter > 0 && (responseDetails?.status === 429 || /rate.limit|lockout/i.test(data?.error_code || ""))) {
+        setRemainingSeconds(Math.ceil(retryAfter));
+      }
       setSummaryError(message);
       setErrors(Object.fromEntries(Object.entries(data?.errors || {}).map(([key, value]) => [key, value[0] || message])));
       notify.error("Gagal masuk", { description: message });
@@ -121,6 +129,14 @@ export default function Login() {
     }
   };
 
+  useEffect(() => {
+    if (!countdownActive) return;
+    const timer = window.setInterval(() => {
+      setRemainingSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [countdownActive]);
+
   return <AuthExperience mode="login" role="all">
       <section>
         <p className="mt-8 text-xs font-extrabold uppercase tracking-wider text-orange-700">Selamat datang kembali</p>
@@ -128,6 +144,7 @@ export default function Login() {
         <p className="mt-2 text-sm leading-6 text-slate-500">Lanjutkan belajar, lihat jadwal, dan kelola kelasmu dalam satu akun.</p>
         {googleError && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{googleError}</p>}
         {summaryError && <p role="alert" aria-live="assertive" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{summaryError}</p>}
+        {remainingSeconds > 0 && <p role="status" aria-live="polite" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">Terlalu banyak percobaan. Coba lagi dalam {remainingSeconds} detik.</p>}
         <form onSubmit={handleLogin} className="auth-login-form mt-7 space-y-5">
           <label htmlFor="login-email" className="block text-sm font-bold text-slate-700">Email<div className="auth-control mt-2" data-invalid={Boolean(errors.email)}><span className="auth-control-icon" aria-hidden="true"><Mail size={19} /></span><input id="login-email" name="email" type="email" autoComplete="email" required aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? "login-email-error" : undefined} value={formData.email} onChange={(event) => { setFormData((value) => ({ ...value, email: event.target.value })); setErrors((value) => ({ ...value, email: "" })); }} placeholder="nama@email.com" /></div>{errors.email && <span id="login-email-error" className="mt-1 block text-xs font-semibold text-red-700">{errors.email}</span>}</label>
           <label htmlFor="login-password" className="block text-sm font-bold text-slate-700">Kata sandi<div className="auth-control mt-2" data-invalid={Boolean(errors.password)}><span className="auth-control-icon" aria-hidden="true"><Lock size={19} /></span><input id="login-password" name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" required aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? "login-password-error" : undefined} value={formData.password} onChange={(event) => { setFormData((value) => ({ ...value, password: event.target.value })); setErrors((value) => ({ ...value, password: "" })); }} placeholder="Masukkan kata sandi" /><button type="button" onClick={() => setShowPassword((value) => !value)} className="auth-control-action" aria-controls="login-password" aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>{errors.password && <span id="login-password-error" className="mt-1 block text-xs font-semibold text-red-700">{errors.password}</span>}</label>
@@ -152,7 +169,7 @@ export default function Login() {
               </button>
             )}
           </div>
-          <button disabled={isLoading || (turnstileEnabled && !turnstileToken.trim())} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#14213D] px-5 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50">{isLoading ? <Loader2 className="animate-spin" size={18} /> : <ArrowRight size={18} />}{isLoading ? "Memproses…" : "Masuk"}</button>
+          <button disabled={isLoading || remainingSeconds > 0 || (turnstileEnabled && !turnstileToken.trim())} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#14213D] px-5 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50">{isLoading ? <Loader2 className="animate-spin" size={18} /> : <ArrowRight size={18} />}{isLoading ? "Memproses…" : "Masuk"}</button>
           <div className="flex items-center gap-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-400"><span className="h-px flex-1 bg-slate-200" />atau<span className="h-px flex-1 bg-slate-200" /></div><GoogleAuthButton redirect={requestedRedirect} rememberDevice={rememberDevice} />
         </form>
           <>

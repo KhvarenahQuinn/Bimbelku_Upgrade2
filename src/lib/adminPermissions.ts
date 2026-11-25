@@ -4,6 +4,7 @@ export const ADMIN_PERMISSIONS = {
   FINANCE_PAYMENTS: "finance.payments",
   FINANCE_PAYOUTS: "finance.payouts",
   FINANCE_REFUNDS: "finance.refunds",
+  FINANCE_REPORTS: "finance.reports",
   TEACHERS_MANAGE: "teachers.manage",
   CASES_MANAGE: "cases.manage",
   USERS_MANAGE: "users.manage",
@@ -14,7 +15,7 @@ export const ADMIN_PERMISSIONS = {
   AUDIT_VIEW: "audit.view",
 } as const;
 
-export type AdminPermission = typeof ADMIN_PERMISSIONS[keyof typeof ADMIN_PERMISSIONS];
+export type AdminPermission = typeof ADMIN_PERMISSIONS[keyof typeof ADMIN_PERMISSIONS] | "admin.profile";
 
 export type StoredAdminUser = {
   role?: string;
@@ -35,23 +36,47 @@ export const canAdmin = (
   permission: AdminPermission | string,
 ) => {
   if (user?.role !== "admin") return false;
+  if (permission === "admin.profile") return true;
   if (isSuperAdmin(user)) return true;
   const granted = user?.admin_permissions;
   if (!Array.isArray(granted)) return false;
   return granted.includes(permission);
 };
 
+export const hasAnyAdminPermission = (
+  user: StoredAdminUser | null | undefined,
+  permissions: readonly (AdminPermission | string)[],
+) => permissions.some((permission) => canAdmin(user, permission));
+
+export const FINANCE_TAB_PERMISSIONS = {
+  report: ADMIN_PERMISSIONS.FINANCE_REPORTS,
+  payments: ADMIN_PERMISSIONS.FINANCE_PAYMENTS,
+  refunds: ADMIN_PERMISSIONS.FINANCE_REFUNDS,
+  payouts: ADMIN_PERMISSIONS.FINANCE_PAYOUTS,
+} as const;
+
+export type FinanceTab = keyof typeof FINANCE_TAB_PERMISSIONS;
+
+export const allowedFinanceTabs = (user: StoredAdminUser | null | undefined): FinanceTab[] =>
+  (Object.keys(FINANCE_TAB_PERMISSIONS) as FinanceTab[])
+    .filter((tab) => canAdmin(user, FINANCE_TAB_PERMISSIONS[tab]));
+
 export const permissionForAdminPath = (pathname: string): AdminPermission | null => {
   const path = pathname.replace(/^\/admin\/?/, "");
   if (!path) return ADMIN_PERMISSIONS.OPERATIONS_DASHBOARD;
 
+  if (/^profile(?:\/|$)/.test(path)) return "admin.profile";
+
   const rules: Array<[RegExp, AdminPermission]> = [
-    [/^profile(?:\/|$)/, ADMIN_PERMISSIONS.OPERATIONS_DASHBOARD],
+    [/^finance\/report(?:\.pdf)?$/, ADMIN_PERMISSIONS.FINANCE_REPORTS],
+    [/^finance\/payments(?:\/|$)/, ADMIN_PERMISSIONS.FINANCE_PAYMENTS],
+    [/^finance\/refunds(?:\/|$)/, ADMIN_PERMISSIONS.FINANCE_REFUNDS],
+    [/^finance\/payouts(?:\/|$)/, ADMIN_PERMISSIONS.FINANCE_PAYOUTS],
+    [/^finance(?:\/|$)/, ADMIN_PERMISSIONS.FINANCE_PAYOUTS],
     [/^tutor-searches(?:\/|$)/, ADMIN_PERMISSIONS.MATCHING_MANAGE],
     [/^pembayaran(?:\/|$)/, ADMIN_PERMISSIONS.FINANCE_PAYMENTS],
     [/^refunds(?:\/|$)/, ADMIN_PERMISSIONS.FINANCE_REFUNDS],
     [/^finance-security(?:\/|$)/, ADMIN_PERMISSIONS.FINANCE_PAYMENTS],
-    [/^finance(?:\/|$)/, ADMIN_PERMISSIONS.FINANCE_PAYOUTS],
     [/^guru(?:\/|$)/, ADMIN_PERMISSIONS.TEACHERS_MANAGE],
     [/^users(?:\/|$)/, ADMIN_PERMISSIONS.USERS_MANAGE],
     [/^cases(?:\/|$)/, ADMIN_PERMISSIONS.CASES_MANAGE],
@@ -101,10 +126,11 @@ export const readStoredAdmin = (): StoredAdmin => {
  * jadi dialihkan ke modul pertama yang ia boleh buka.
  */
 const ADMIN_LANDING_ORDER: ReadonlyArray<{ path: string; permission: string }> = [
+  { path: "/admin/finance?tab=report", permission: ADMIN_PERMISSIONS.FINANCE_REPORTS },
   { path: "/admin/tutor-searches", permission: ADMIN_PERMISSIONS.MATCHING_MANAGE },
   { path: "/admin/classes", permission: ADMIN_PERMISSIONS.CLASSES_MANAGE },
   { path: "/admin/cases", permission: ADMIN_PERMISSIONS.CASES_MANAGE },
-  { path: "/admin/finance", permission: ADMIN_PERMISSIONS.FINANCE_PAYOUTS },
+  { path: "/admin/finance?tab=payouts", permission: ADMIN_PERMISSIONS.FINANCE_PAYOUTS },
   { path: "/admin/finance?tab=refunds", permission: ADMIN_PERMISSIONS.FINANCE_REFUNDS },
   { path: "/admin/finance?tab=payments", permission: ADMIN_PERMISSIONS.FINANCE_PAYMENTS },
   { path: "/admin/guru", permission: ADMIN_PERMISSIONS.TEACHERS_MANAGE },

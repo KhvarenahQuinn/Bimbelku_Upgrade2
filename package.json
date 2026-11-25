@@ -17,6 +17,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test:unit": "node --test src/lib/*.test.mjs",
     "check:contracts": "node scripts/check-api-contract.mjs",
     "check:file-preview": "node scripts/check-file-preview.mjs",
     "check:security-static": "node scripts/check-security-baseline.mjs && node scripts/check-xendit-payment.mjs && npm run check:seo",

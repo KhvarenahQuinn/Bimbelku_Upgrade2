@@ -16,6 +16,8 @@ class AdminPermissionCatalog
 
     public const FINANCE_REFUNDS = 'finance.refunds';
 
+    public const FINANCE_REPORTS = 'finance.reports';
+
     public const TEACHERS_MANAGE = 'teachers.manage';
 
     public const CASES_MANAGE = 'cases.manage';
@@ -52,6 +54,7 @@ class AdminPermissionCatalog
                     self::definition(self::FINANCE_PAYMENTS, 'Kelola pembayaran murid', 'Memeriksa bukti pembayaran dan rekening penerimaan.'),
                     self::definition(self::FINANCE_PAYOUTS, 'Kelola pencairan tutor', 'Memeriksa saldo, persetujuan, komisi, dan transfer pencairan.'),
                     self::definition(self::FINANCE_REFUNDS, 'Kelola refund dan saldo', 'Memproses refund ke rekening atau Saldo BimbelKu.'),
+                    self::definition(self::FINANCE_REPORTS, 'Lihat laporan keuangan', 'Melihat buku besar keuangan lintas pembayaran, refund, dan pencairan.'),
                 ],
             ],
             [
@@ -110,6 +113,7 @@ class AdminPermissionCatalog
             '#^tutor-searches(?:/|$)#' => self::MATCHING_MANAGE,
             '#^(?:pending-payments|finance/payments|verify-payment|orders|payment-settings)(?:/|$)#' => self::FINANCE_PAYMENTS,
             '#^(?:finance/refunds|refunds)(?:/|$)#' => self::FINANCE_REFUNDS,
+            '#^finance/report(?:\.pdf)?$#' => self::FINANCE_REPORTS,
             '#^(?:finance|payout|commission-setting)(?:/|$)#' => self::FINANCE_PAYOUTS,
             '#^(?:pending-teachers|history-teachers|verify-teacher|teachers/.+/(?:verification-stage|schedule))(?:/|$)#' => self::TEACHERS_MANAGE,
             '#^(?:users|accounts)(?:/|$)#' => self::USERS_MANAGE,
