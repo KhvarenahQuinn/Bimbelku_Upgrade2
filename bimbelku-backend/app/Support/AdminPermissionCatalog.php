@@ -123,7 +123,7 @@ class AdminPermissionCatalog
             '#^notifications/(?:recipients|send)(?:/|$)#' => self::SUPPORT_MANAGE,
             '#^(?:hourly-rates|private-participant-pricing|program-groups|learning-programs|subject-groups|subjects|chapters|stage-five|cheap-class-templates|cheap-classes)(?:/|$)#' => self::CONTENT_MANAGE,
             '#^(?:website-settings|website-media|website-tutor-gallery|settings/footer|admin-socials|socials|settings/teacher-cover|public-tutors|notes)(?:/|$)#' => self::SETTINGS_MANAGE,
-            '#^audit-log(?:/|$)#' => self::AUDIT_VIEW,
+            '#^(?:audit-log|activity-logs)(?:/|$)#' => self::AUDIT_VIEW,
         ];
 
         foreach ($rules as $pattern => $permission) {

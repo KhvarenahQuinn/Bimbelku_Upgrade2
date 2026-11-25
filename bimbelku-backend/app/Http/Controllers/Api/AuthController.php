@@ -9,6 +9,7 @@ use App\Models\TeacherProfile;
 use App\Models\TeacherSubject;
 use App\Models\User;
 use App\Services\GuestPackageLinkService;
+use App\Services\AdminActivityLogService;
 use App\Services\OneTimeCodeService;
 use App\Services\PersistentLoginService;
 use App\Services\UploadSecurityService;
@@ -430,7 +431,7 @@ class AuthController extends Controller
      * membedakan "bukan admin" dari "kredensial salah" akan membuat URL ini
      * bisa dipakai menebak peran akun (role enumeration).
      */
-    public function adminLogin(Request $request, PersistentLoginService $sessions)
+    public function adminLogin(Request $request, PersistentLoginService $sessions, AdminActivityLogService $activity)
     {
         $credentials = $request->validate([
             'email' => 'required|email',
@@ -444,17 +445,24 @@ class AuthController extends Controller
         $user = User::where('email', mb_strtolower(trim((string) $credentials['email'])))->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+            $knownAdmin = $user?->role === 'admin' ? $user : null;
+            $activity->record($request, $knownAdmin, 'auth', 'admin.login.failed', 'Percobaan masuk admin gagal.', $knownAdmin ? 'User' : null, $knownAdmin?->id, [], 'failed');
+
             return $genericFailure;
         }
 
         // Akun non-admin atau admin nonaktif tidak boleh tahu bahwa kredensial
         // mereka benar. Jawaban tetap identik dengan kredensial salah.
         if ($user->role !== 'admin' || $user->status !== 'active') {
+            $knownAdmin = $user->role === 'admin' ? $user : null;
+            $activity->record($request, $knownAdmin, 'auth', 'admin.login.failed', 'Percobaan masuk admin gagal.', $knownAdmin ? 'User' : null, $knownAdmin?->id, [], 'failed');
+
             return $genericFailure;
         }
 
         // Sesi admin selalu pendek; portal ini tidak menawarkan "ingat perangkat".
         $session = $sessions->issue($user, false, 'password');
+        $activity->record($request, $user, 'auth', 'admin.login.succeeded', 'Admin berhasil masuk.', 'User', $user->id);
 
         return response()->json([
             'message' => 'Login berhasil',

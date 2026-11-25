@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\AdminActivityLogService;
+use App\Support\AdminPermissionCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -18,24 +20,34 @@ class AdminAccountController extends Controller
         return response()->json(User::query()
             ->where('role', 'admin')
             ->orderBy('id')
-            ->get(['id', 'name', 'email', 'status', 'created_at'])
+            ->get(['id', 'name', 'email', 'status', 'admin_permissions', 'created_at'])
             ->map(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'status' => $user->status,
                 'is_primary' => $user->isPrimaryAdmin(),
+                'admin_permissions' => $user->effectiveAdminPermissions(),
                 'created_at' => $user->created_at,
             ]));
     }
 
-    public function store(Request $request)
+    public function permissionCatalog(Request $request)
+    {
+        $this->authorizePrimary($request);
+
+        return response()->json(['groups' => AdminPermissionCatalog::groups()]);
+    }
+
+    public function store(Request $request, AdminActivityLogService $activity)
     {
         $this->authorizePrimary($request);
         $validated = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', 'min:12', 'max:255'],
+            'admin_permissions' => ['sometimes', 'array'],
+            'admin_permissions.*' => ['required', 'string', Rule::in(AdminPermissionCatalog::allCodes())],
             'super_admin_password' => ['required', 'string'],
         ], [
             'email.unique' => 'Email ini sudah dipakai akun lain. Gunakan email admin yang berbeda.',
@@ -48,10 +60,18 @@ class AdminAccountController extends Controller
             'password' => Hash::make($validated['password']),
             'has_password' => true,
             'role' => 'admin',
-            'admin_type' => 'admin',
+            'admin_type' => 'standard_admin',
+            'admin_permissions' => array_values(array_unique($validated['admin_permissions'] ?? [])),
+            'admin_permissions_updated_by' => $request->user()->id,
+            'admin_permissions_updated_at' => now(),
             'status' => 'active',
         ]);
         $request->attributes->set('admin_audit_target_override', $admin);
+        $activity->record($request, $request->user(), 'admins', 'account.created', 'Membuat akun admin '.$admin->name.'.', 'User', $admin->id, [
+            'email' => $admin->email,
+            'status' => $admin->status,
+            'admin_permissions' => $admin->effectiveAdminPermissions(),
+        ]);
 
         return response()->json([
             'message' => 'Akun admin berhasil dibuat.',
@@ -59,7 +79,7 @@ class AdminAccountController extends Controller
         ], 201);
     }
 
-    public function update(Request $request, User $admin)
+    public function update(Request $request, User $admin, AdminActivityLogService $activity)
     {
         $this->authorizePrimary($request);
         abort_unless($admin->role === 'admin', 404);
@@ -67,16 +87,31 @@ class AdminAccountController extends Controller
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($admin->id)],
             'password' => ['nullable', 'string', 'min:12', 'max:255'],
+            'admin_permissions' => ['sometimes', 'array'],
+            'admin_permissions.*' => ['required', 'string', Rule::in(AdminPermissionCatalog::allCodes())],
             'super_admin_password' => ['required', 'string'],
         ], [
             'email.unique' => 'Email ini sudah dipakai akun lain. Gunakan email admin yang berbeda.',
         ]);
         $this->verifyPassword($request, $validated['super_admin_password']);
 
+        $before = [
+            'name' => $admin->name,
+            'email' => $admin->email,
+            'admin_permissions' => $admin->effectiveAdminPermissions(),
+        ];
         $changes = [
             'name' => trim($validated['name']),
             'email' => mb_strtolower(trim($validated['email'])),
         ];
+        if (! $admin->isPrimaryAdmin() && array_key_exists('admin_permissions', $validated)) {
+            $changes['admin_permissions'] = array_values(array_unique($validated['admin_permissions']));
+            $changes['admin_permissions_updated_by'] = $request->user()->id;
+            $changes['admin_permissions_updated_at'] = now();
+            $changes['admin_type'] = 'standard_admin';
+        } elseif ($admin->isPrimaryAdmin()) {
+            $changes['admin_permissions'] = null;
+        }
         if (! empty($validated['password'])) {
             $changes['password'] = Hash::make($validated['password']);
             $changes['has_password'] = true;
@@ -86,6 +121,23 @@ class AdminAccountController extends Controller
         if (! empty($validated['password'])) {
             $admin->tokens()->delete();
         }
+        $updated = $admin->fresh();
+        $after = [
+            'name' => $updated->name,
+            'email' => $updated->email,
+            'admin_permissions' => $updated->effectiveAdminPermissions(),
+        ];
+        $activity->record($request, $request->user(), 'admins', 'account.updated', 'Memperbarui akun admin '.$updated->name.'.', 'User', $updated->id, [
+            'before' => $before,
+            'after' => $after,
+            'password_changed' => ! empty($validated['password']),
+        ]);
+        if ($before['admin_permissions'] !== $after['admin_permissions']) {
+            $activity->record($request, $request->user(), 'admins', 'permissions.updated', 'Memperbarui izin akses admin '.$updated->name.'.', 'User', $updated->id, [
+                'before' => ['admin_permissions' => $before['admin_permissions']],
+                'after' => ['admin_permissions' => $after['admin_permissions']],
+            ]);
+        }
 
         return response()->json([
             'message' => 'Akun admin berhasil diperbarui.',
@@ -93,7 +145,7 @@ class AdminAccountController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, User $admin)
+    public function destroy(Request $request, User $admin, AdminActivityLogService $activity)
     {
         $this->authorizePrimary($request);
         abort_unless($admin->role === 'admin', 404);
@@ -103,6 +155,7 @@ class AdminAccountController extends Controller
         $this->verifyPassword($request, $validated['super_admin_password']);
 
         $adminId = $admin->id;
+        $deletedName = $admin->name;
         $admin->tokens()->delete();
         $admin->forceFill([
             'name' => 'Admin dihapus',
@@ -111,11 +164,12 @@ class AdminAccountController extends Controller
             'status' => 'banned',
         ])->save();
         $admin->delete();
+        $activity->record($request, $request->user(), 'admins', 'account.deleted', 'Menghapus akun admin '.$deletedName.'.', 'User', $adminId, ['status' => 'deleted']);
 
         return response()->json(['message' => 'Akun admin berhasil dihapus.']);
     }
 
-    public function updateStatus(Request $request, User $admin)
+    public function updateStatus(Request $request, User $admin, AdminActivityLogService $activity)
     {
         $this->authorizePrimary($request);
         abort_unless($admin->role === 'admin', 404);
@@ -126,10 +180,15 @@ class AdminAccountController extends Controller
         ]);
         $this->verifyPassword($request, $validated['super_admin_password']);
 
+        $beforeStatus = $admin->status;
         $admin->update(['status' => $validated['status']]);
         if ($validated['status'] === 'banned') {
             $admin->tokens()->delete();
         }
+        $activity->record($request, $request->user(), 'admins', 'account.status_changed', 'Mengubah status admin '.$admin->name.' dari '.$beforeStatus.' menjadi '.$validated['status'].'.', 'User', $admin->id, [
+            'before' => ['status' => $beforeStatus],
+            'after' => ['status' => $validated['status']],
+        ]);
 
         return response()->json(['message' => 'Status admin berhasil diperbarui.']);
     }

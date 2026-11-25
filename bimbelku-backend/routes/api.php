@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AdminAccessController;
+use App\Http\Controllers\Api\AdminActivityLogController;
 use App\Http\Controllers\Api\AdminAccountController;
 use App\Http\Controllers\Api\AdminCheapClassController;
 use App\Http\Controllers\Api\AdminClassController;
@@ -313,6 +314,8 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
         Route::put('/accounts/{admin}', [AdminAccountController::class, 'update']);
         Route::delete('/accounts/{admin}', [AdminAccountController::class, 'destroy']);
         Route::patch('/accounts/{admin}/status', [AdminAccountController::class, 'updateStatus']);
+        Route::get('/accounts/permission-catalog', [AdminAccountController::class, 'permissionCatalog']);
+        Route::get('/activity-logs', [AdminActivityLogController::class, 'index']);
         Route::get('/audit-log', [AdminAccessController::class, 'audit']);
         Route::get('/audit-log/integrity', [AdminAccessController::class, 'auditIntegrity']);
         Route::get('/audit-log/{adminAuditLog}', [AdminAccessController::class, 'auditDetail'])
