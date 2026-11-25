@@ -1,58 +1,58 @@
 English: [cloudflare-setup.md](cloudflare-setup.md) | Bahasa Indonesia: [cloudflare-setup.id.md](cloudflare-setup.id.md)
 
-# Pengaturan Cloudflare Free Tier — Platform BimbelKu
+# Setup Cloudflare Free Tier untuk Platform BimbelKu
 
-Panduan ini mencakup zona Cloudflare produksi dan origin Laravel. Terapkan perubahan firewall dan WAF setelah memastikan hostname produksi serta alamat origin yang benar. Callback Xendit yang terdaftar di `bimbelku-backend/routes/api.php` adalah `POST /api/webhooks/xendit`; kecualikan path persis ini dari challenge edge.
+Panduan ini menjelaskan konfigurasi zona Cloudflare produksi dan origin server Laravel. Pastikan hostname produksi dan alamat origin server benar sebelum mengubah firewall atau WAF. Route callback Xendit yang terdaftar di `bimbelku-backend/routes/api.php` adalah `POST /api/webhooks/xendit`. Kecualikan path ini dari edge challenge.
 
 ## 1. DNS dan TLS
 
 1. Tambahkan domain produksi ke Cloudflare, lalu ubah nameserver di registrar.
-2. Buat record A/AAAA atau CNAME yang diperlukan untuk origin web, kemudian aktifkan **Proxied** (awan oranye) untuk lalu lintas web publik. Jangan membuka record origin aplikasi tanpa proxy.
-3. Pasang sertifikat origin yang valid dan sesuai hostname produksi (Cloudflare Origin CA atau sertifikat tepercaya lainnya).
+2. Buat record A/AAAA atau CNAME untuk origin web. Aktifkan **Proxied** (awan oranye) untuk traffic web publik. Jangan membuka record origin aplikasi tanpa proxy.
+3. Pasang origin certificate yang valid dan sesuai dengan production hostname. Gunakan Cloudflare Origin CA atau certificate tepercaya lainnya.
 4. Di **SSL/TLS → Overview**, pilih **Full (strict)**. Jangan gunakan Flexible.
-5. Aktifkan **Always Use HTTPS** di **SSL/TLS → Edge Certificates**. Selaraskan konfigurasi HTTPS aplikasi dan origin agar tidak terjadi redirect loop.
+5. Aktifkan **Always Use HTTPS** di **SSL/TLS → Edge Certificates**. Samakan konfigurasi HTTPS di aplikasi dan origin server agar tidak terjadi redirect loop.
 
-## 2. Batasi akses origin dan percayai header proxy
+## 2. Batasi akses origin dan percayai proxy headers
 
-Pada firewall/server security group, izinkan koneksi HTTP/HTTPS masuk (port 80 dan 443) hanya dari rentang alamat IPv4 dan IPv6 Cloudflare terkini. Tolak akses publik langsung ke origin; kelola SSH dan port administrasi lain dengan kebijakan terpisah. Perbarui allowlist dari daftar IP resmi Cloudflare, jangan menyalin rentang yang mungkin sudah kedaluwarsa ke panduan ini.
+Atur server firewall atau security group agar hanya menerima HTTP/HTTPS masuk (port 80 dan 443) dari rentang alamat IPv4 dan IPv6 Cloudflare terbaru. Blokir akses publik langsung ke origin server. Atur SSH dan port administrasi lain dengan kebijakan terpisah. Perbarui allowlist dari daftar IP resmi Cloudflare. Jangan menyalin rentang yang mungkin sudah kedaluwarsa ke panduan ini.
 
-Laravel 11 mengatur `trustProxies(at: '*')` di `bimbelku-backend/bootstrap/app.php`. Pengaturan ini aman hanya jika firewall origin mencegah koneksi langsung dari klien yang tidak tepercaya. Cloudflare mengirim rantai IP klien melalui `X-Forwarded-For`; penanganan trusted proxy Laravel menggunakan header standar tersebut untuk `$request->ip()`, termasuk atribusi rate limit aplikasi dan audit. Cloudflare juga mengirim `CF-Connecting-IP`; jangan mempercayai header forwarding dari klien jika origin dapat diakses di luar Cloudflare.
+Laravel 11 mengatur `trustProxies(at: '*')` di `bimbelku-backend/bootstrap/app.php`. Gunakan konfigurasi ini hanya jika origin firewall memblokir koneksi dari klien yang tidak tepercaya. Cloudflare mengirim rantai IP klien melalui `X-Forwarded-For`. Laravel memakai forwarded header ini untuk `$request->ip()`, termasuk atribusi rate limiting aplikasi dan audit. Cloudflare juga mengirim `CF-Connecting-IP`. Jangan percayai forwarding headers dari klien jika origin server dapat diakses di luar Cloudflare.
 
 ## 3. Turnstile
 
-1. Di Cloudflare **Turnstile**, buat widget **Managed** dan izinkan hostname produksi yang tepat, termasuk hostname `www` jika digunakan secara terpisah.
-2. Atur site key publik sebagai `VITE_TURNSTILE_SITE_KEY` di environment build frontend. Build dan deploy ulang frontend setelah nilainya berubah.
-3. Simpan secret privat sebagai `TURNSTILE_SECRET_KEY` di secret store backend produksi. Jangan menaruh secret di variabel frontend, repository, atau kode browser.
-4. Atur `TURNSTILE_ENABLED=true` di produksi. Untuk local/testing, biarkan false atau jangan setel jika secret tidak tersedia. Jika flag tidak diatur, nilai default mengikuti keberadaan `TURNSTILE_SECRET_KEY`. Saat aktif, token yang hilang/tidak valid ditolak dengan HTTP 422 dan kegagalan siteverify ditangani secara fail-closed.
-5. Pastikan widget Turnstile bersama tampil pada `/login`, `/admin/login`, dan `/register`. Endpoint API-nya adalah `POST /api/login`, `POST /api/login/admin`, dan `POST /api/register`; frontend mengirim token sebagai `cf-turnstile-response` (juga diterima sebagai `turnstile_token`). Endpoint admin tetap memiliki throttle login aplikasi tersendiri.
+1. Di Cloudflare **Turnstile**, buat widget **Managed**. Izinkan production hostname yang tepat, termasuk hostname `www` terpisah jika digunakan.
+2. Atur site key publik sebagai `VITE_TURNSTILE_SITE_KEY` di frontend build environment. Build dan deploy ulang frontend setelah mengubahnya.
+3. Simpan secret privat sebagai `TURNSTILE_SECRET_KEY` di backend production secret store. Jangan masukkan secret ke frontend variables, repository, atau browser code.
+4. Atur `TURNSTILE_ENABLED=true` di produksi. Di local dan testing environments, atur ke false atau biarkan tidak disetel jika secret tidak tersedia. Jika tidak disetel, nilai default mengikuti keberadaan `TURNSTILE_SECRET_KEY`. Saat aktif, token yang hilang atau tidak valid menghasilkan HTTP 422. Kegagalan siteverify bersifat fail-closed.
+5. Pastikan shared Turnstile widget tampil pada `/login`, `/admin/login`, dan `/register`. API endpoints-nya adalah `POST /api/login`, `POST /api/login/admin`, dan `POST /api/register`. Frontend mengirim token sebagai `cf-turnstile-response`; server juga menerima `turnstile_token`. Admin endpoint memiliki application-level login throttle tersendiri.
 
-## 4. Aturan WAF kustom — urutan wajib
+## 4. WAF custom rules
 
-Buat aturan di **Security → WAF → Custom rules** sesuai urutan berikut. Aturan 1 harus berada di urutan pertama agar callback pembayaran tidak menerima halaman challenge HTML sebagai pengganti respons JSON yang diharapkan Xendit.
+Buat rules berikut di **Security → WAF → Custom rules** sesuai urutan. Tempatkan Rule 1 di urutan pertama agar edge challenge tidak mengganti JSON response yang diharapkan Xendit.
 
-### Prioritas 1 — wajib melewati challenge untuk webhook Xendit
+### Prioritas 1: skip challenge untuk Xendit webhook
 
-**Ekspresi:**
+Expression:
 
 ```text
 (http.request.method eq "POST" and http.request.uri.path eq "/api/webhooks/xendit")
 ```
 
-**Aksi:** **Skip**. Pilih custom rules berikutnya dan managed WAF rules yang dapat menantang atau memblokir request ini. Jangan menerapkan pengecualian ke seluruh `/api/*`. Callback tetap diautentikasi melalui validasi token callback Xendit di backend; pengecualian ini hanya melewati challenge edge, bukan autentikasi. Pastikan callback tetap tersedia melalui HTTPS.
+Action: **Skip**. Pilih custom rules berikutnya serta managed WAF rules yang dapat menantang atau memblokir request ini. Jangan terapkan pengecualian ke semua path `/api/*`. Backend tetap mengautentikasi callback dengan Xendit callback token. Aturan ini melewati edge challenge, bukan autentikasi. Pastikan callback tetap dapat diakses melalui HTTPS.
 
-### Prioritas 2 — challenge skor ancaman tinggi untuk halaman browser saja
+### Prioritas 2: challenge untuk threat score tinggi pada halaman browser
 
-**Ekspresi:**
+Expression:
 
 ```text
 (cf.threat_score gt 14 and not starts_with(http.request.uri.path, "/api/"))
 ```
 
-**Aksi:** **Managed Challenge** (halaman interstitial Cloudflare “Verify you are human”). Pertahankan pengecualian `/api/`: request SPA XHR/fetch harus menerima JSON aplikasi, bukan respons challenge HTML. Pastikan field `cf.threat_score` tersedia untuk ruleset zona. Jika Cloudflare mengubah ketersediaannya pada paket ini, gunakan sinyal bot setara yang didukung tanpa menghapus pengecualian `/api/`.
+Action: **Managed Challenge** (interstitial Cloudflare “Verify you are human”). Pertahankan pengecualian `/api/` agar SPA XHR/fetch requests menerima application JSON, bukan HTML challenge. Pastikan `cf.threat_score` tersedia di zone ruleset. Jika paket Cloudflare tidak lagi menyediakan field ini, gunakan bot signal setara yang didukung dan tetap kecualikan `/api/`.
 
 ## 5. Rate limiting
 
-Buat rate limiting untuk path berikut (batasi ke POST bila sesuai), hitung request berdasarkan IP sumber, dengan ambang seperti **lebih dari 10 request per 1 menit** dan aksi **Block** atau **Managed Challenge**. Pilih periode serta durasi mitigasi yang tersedia pada dashboard Free Tier.
+Buat rate-limiting rule untuk path berikut. Batasi ke POST jika sesuai, hitung request berdasarkan source IP, dan gunakan ambang seperti **lebih dari 10 request per 1 menit**. Pilih action **Block** atau **Managed Challenge**. Gunakan periode dan mitigation timeout yang tersedia di dashboard Free Tier.
 
 ```text
 (http.request.method eq "POST" and (
@@ -67,18 +67,18 @@ Buat rate limiting untuk path berikut (batasi ke POST bila sesuai), hitung reque
 ))
 ```
 
-`/api/login/admin` adalah route backend admin yang sebenarnya. `/api/admin/login` disertakan untuk deployment atau proxy yang menyediakan path alternatif tersebut. Jangan masukkan callback Xendit ke aturan ini; Laravel memiliki limiter webhook tersendiri dengan batas yang lebih longgar.
+`/api/login/admin` adalah backend route yang digunakan admin portal. `/api/admin/login` disertakan untuk deployment atau proxy yang menyediakan alternate path tersebut. Kecualikan Xendit callback dari rule ini. Laravel menerapkan webhook limiter terpisah dengan batas lebih longgar.
 
 ## 6. Cache dan security events
 
-Cache aset statis ber-hash dengan masa berlaku panjang. Jangan cache respons API yang berisi data pengguna, sesi, pembayaran, atau konten personal. Lakukan purge setelah deployment jika konten lama masih tersaji. Tinjau Cloudflare Security Events dan Turnstile Analytics untuk false positive, lalu uji ulang webhook setiap kali aturan WAF atau rate limit berubah.
+Cache hashed static assets dengan masa berlaku panjang. Jangan cache API responses yang berisi data pengguna, sessions, payments, atau konten personal. Purge cache setelah deployment jika konten lama masih tampil. Tinjau Cloudflare Security Events dan Turnstile Analytics untuk false positives. Uji webhook lagi setelah mengubah WAF atau rate-limit rules.
 
-## 7. Checklist verifikasi setelah setup
+## 7. Verifikasi setup
 
-- Lakukan percobaan login dan pastikan Managed widget Turnstile berhasil. Dengan `TURNSTILE_ENABLED=true`, kirim request tanpa token dan pastikan endpoint mengembalikan JSON HTTP `422` dengan `error_code: turnstile_failed`.
-- Masuk melalui `/admin/login`, lakukan tindakan admin yang diaudit, lalu pastikan `admin_audit_logs.ip_address` berisi IP publik pengunjung, bukan IP edge Cloudflare.
-- Kirim callback tes Xendit yang ditandatangani/ber-token valid ke `POST /api/webhooks/xendit`; pastikan Laravel mengembalikan HTTP `200`, bukan challenge HTML edge atau `403`.
-- Lampaui ambang request edge pada salah satu path yang tercantum dan pastikan Cloudflare mengembalikan HTTP `429` (atau managed challenge yang dipilih), sementara request SPA `/api/` biasa tetap menerima JSON.
-- Periksa log firewall origin, header keamanan respons, perilaku cache, urutan WAF, Security Events, dan Turnstile Analytics.
+- Selesaikan login dengan Turnstile Managed widget. Dengan `TURNSTILE_ENABLED=true`, kirim request tanpa token dan pastikan endpoint mengembalikan JSON HTTP `422` dengan `error_code: turnstile_failed`.
+- Masuk melalui `/admin/login` dan lakukan admin action yang tercatat di audit. Pastikan `admin_audit_logs.ip_address` berisi public client IP pengunjung, bukan Cloudflare edge IP.
+- Kirim Xendit test callback dengan signature atau token valid ke `POST /api/webhooks/xendit`. Pastikan Laravel mengembalikan HTTP `200`, bukan edge HTML challenge atau `403`.
+- Lampaui edge request threshold pada salah satu path yang tercantum. Pastikan Cloudflare mengembalikan HTTP `429` atau managed challenge yang dipilih, sementara SPA `/api/` requests biasa tetap menerima JSON.
+- Periksa origin firewall logs, response security headers, cache behavior, urutan WAF rules, Security Events, dan Turnstile Analytics.
 
 Untuk panduan terkait, baca [dokumentasi API](api/README.md) dan [panduan keamanan deployment](security/README.md).
