@@ -2,6 +2,7 @@ import { notify } from "@/lib/notify";
 import http, { getApiErrorDetails } from "@/lib/http";
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import PasswordInput from "@/components/PasswordInput";
 import { ArrowLeft, CheckCircle2, KeyRound, Loader2, ShieldCheck } from "lucide-react";
 
 export default function ResetPaymentPin() {
@@ -98,31 +99,31 @@ export default function ResetPaymentPin() {
             )}
             <div>
               <label htmlFor="reset-pin" className="mb-2 block text-sm font-bold text-slate-700">PIN Baru</label>
-              <input
+              <PasswordInput
                 id="reset-pin"
-                type="password"
+                label="PIN baru"
                 inputMode="numeric"
                 autoComplete="new-password"
                 maxLength={6}
                 required
                 value={pin}
                 onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 font-medium tracking-[0.3em] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="h-auto rounded-xl py-3 font-medium tracking-[0.3em]"
                 placeholder="6 angka"
               />
             </div>
             <div>
               <label htmlFor="reset-pin-confirmation" className="mb-2 block text-sm font-bold text-slate-700">Ulangi PIN Baru</label>
-              <input
+              <PasswordInput
                 id="reset-pin-confirmation"
-                type="password"
+                label="ulangi PIN baru"
                 inputMode="numeric"
                 autoComplete="new-password"
                 maxLength={6}
                 required
                 value={pinConfirmation}
                 onChange={(event) => setPinConfirmation(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 font-medium tracking-[0.3em] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="h-auto rounded-xl py-3 font-medium tracking-[0.3em]"
                 placeholder="Ulangi 6 angka"
               />
             </div>

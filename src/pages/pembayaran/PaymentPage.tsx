@@ -30,6 +30,7 @@ import OrderProgress from "@/components/OrderProgress";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import PasswordInput from "@/components/PasswordInput";
 import { Label } from "@/components/ui/label";
 import http, { getApiError, getApiErrorDetails } from "@/lib/http";
 import { getPaymentReturnOrderId } from "@/lib/paymentReturn";
@@ -1001,7 +1002,7 @@ export default function PaymentPage() {
                               <>
                                 <p className="text-xs font-semibold leading-5 text-emerald-900">Buat PIN pembayaran sekali untuk mengamankan pemakaian saldo.</p>
                                 {accountHasPassword ? (
-                                  <Input type="password" autoComplete="current-password" placeholder="Password akun" className="h-11 rounded-xl bg-white" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} />
+                                  <PasswordInput label="password akun" autoComplete="current-password" placeholder="Password akun" className="h-11 rounded-xl bg-white" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} />
                                 ) : (
                                   <div className="rounded-xl border border-emerald-200 bg-white p-3 text-xs leading-5 text-emerald-900">
                                     <p className="font-black">Akun Google belum punya password.</p>
@@ -1009,14 +1010,14 @@ export default function PaymentPage() {
                                     <button type="button" onClick={() => navigate("/student/settings")} className="mt-2 font-black text-emerald-700 underline">Buka Pengaturan</button>
                                   </div>
                                 )}
-                                <Input inputMode="numeric" maxLength={6} placeholder="PIN baru (6 angka)" className="h-11 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} />
-                                <Input inputMode="numeric" maxLength={6} placeholder="Ulangi PIN baru" className="h-11 rounded-xl bg-white" value={pinConfirmation} onChange={(event) => setPinConfirmation(event.target.value.replace(/\D/g, "").slice(0, 6))} />
+                                <PasswordInput label="PIN baru" inputMode="numeric" autoComplete="new-password" maxLength={6} placeholder="PIN baru (6 angka)" className="h-11 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} />
+                                <PasswordInput label="ulangi PIN baru" inputMode="numeric" autoComplete="new-password" maxLength={6} placeholder="Ulangi PIN baru" className="h-11 rounded-xl bg-white" value={pinConfirmation} onChange={(event) => setPinConfirmation(event.target.value.replace(/\D/g, "").slice(0, 6))} />
                                 <Button type="button" disabled={settingPin} onClick={() => void setupPaymentPin()} className="h-11 w-full rounded-xl bg-emerald-700 font-black text-white hover:bg-emerald-800">{settingPin ? <Loader2 size={16} className="mr-2 animate-spin" /> : null}Simpan PIN</Button>
                               </>
                             ) : (
                               <>
                                 <Label className="font-black text-emerald-900">PIN pembayaran</Label>
-                                <Input type="password" inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="h-12 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Masukkan 6 angka" />
+                                <PasswordInput label="PIN pembayaran" inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="h-12 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Masukkan 6 angka" />
                                 <div className="rounded-xl bg-white p-3 text-xs">
                                   <div className="flex items-center justify-between gap-3"><span className="font-bold text-slate-500">Dari saldo</span><span className="font-black text-emerald-700">{rupiah(walletAmount)}</span></div>
                                   {externalDue > 0.01 && <div className="mt-1 flex items-center justify-between gap-3"><span className="font-bold text-slate-500">Sisa via Xendit</span><span className="font-black text-[#bb5526]">{rupiah(externalDue)}</span></div>}
@@ -1241,12 +1242,12 @@ export default function PaymentPage() {
               <p className="font-black text-amber-900">Buat atau reset PIN pembayaran</p>
               <p className="mt-1 text-xs leading-5 text-amber-800">{accountHasPassword ? "Akun lama cukup membuat PIN sekali. Tidak ada SMS atau biaya tambahan." : "Akun Google belum memiliki password lokal. Kamu bisa membuat PIN langsung di sini, atau membuat password dulu melalui Profil."}</p>
               {accountHasPassword ? (
-                <Input type="password" autoComplete="current-password" placeholder="Password akun" className="mt-3 h-11 rounded-xl bg-white" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} />
+                <PasswordInput label="password akun" autoComplete="current-password" placeholder="Password akun" className="mt-3 h-11 rounded-xl bg-white" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} />
               ) : (
                 <button type="button" onClick={() => navigate("/student/profile")} className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-900 underline">Buat password akun di Profil</button>
               )}
-              <Input inputMode="numeric" maxLength={6} placeholder="PIN baru (6 angka)" className="mt-2 h-11 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} />
-              <Input inputMode="numeric" maxLength={6} placeholder="Ulangi PIN baru" className="mt-2 h-11 rounded-xl bg-white" value={pinConfirmation} onChange={(event) => setPinConfirmation(event.target.value.replace(/\D/g, "").slice(0, 6))} />
+              <PasswordInput label="PIN baru" inputMode="numeric" autoComplete="new-password" maxLength={6} placeholder="PIN baru (6 angka)" className="mt-2 h-11 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} />
+              <PasswordInput label="ulangi PIN baru" inputMode="numeric" autoComplete="new-password" maxLength={6} placeholder="Ulangi PIN baru" className="mt-2 h-11 rounded-xl bg-white" value={pinConfirmation} onChange={(event) => setPinConfirmation(event.target.value.replace(/\D/g, "").slice(0, 6))} />
               <Button type="button" disabled={settingPin} onClick={() => void setupPaymentPin()} className="mt-3 h-11 w-full rounded-xl bg-amber-600 font-black hover:bg-amber-700">{settingPin ? <Loader2 size={16} className="mr-2 animate-spin" /> : null}Simpan PIN dan lanjut</Button>
             </div>}
             {useWallet && paymentPinConfigured === true && pinResetRequested && <div className="mt-7 rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -1259,9 +1260,9 @@ export default function PaymentPage() {
                 </Button>
               ) : (
                 <>
-                  <Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="Kode OTP dari email" className="mt-3 h-11 rounded-xl bg-white text-center font-black tracking-[.3em]" value={pinResetCode} onChange={(event) => setPinResetCode(event.target.value.replace(/\D/g, "").slice(0, 6))} />
-                  <Input type="password" inputMode="numeric" maxLength={6} placeholder="PIN baru (6 angka)" className="mt-2 h-11 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} />
-                  <Input type="password" inputMode="numeric" maxLength={6} placeholder="Ulangi PIN baru" className="mt-2 h-11 rounded-xl bg-white" value={pinConfirmation} onChange={(event) => setPinConfirmation(event.target.value.replace(/\D/g, "").slice(0, 6))} />
+                  <PasswordInput label="kode OTP dari email" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="Kode OTP dari email" className="mt-3 h-11 rounded-xl bg-white text-center font-black tracking-[.3em]" value={pinResetCode} onChange={(event) => setPinResetCode(event.target.value.replace(/\D/g, "").slice(0, 6))} />
+                  <PasswordInput label="PIN baru" inputMode="numeric" autoComplete="new-password" maxLength={6} placeholder="PIN baru (6 angka)" className="mt-2 h-11 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} />
+                  <PasswordInput label="ulangi PIN baru" inputMode="numeric" autoComplete="new-password" maxLength={6} placeholder="Ulangi PIN baru" className="mt-2 h-11 rounded-xl bg-white" value={pinConfirmation} onChange={(event) => setPinConfirmation(event.target.value.replace(/\D/g, "").slice(0, 6))} />
                   <Button type="button" disabled={settingPin} onClick={() => void resetPaymentPin()} className="mt-3 h-11 w-full rounded-xl bg-amber-600 font-black hover:bg-amber-700">
                     {settingPin ? <Loader2 size={16} className="mr-2 animate-spin" /> : null}
                     Simpan PIN baru
@@ -1275,7 +1276,7 @@ export default function PaymentPage() {
             </div>}
             {useWallet && paymentPinConfigured === true && !pinResetRequested && <div className="mt-7 rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
               <Label className="font-black text-indigo-900">PIN pembayaran</Label>
-              <Input required type="password" inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="mt-2 h-12 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Masukkan 6 angka" />
+              <PasswordInput required label="PIN pembayaran" inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="mt-2 h-12 rounded-xl bg-white" value={paymentPin} onChange={(event) => setPaymentPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Masukkan 6 angka" />
                             <div className="mt-2 flex items-center justify-between gap-3">
                 <p className="text-xs text-indigo-700">PIN hanya diperlukan saat memakai Saldo Bimbelku.</p>
                 <button type="button" className="shrink-0 text-xs font-black text-indigo-700 underline" onClick={() => { setPinResetRequested(true); setPaymentPin(""); }}>Lupa PIN?</button>

@@ -411,15 +411,42 @@ class StageFourAccountFlowTest extends TestCase
 
         $this->putJson('/api/user/password', [
             'current_password' => 'password123',
-            'password' => 'password456',
-            'password_confirmation' => 'password456',
+            'password' => 'pass1234',
+            'password_confirmation' => 'pass1234',
         ])
             ->assertOk()
             ->assertJsonStructure(['message', 'password_updated_at']);
 
         $student->refresh();
-        $this->assertTrue(Hash::check('password456', $student->password));
+        $this->assertTrue(Hash::check('pass1234', $student->password));
         $this->assertNotNull($student->password_updated_at);
+    }
+
+    public function test_admin_password_change_requires_twelve_characters(): void
+    {
+        $admin = User::factory()->create([
+            'role' => 'admin',
+            'status' => 'active',
+            'password' => Hash::make('admin-current-password'),
+            'has_password' => true,
+        ]);
+        Sanctum::actingAs($admin);
+
+        $this->putJson('/api/user/password', [
+            'current_password' => 'admin-current-password',
+            'password' => 'admin123',
+            'password_confirmation' => 'admin123',
+        ])->assertUnprocessable()->assertJsonValidationErrors('password');
+
+        $this->assertTrue(Hash::check('admin-current-password', $admin->fresh()->password));
+
+        $this->putJson('/api/user/password', [
+            'current_password' => 'admin-current-password',
+            'password' => 'adminpass12!',
+            'password_confirmation' => 'adminpass12!',
+        ])->assertOk();
+
+        $this->assertTrue(Hash::check('adminpass12!', $admin->fresh()->password));
     }
 
     public function test_profile_exposes_has_password_flag_for_google_accounts(): void

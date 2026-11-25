@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, KeyRound, Loader2, MailCheck, ShieldCheck, Wallet } from "lucide-react";
 import TeacherLayout from "@/components/TeacherLayout";
 import ChangePasswordDialog from "@/components/ChangePasswordDialog";
+import PasswordInput from "@/components/PasswordInput";
 import { formatAccountDate } from "@/lib/date";
 import http, { getApiError, getCached } from "@/lib/http";
 import { Input } from "@/components/ui/input";
@@ -257,8 +258,8 @@ export default function TeacherSettings() {
             </div>
 
             <div className="space-y-3 border-t border-slate-100 pt-4">
-              <Input
-                type="password"
+              <PasswordInput
+                label="kata sandi akun saat ini"
                 autoComplete="current-password"
                 placeholder="Kata sandi akun saat ini"
                 value={methodPassword}

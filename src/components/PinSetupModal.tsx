@@ -1,4 +1,5 @@
 import { notify } from "@/lib/notify";
+import PasswordInput from "@/components/PasswordInput";
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from "react";
 import { KeyRound, Loader2, MailCheck, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -229,27 +230,29 @@ export default function PinSetupModal({
     <>
       <div>
         <Label className="mb-2 block font-bold text-slate-700">PIN pembayaran baru</Label>
-        <Input
+        <PasswordInput
+          label="PIN pembayaran baru"
           required
           inputMode="numeric"
           maxLength={6}
           autoComplete="new-password"
           placeholder="6 angka"
           value={form.pin}
-          onChange={(event) => update("pin", event.target.value.replace(/\D/g, ""))}
+          onChange={(event) => update("pin", event.target.value.replace(/\D/g, "").slice(0, 6))}
           className="h-12 rounded-xl tracking-[0.3em]"
         />
       </div>
       <div>
         <Label className="mb-2 block font-bold text-slate-700">Ulangi PIN pembayaran</Label>
-        <Input
+        <PasswordInput
+          label="ulangi PIN pembayaran"
           required
           inputMode="numeric"
           maxLength={6}
           autoComplete="new-password"
           placeholder="6 angka"
           value={form.pin_confirmation}
-          onChange={(event) => update("pin_confirmation", event.target.value.replace(/\D/g, ""))}
+          onChange={(event) => update("pin_confirmation", event.target.value.replace(/\D/g, "").slice(0, 6))}
           className="h-12 rounded-xl tracking-[0.3em]"
         />
       </div>
@@ -320,9 +323,9 @@ export default function PinSetupModal({
             {status.has_password && (
               <div>
                 <Label className="mb-2 block font-bold text-slate-700">Kata sandi akun</Label>
-                <Input
+                <PasswordInput
                   required
-                  type="password"
+                  label="kata sandi akun"
                   autoComplete="current-password"
                   value={form.current_password}
                   onChange={(event) => update("current_password", event.target.value)}
@@ -362,9 +365,9 @@ export default function PinSetupModal({
             ) : (
               <div>
                 <Label className="mb-2 block font-bold text-slate-700">Kata sandi akun</Label>
-                <Input
+                <PasswordInput
                   required
-                  type="password"
+                  label="kata sandi akun"
                   autoComplete="current-password"
                   value={form.current_password}
                   onChange={(event) => update("current_password", event.target.value)}

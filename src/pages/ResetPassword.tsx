@@ -2,6 +2,7 @@ import { notify } from "@/lib/notify";
 import { API_BASE_URL } from "@/lib/apiBase";
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import PasswordInput from "@/components/PasswordInput";
 import { Loader2, Lock, CheckCircle2 } from "lucide-react";
 
 const ResetPassword = () => {
@@ -64,25 +65,25 @@ const ResetPassword = () => {
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">Password Baru</label>
-            <input
-              type="password"
+            <PasswordInput
+              label="password baru"
               required
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+              className="h-auto rounded-xl py-3 font-medium"
               placeholder="Minimal 8 karakter"
             />
           </div>
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">Konfirmasi Password</label>
-            <input
-              type="password"
+            <PasswordInput
+              label="konfirmasi password"
               required
               minLength={8}
               value={passwordConfirmation}
               onChange={(e) => setPasswordConfirmation(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+              className="h-auto rounded-xl py-3 font-medium"
               placeholder="Ulangi password baru"
             />
           </div>

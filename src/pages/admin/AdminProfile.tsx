@@ -1,9 +1,9 @@
 import { FormEvent, useEffect, useState } from "react";
+import PasswordInput from "@/components/PasswordInput";
 import { KeyRound, Loader2, Mail, Phone, ShieldCheck, UserRound } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import LogoutButton from "@/components/LogoutButton";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import http, { getApiError } from "@/lib/http";
 import { notify } from "@/lib/notify";
@@ -21,6 +21,7 @@ export default function AdminProfile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ current_password: "", password: "", password_confirmation: "" });
+  const [passwordError, setPasswordError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -33,6 +34,12 @@ export default function AdminProfile() {
 
   const updatePassword = async (event: FormEvent) => {
     event.preventDefault();
+    if (form.password.length < 12) {
+      setPasswordError("Kata sandi admin minimal 12 karakter.");
+      document.getElementById("admin-new-password")?.focus();
+      return;
+    }
+    setPasswordError("");
     if (form.password !== form.password_confirmation) {
       notify.error("Konfirmasi kata sandi belum sama.");
       return;
@@ -42,6 +49,7 @@ export default function AdminProfile() {
       const response = await http.put("/user/password", form);
       notify.success(response.data?.message || "Kata sandi berhasil diperbarui.");
       setForm({ current_password: "", password: "", password_confirmation: "" });
+      setPasswordError("");
     } catch (error) {
       notify.error(getApiError(error, "Kata sandi tidak dapat diperbarui."));
     } finally {
@@ -74,9 +82,9 @@ export default function AdminProfile() {
           <form onSubmit={updatePassword} className="rounded-[1.75rem] border border-slate-100 bg-white p-5 shadow-sm sm:p-7">
             <div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-orange-50 text-orange-700"><KeyRound size={20} /></span><div><h2 className="font-black text-slate-950">Keamanan akun</h2><p className="text-xs text-slate-500">Ganti kata sandi dan tutup sesi lama.</p></div></div>
             <div className="mt-6 space-y-4">
-              <div><Label htmlFor="admin-current-password">Kata sandi saat ini</Label><Input id="admin-current-password" type="password" autoComplete="current-password" required value={form.current_password} onChange={(event) => setForm((value) => ({ ...value, current_password: event.target.value }))} className="mt-2 h-12 rounded-xl" /></div>
-              <div><Label htmlFor="admin-new-password">Kata sandi baru</Label><Input id="admin-new-password" type="password" autoComplete="new-password" minLength={8} required value={form.password} onChange={(event) => setForm((value) => ({ ...value, password: event.target.value }))} className="mt-2 h-12 rounded-xl" /></div>
-              <div><Label htmlFor="admin-confirm-password">Ulangi kata sandi baru</Label><Input id="admin-confirm-password" type="password" autoComplete="new-password" minLength={8} required value={form.password_confirmation} onChange={(event) => setForm((value) => ({ ...value, password_confirmation: event.target.value }))} className="mt-2 h-12 rounded-xl" /></div>
+              <div><Label htmlFor="admin-current-password">Kata sandi saat ini</Label><PasswordInput id="admin-current-password" label="kata sandi saat ini" autoComplete="current-password" required value={form.current_password} onChange={(event) => setForm((value) => ({ ...value, current_password: event.target.value }))} className="mt-2 h-12 rounded-xl" /></div>
+              <div><Label htmlFor="admin-new-password">Kata sandi baru</Label><PasswordInput id="admin-new-password" label="kata sandi baru" autoComplete="new-password" required value={form.password} onChange={(event) => { setForm((value) => ({ ...value, password: event.target.value })); if (event.target.value.length >= 12) setPasswordError(""); }} onBlur={() => setPasswordError(form.password.length > 0 && form.password.length < 12 ? "Kata sandi admin minimal 12 karakter." : "")} aria-invalid={Boolean(passwordError)} aria-describedby={`admin-password-hint${passwordError ? " admin-password-error" : ""}`} className="mt-2 h-12 rounded-xl" /><p id="admin-password-hint" className="mt-1 text-xs text-slate-500">Minimal 12 karakter.</p>{passwordError && <p id="admin-password-error" role="alert" className="mt-1 text-xs font-semibold text-red-700">{passwordError}</p>}</div>
+              <div><Label htmlFor="admin-confirm-password">Ulangi kata sandi baru</Label><PasswordInput id="admin-confirm-password" label="ulangi kata sandi baru" autoComplete="new-password" required value={form.password_confirmation} onChange={(event) => setForm((value) => ({ ...value, password_confirmation: event.target.value }))} className="mt-2 h-12 rounded-xl" /></div>
             </div>
             <Button disabled={saving} className="mt-6 h-12 w-full rounded-xl bg-slate-950 font-black hover:bg-slate-800">{saving && <Loader2 size={17} className="mr-2 animate-spin" />}Perbarui kata sandi</Button>
           </form>

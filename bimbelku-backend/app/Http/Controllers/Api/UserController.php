@@ -214,8 +214,9 @@ class UserController extends Controller
             $request->merge(['password_confirmation' => $request->input('new_password_confirmation')]);
         }
 
+        $minimumPasswordLength = $user->role === 'admin' ? 12 : 8;
         $rules = [
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'string', 'min:'.$minimumPasswordLength, 'confirmed'],
         ];
 
         if ($hasPassword) {

@@ -8,6 +8,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import PasswordInput from "@/components/PasswordInput";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import http, { getApiError, getCached } from "@/lib/http";
 import { isValidAccountNumber, sanitizeDigits } from "@/lib/validation";
@@ -256,8 +257,8 @@ export function TeacherBankSettings({ onSaved, payoutAmount, payoutAvailable = f
                         <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
                            <KeyRound size={16} className="text-slate-400" /> Kata sandi akun
                         </label>
-                        <Input
-                           type="password"
+                        <PasswordInput
+                           label="kata sandi akun tutor"
                            autoComplete="current-password"
                            placeholder="Kata sandi akun tutor"
                            value={currentPassword}
