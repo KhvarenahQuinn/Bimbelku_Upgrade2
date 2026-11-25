@@ -19,6 +19,7 @@ use App\Models\TeacherPayoutRequest;
 use App\Models\TeacherProfile;
 use App\Models\TeacherSubject;
 use App\Models\User;
+use App\Services\AdminActivityLogService;
 use App\Services\CheapClassService;
 use App\Services\OneTimeCodeService;
 use App\Services\PackageCheckoutService;
@@ -69,7 +70,7 @@ class AdminController extends Controller
         return response()->json($teachers->map(fn (User $teacher) => $this->formatTeacherVerification($teacher)));
     }
 
-    public function updateTeacherVerificationStage(Request $request, User $teacher)
+    public function updateTeacherVerificationStage(Request $request, User $teacher, AdminActivityLogService $activity)
     {
         abort_unless($teacher->role === 'teacher' && $teacher->status === 'pending', 422, 'Tahap hanya dapat diubah untuk kandidat tutor yang masih menunggu.');
         $validated = $request->validate([
@@ -77,10 +78,12 @@ class AdminController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        DB::transaction(function () use ($request, $teacher, $validated) {
+        $previousStage = null;
+        DB::transaction(function () use ($request, $teacher, $validated, &$previousStage) {
             $profile = TeacherProfile::query()->where('user_id', $teacher->id)->lockForUpdate()->firstOrFail();
             $teacher->load('subjects');
             $current = $profile->verification_stage ?: 'submitted';
+            $previousStage = $current;
             $transitions = [
                 'submitted' => 'documents_checked',
                 'documents_checked' => 'whatsapp_scheduled',
@@ -116,13 +119,19 @@ class AdminController extends Controller
             $profile->update($updates);
         }, 3);
 
+        $activity->record($request, $request->user(), 'tutors', 'tutor.verification_stage_updated', 'Memperbarui tahap verifikasi tutor '.$teacher->name.' menjadi '.$validated['stage'].'.', 'User', $teacher->id, [
+            'before' => ['verification_stage' => $previousStage],
+            'after' => ['verification_stage' => $validated['stage']],
+        ]);
+
         return response()->json(['message' => 'Tahap verifikasi tutor diperbarui.']);
     }
 
     public function verifyTeacher(
         Request $request,
         TeacherOfferReleaseService $offerReleaseService,
-        TeacherMatchingService $matchingService
+        TeacherMatchingService $matchingService,
+        AdminActivityLogService $activity
     ) {
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
@@ -154,7 +163,9 @@ class AdminController extends Controller
             return response()->json(['message' => 'Alasan penolakan wajib diisi dengan jelas.'], 422);
         }
 
-        DB::transaction(function () use ($request, $validated) {
+        $beforeStatus = null;
+        $targetName = null;
+        DB::transaction(function () use ($request, $validated, &$beforeStatus, &$targetName) {
             $user = User::query()
                 ->where('role', 'teacher')
                 ->lockForUpdate()
@@ -168,6 +179,8 @@ class AdminController extends Controller
             }
 
             $user->load('subjects');
+            $beforeStatus = $user->status;
+            $targetName = $user->name;
             if ($validated['status'] === 'active') {
                 $requiredDocuments = [
                     $profile->identity_document,
@@ -227,6 +240,11 @@ class AdminController extends Controller
                 ]
             );
         }, 3);
+
+        $activity->record($request, $request->user(), 'tutors', $validated['status'] === 'active' ? 'tutor.approved' : 'tutor.rejected', ($validated['status'] === 'active' ? 'Menyetujui' : 'Menolak').' verifikasi tutor '.$targetName.'.', 'User', $validated['user_id'], [
+            'before' => ['status' => $beforeStatus],
+            'after' => ['status' => $validated['status']],
+        ]);
 
         if ($validated['status'] === 'rejected') {
             $offerReleaseService
@@ -507,7 +525,8 @@ class AdminController extends Controller
     public function updateUserStatus(
         Request $request,
         TeacherOfferReleaseService $offerReleaseService,
-        TeacherMatchingService $matchingService
+        TeacherMatchingService $matchingService,
+        AdminActivityLogService $activity
     ) {
         $request->validate([
             'user_id' => 'required|exists:users,id',
@@ -515,7 +534,9 @@ class AdminController extends Controller
         ]);
 
         $affectedRole = null;
-        DB::transaction(function () use ($request, &$affectedRole) {
+        $beforeStatus = null;
+        $targetName = null;
+        DB::transaction(function () use ($request, &$affectedRole, &$beforeStatus, &$targetName) {
             $user = User::query()
                 ->lockForUpdate()
                 ->findOrFail($request->user_id);
@@ -530,6 +551,8 @@ class AdminController extends Controller
                 abort(403, 'Akun admin tidak dapat diblokir dari menu pengguna.');
             }
             $affectedRole = $user->role;
+            $beforeStatus = $user->status;
+            $targetName = $user->name;
             if (
                 $request->status === 'active'
                 && $user->role === 'teacher'
@@ -552,6 +575,11 @@ class AdminController extends Controller
                 $user->tokens()->delete();
             }
         }, 3);
+
+        $activity->record($request, $request->user(), 'users', 'user.status_changed', 'Mengubah status '.$affectedRole.' '.$targetName.' dari '.$beforeStatus.' menjadi '.$request->status.'.', 'User', (int) $request->user_id, [
+            'before' => ['status' => $beforeStatus],
+            'after' => ['status' => $request->status],
+        ]);
 
         if ($request->status === 'banned' && $affectedRole === 'teacher') {
             $offerReleaseService

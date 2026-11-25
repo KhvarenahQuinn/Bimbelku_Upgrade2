@@ -16,6 +16,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
+import AdminActivityLogPanel from "@/pages/admin/AdminActivityLogPanel";
 import { ResponsiveSelect } from "@/components/ResponsiveSelect";
 import http, { getApiError } from "@/lib/http";
 
@@ -164,6 +165,7 @@ const dateTime = (value: string) => new Date(value).toLocaleString("id-ID", {
 });
 
 export default function AdminAuditLog() {
+  const [activeTab, setActiveTab] = useState<"financial" | "activity">("financial");
   const [data, setData] = useState<AuditResponse | null>(null);
   const [integrity, setIntegrity] = useState<IntegrityStatus | null>(null);
   const [filters, setFilters] = useState<FilterState>(defaultFilters);
@@ -235,13 +237,14 @@ export default function AdminAuditLog() {
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (activeTab === "financial") void load();
+  }, [activeTab, load]);
 
   useEffect(() => {
+    if (activeTab !== "financial") return;
     const timer = window.setTimeout(() => void loadIntegrity(), 300);
     return () => window.clearTimeout(timer);
-  }, [loadIntegrity]);
+  }, [activeTab, loadIntegrity]);
 
   const permissions = useMemo(
     () => data?.filters.permission_groups.flatMap((group) => group.permissions) || [],
@@ -311,7 +314,11 @@ export default function AdminAuditLog() {
       title="Riwayat Perubahan"
       subtitle="Lihat siapa yang mengubah data, bagian yang diubah, dan hasil perubahannya."
     >
-      <div className="space-y-5 pb-8 sm:pb-12">
+      <div className="mb-5 grid grid-cols-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm" role="tablist" aria-label="Jenis log admin">
+        <button type="button" role="tab" aria-selected={activeTab === "financial"} onClick={() => setActiveTab("financial")} className={`min-h-11 rounded-xl px-3 text-sm font-black transition ${activeTab === "financial" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}>Audit Keuangan</button>
+        <button type="button" role="tab" aria-selected={activeTab === "activity"} onClick={() => setActiveTab("activity")} className={`min-h-11 rounded-xl px-3 text-sm font-black transition ${activeTab === "activity" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}>Aktivitas Admin</button>
+      </div>
+      {activeTab === "activity" ? <AdminActivityLogPanel /> : <div className="space-y-5 pb-8 sm:pb-12">
         <section className={`rounded-3xl border p-5 shadow-sm sm:p-6 ${integrity?.valid === false ? "border-rose-300 bg-rose-50" : integrity ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
@@ -568,7 +575,7 @@ export default function AdminAuditLog() {
             </button>
           </div>
         )}
-      </div>
+      </div>}
     </AdminLayout>
   );
 }
