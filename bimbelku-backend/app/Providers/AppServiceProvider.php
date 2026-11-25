@@ -43,7 +43,7 @@ class AppServiceProvider extends ServiceProvider
         // terlihat di kanal `security` saat kunci tidak diisi.
         if (! config('turnstile.enabled') && app()->environment('production')) {
             Log::channel('security')->warning('turnstile_disabled_in_production', [
-                'hint' => 'Set TURNSTILE_SECRET_KEY untuk mengaktifkan verifikasi anti-bot pada /register dan /forgot-password.',
+                'hint' => 'Set TURNSTILE_ENABLED=true dan TURNSTILE_SECRET_KEY untuk melindungi /login, /admin/login, /register, dan /forgot-password.',
             ]);
         }
 

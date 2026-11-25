@@ -63,7 +63,7 @@ Tahap 5, alur murid Tahap 6A, operasional tutor Tahap 6B, admin operasional Taha
 ## Integrasi dan keamanan
 
 - Email akun harus memakai provider konsumen yang diizinkan atau domain institusi pendidikan. Daftar domain diterapkan di backend dan pemeriksaan frontend, bukan dikonfigurasi melalui `.env`.
-- Turnstile memakai site key frontend `VITE_TURNSTILE_SITE_KEY` saat build dan secret `TURNSTILE_SECRET_KEY` hanya di backend. Panduan [Cloudflare](docs/CLOUDFLARE_SETUP.md) mencakup widget, hostname, TLS, WAF, dan pengujian.
+- Turnstile memakai site key frontend `VITE_TURNSTILE_SITE_KEY` saat build dan secret `TURNSTILE_SECRET_KEY` hanya di backend. Panduan [Cloudflare](docs/cloudflare-setup.md) mencakup widget, hostname, TLS, WAF, dan pengujian.
 - Xendit hanya diaktifkan dengan kredensial backend. Jangan pernah menaruh secret API key atau token webhook pada variabel `VITE_*`. Gunakan [panduan demo sandbox](docs/operations/DEMO-PEMBAYARAN-SANDBOX.md) untuk uji perjalanan dan konektivitas; panduan tersebut membedakan tes tiruan, test mode, dan pembayaran nyata.
 - Validasi berkas upload menggunakan pemeriksaan konten backend. Dokumen identitas, bukti, dan berkas privat disimpan di disk privat; tinjau [keamanan deployment](docs/security/DEPLOYMENT_SECURITY.md) sebelum membuka hosting.
 

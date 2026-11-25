@@ -3,6 +3,7 @@ import { Loader2, Pencil, Plus, ShieldCheck, Trash2, UserCog, X } from "lucide-r
 
 import http, { getApiError } from "@/lib/http";
 import { notify } from "@/lib/notify";
+import { ADMIN_ROLE_PRESET_OPTIONS, adminPresetForPermissions, permissionsForAdminPreset, type AdminRolePreset } from "@/lib/adminRolePresets";
 
 type AdminAccount = {
   id: number;
@@ -10,18 +11,23 @@ type AdminAccount = {
   email: string;
   status: string;
   is_primary: boolean;
+  admin_permissions: string[];
   created_at?: string;
 };
 
+type PermissionGroup = { key: string; label: string; permissions: Array<{ code: string; label: string; description: string }> };
 type EditForm = {
   name: string;
   email: string;
   password: string;
   superAdminPassword: string;
+  adminPermissions: string[];
+  preset: AdminRolePreset;
 };
 
 export default function AdminAccountsPanel() {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
+  const [permissionGroups, setPermissionGroups] = useState<PermissionGroup[]>([]);
   const [allowed, setAllowed] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -30,19 +36,25 @@ export default function AdminAccountsPanel() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [primaryPassword, setPrimaryPassword] = useState("");
+  const [newAdminPermissions, setNewAdminPermissions] = useState<string[]>([]);
+  const [newAdminPreset, setNewAdminPreset] = useState<AdminRolePreset>("Custom");
 
   const [statusTarget, setStatusTarget] = useState<AdminAccount | null>(null);
   const [statusPassword, setStatusPassword] = useState("");
   const [editTarget, setEditTarget] = useState<AdminAccount | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({ name: "", email: "", password: "", superAdminPassword: "" });
+  const [editForm, setEditForm] = useState<EditForm>({ name: "", email: "", password: "", superAdminPassword: "", adminPermissions: [], preset: "Custom" });
   const [deleteTarget, setDeleteTarget] = useState<AdminAccount | null>(null);
   const [deletePassword, setDeletePassword] = useState("");
 
   const reload = async () => {
     setLoading(true);
     try {
-      const response = await http.get<AdminAccount[]>("/admin/accounts");
+      const [response, catalog] = await Promise.all([
+        http.get<AdminAccount[]>("/admin/accounts"),
+        http.get<{ groups: PermissionGroup[] }>("/admin/accounts/permission-catalog"),
+      ]);
       setAccounts(response.data);
+      setPermissionGroups(catalog.data.groups);
       setAllowed(true);
     } catch (error) {
       const status = (error as { response?: { status?: number } }).response?.status;
@@ -59,12 +71,14 @@ export default function AdminAccountsPanel() {
     event.preventDefault();
     setBusy(true);
     try {
-      await http.post("/admin/accounts", { name, email, password, super_admin_password: primaryPassword });
+      await http.post("/admin/accounts", { name, email, password, admin_permissions: newAdminPermissions, super_admin_password: primaryPassword });
       notify.success("Akun admin berhasil dibuat.");
       setName("");
       setEmail("");
       setPassword("");
       setPrimaryPassword("");
+      setNewAdminPermissions([]);
+      setNewAdminPreset("Custom");
       await reload();
     } catch (error) {
       notify.error(getApiError(error, "Akun admin gagal dibuat."));
@@ -75,7 +89,8 @@ export default function AdminAccountsPanel() {
 
   const openEdit = (admin: AdminAccount) => {
     setEditTarget(admin);
-    setEditForm({ name: admin.name, email: admin.email, password: "", superAdminPassword: "" });
+    const adminPermissions = admin.admin_permissions || [];
+    setEditForm({ name: admin.name, email: admin.email, password: "", superAdminPassword: "", adminPermissions, preset: adminPresetForPermissions(adminPermissions) });
   };
 
   const update = async (event: FormEvent) => {
@@ -87,6 +102,7 @@ export default function AdminAccountsPanel() {
         name: editForm.name,
         email: editForm.email,
         password: editForm.password || null,
+        ...(!editTarget.is_primary ? { admin_permissions: editForm.adminPermissions } : {}),
         super_admin_password: editForm.superAdminPassword,
       });
       notify.success("Akun admin berhasil diperbarui.");
@@ -150,6 +166,13 @@ export default function AdminAccountsPanel() {
             <Field label="Nama"><input required minLength={2} maxLength={120} value={editForm.name} onChange={(event) => setEditForm((value) => ({ ...value, name: event.target.value }))} className="form-field mt-1 min-h-11" /></Field>
             <Field label="Email"><input required type="email" value={editForm.email} onChange={(event) => setEditForm((value) => ({ ...value, email: event.target.value }))} className="form-field mt-1 min-h-11" /></Field>
             <Field label="Kata sandi baru (opsional)"><input type="password" minLength={12} autoComplete="new-password" value={editForm.password} onChange={(event) => setEditForm((value) => ({ ...value, password: event.target.value }))} className="form-field mt-1 min-h-11" /><span className="mt-1 block text-xs font-medium text-slate-500">Kosongkan jika kata sandi tidak diubah.</span></Field>
+            {!editTarget.is_primary ? <AdminPermissionSelector
+              groups={permissionGroups}
+              preset={editForm.preset}
+              permissions={editForm.adminPermissions}
+              onPresetChange={(preset) => setEditForm((value) => ({ ...value, preset, adminPermissions: permissionsForAdminPreset(preset) }))}
+              onPermissionsChange={(adminPermissions) => setEditForm((value) => ({ ...value, adminPermissions, preset: adminPresetForPermissions(adminPermissions) }))}
+            /> : <p className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm font-semibold text-orange-900">Admin utama selalu memiliki semua izin. Hak akses ini tidak dapat dikurangi dari formulir admin.</p>}
             <Field label="Konfirmasi kata sandi admin utama"><input required type="password" autoComplete="current-password" value={editForm.superAdminPassword} onChange={(event) => setEditForm((value) => ({ ...value, superAdminPassword: event.target.value }))} className="form-field mt-1 min-h-11" /></Field>
             <ModalActions busy={busy} onCancel={() => setEditTarget(null)} confirm="Simpan perubahan" />
           </form>
@@ -189,6 +212,7 @@ export default function AdminAccountsPanel() {
                 <div className="flex flex-wrap items-center gap-2"><p className="truncate font-black text-slate-900">{admin.name}</p>{admin.is_primary && <span className="rounded-full bg-orange-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-orange-800">Admin utama</span>}</div>
                 <p className="mt-1 break-all text-sm text-slate-500">{admin.email}</p>
                 <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${admin.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{admin.status === "active" ? "Aktif" : "Nonaktif"}</span>
+                <span className="ml-2 mt-2 inline-flex rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-black text-indigo-800">Admin · {admin.is_primary ? "Full Admin · Admin utama" : `${adminPresetForPermissions(admin.admin_permissions || [])} · ${admin.admin_permissions?.length || 0} izin`}</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={busy} onClick={() => openEdit(admin)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Pencil size={14} />Edit</button>
@@ -201,15 +225,39 @@ export default function AdminAccountsPanel() {
       </section>
 
       <form onSubmit={create} className="min-w-0 self-start space-y-4 rounded-2xl border border-slate-200 bg-white p-5 pb-7">
-        <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-2xl bg-orange-100 text-orange-700"><Plus size={18} /></span><div><h2 className="text-lg font-black text-slate-900">Tambah admin</h2><p className="text-xs font-medium text-slate-500">Akses operasional penuh, tanpa hak mengelola admin lain.</p></div></div>
+        <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-2xl bg-orange-100 text-orange-700"><Plus size={18} /></span><div><h2 className="text-lg font-black text-slate-900">Tambah admin</h2><p className="text-xs font-medium text-slate-500">Peran tetap admin; pilih akses modul yang dibutuhkan.</p></div></div>
         <Field label="Nama"><input required minLength={2} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} className="form-field mt-1 min-h-11" /></Field>
         <Field label="Email"><input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="form-field mt-1 min-h-11" /></Field>
         <Field label="Kata sandi admin baru"><input required type="password" minLength={12} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="form-field mt-1 min-h-11" /></Field>
+        <AdminPermissionSelector
+          groups={permissionGroups}
+          preset={newAdminPreset}
+          permissions={newAdminPermissions}
+          onPresetChange={(preset) => { setNewAdminPreset(preset); setNewAdminPermissions(permissionsForAdminPreset(preset)); }}
+          onPermissionsChange={(permissions) => { setNewAdminPermissions(permissions); setNewAdminPreset(adminPresetForPermissions(permissions)); }}
+        />
         <Field label="Konfirmasi kata sandi admin utama"><input required type="password" autoComplete="current-password" value={primaryPassword} onChange={(event) => setPrimaryPassword(event.target.value)} className="form-field mt-1 min-h-11" /></Field>
         <button type="submit" disabled={busy} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 font-black text-white hover:bg-orange-700 disabled:opacity-50">{busy ? <Loader2 className="animate-spin" size={17} /> : <Plus size={17} />}{busy ? "Menyimpan…" : "Buat akun admin"}</button>
       </form>
     </div>
   );
+}
+
+function AdminPermissionSelector({ groups, preset, permissions, onPresetChange, onPermissionsChange }: { groups: PermissionGroup[]; preset: AdminRolePreset; permissions: string[]; onPresetChange: (preset: AdminRolePreset) => void; onPermissionsChange: (permissions: string[]) => void }) {
+  const togglePermission = (code: string, checked: boolean) => onPermissionsChange(checked ? [...new Set([...permissions, code])] : permissions.filter((permission) => permission !== code));
+  return <fieldset className="space-y-3 rounded-2xl border border-slate-200 p-4">
+    <legend className="px-1 text-sm font-black text-slate-900">Admin Role Presets</legend>
+    <label className="block text-xs font-bold text-slate-600">Preset akses<select value={preset} onChange={(event) => onPresetChange(event.target.value as AdminRolePreset)} className="form-field mt-1 min-h-11">{ADMIN_ROLE_PRESET_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+    <p className="text-xs leading-5 text-slate-500">Preset mengisi izin awal. Centang atau hapus izin di bawah untuk penyesuaian; peran akun tetap <code>admin</code>.</p>
+    {groups.map((group) => <section key={group.key} className="rounded-xl bg-slate-50 p-3">
+      <h3 className="text-xs font-black uppercase tracking-wide text-slate-700">{group.label}</h3>
+      <div className="mt-2 space-y-2">{group.permissions.map((permission) => <label key={permission.code} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg bg-white p-2.5 text-sm">
+        <input type="checkbox" checked={permissions.includes(permission.code)} onChange={(event) => togglePermission(permission.code, event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-orange-600 focus:ring-orange-500" />
+        <span><span className="block font-bold text-slate-800">{permission.label}</span><span className="mt-0.5 block text-xs leading-5 text-slate-500">{permission.description}</span></span>
+      </label>)}</div>
+    </section>)}
+    <p className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-900" role="status">Ringkasan: {permissions.length} dari {groups.reduce((count, group) => count + group.permissions.length, 0)} izin aktif{preset !== "Custom" ? ` · ${preset}` : " · Custom"}</p>
+  </fieldset>;
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {

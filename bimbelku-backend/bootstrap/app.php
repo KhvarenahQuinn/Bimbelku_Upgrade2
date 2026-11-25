@@ -26,26 +26,16 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Di belakang Cloudflare (atau reverse proxy lain) Laravel hanya tahu
-        // skema asli dan IP klien bila proxy dipercaya. Daftar diambil dari
-        // TRUSTED_PROXIES (dipisah koma; "REMOTE_ADDR" berarti memercayai
-        // proxy yang langsung terhubung). Kosong = tidak ada proxy dipercaya,
-        // sehingga pengembangan lokal tetap memakai koneksi langsung.
-        $trustedProxies = array_values(array_filter(array_map(
-            'trim',
-            explode(',', (string) env('TRUSTED_PROXIES', ''))
-        ), fn (string $proxy): bool => $proxy !== ''));
-
-        if ($trustedProxies !== []) {
-            $middleware->trustProxies(
-                at: $trustedProxies,
-                headers: Request::HEADER_X_FORWARDED_FOR
-                    | Request::HEADER_X_FORWARDED_HOST
-                    | Request::HEADER_X_FORWARDED_PORT
-                    | Request::HEADER_X_FORWARDED_PROTO
-                    | Request::HEADER_X_FORWARDED_PREFIX,
-            );
-        }
+        // Cloudflare is the public reverse proxy. Restrict direct origin access
+        // to Cloudflare IP ranges at the firewall before trusting forwarded IPs.
+        $middleware->trustProxies(
+            at: '*',
+            headers: Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_HOST
+                | Request::HEADER_X_FORWARDED_PORT
+                | Request::HEADER_X_FORWARDED_PROTO
+                | Request::HEADER_X_FORWARDED_PREFIX,
+        );
 
         // Aplikasi ini tidak punya route bernama `login`: autentikasi memakai
         // bearer token / cookie sesi, bukan redirect ke halaman web. Tanpa ini

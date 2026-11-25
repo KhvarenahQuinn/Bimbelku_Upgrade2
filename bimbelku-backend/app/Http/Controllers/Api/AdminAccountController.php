@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\AdminPermissionCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -18,15 +19,23 @@ class AdminAccountController extends Controller
         return response()->json(User::query()
             ->where('role', 'admin')
             ->orderBy('id')
-            ->get(['id', 'name', 'email', 'status', 'created_at'])
+            ->get(['id', 'name', 'email', 'status', 'admin_permissions', 'created_at'])
             ->map(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'status' => $user->status,
                 'is_primary' => $user->isPrimaryAdmin(),
+                'admin_permissions' => $user->effectiveAdminPermissions(),
                 'created_at' => $user->created_at,
             ]));
+    }
+
+    public function permissionCatalog(Request $request)
+    {
+        $this->authorizePrimary($request);
+
+        return response()->json(['groups' => AdminPermissionCatalog::groups()]);
     }
 
     public function store(Request $request)
@@ -36,6 +45,8 @@ class AdminAccountController extends Controller
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', 'min:12', 'max:255'],
+            'admin_permissions' => ['sometimes', 'array'],
+            'admin_permissions.*' => ['required', 'string', Rule::in(AdminPermissionCatalog::allCodes())],
             'super_admin_password' => ['required', 'string'],
         ], [
             'email.unique' => 'Email ini sudah dipakai akun lain. Gunakan email admin yang berbeda.',
@@ -48,14 +59,17 @@ class AdminAccountController extends Controller
             'password' => Hash::make($validated['password']),
             'has_password' => true,
             'role' => 'admin',
-            'admin_type' => 'admin',
+            'admin_type' => 'standard_admin',
+            'admin_permissions' => array_values(array_unique($validated['admin_permissions'] ?? [])),
+            'admin_permissions_updated_by' => $request->user()->id,
+            'admin_permissions_updated_at' => now(),
             'status' => 'active',
         ]);
         $request->attributes->set('admin_audit_target_override', $admin);
 
         return response()->json([
             'message' => 'Akun admin berhasil dibuat.',
-            'data' => $admin->only(['id', 'name', 'email', 'status']),
+            'data' => [...$admin->only(['id', 'name', 'email', 'status']), 'admin_permissions' => $admin->effectiveAdminPermissions()],
         ], 201);
     }
 
@@ -67,6 +81,8 @@ class AdminAccountController extends Controller
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($admin->id)],
             'password' => ['nullable', 'string', 'min:12', 'max:255'],
+            'admin_permissions' => ['sometimes', 'array'],
+            'admin_permissions.*' => ['required', 'string', Rule::in(AdminPermissionCatalog::allCodes())],
             'super_admin_password' => ['required', 'string'],
         ], [
             'email.unique' => 'Email ini sudah dipakai akun lain. Gunakan email admin yang berbeda.',
@@ -77,6 +93,16 @@ class AdminAccountController extends Controller
             'name' => trim($validated['name']),
             'email' => mb_strtolower(trim($validated['email'])),
         ];
+        if (! $admin->isPrimaryAdmin() && array_key_exists('admin_permissions', $validated)) {
+            $changes['admin_permissions'] = array_values(array_unique($validated['admin_permissions']));
+            $changes['admin_permissions_updated_by'] = $request->user()->id;
+            $changes['admin_permissions_updated_at'] = now();
+            $changes['admin_type'] = 'standard_admin';
+        } elseif ($admin->isPrimaryAdmin()) {
+            // Defense in depth: retain full access if the configured primary
+            // admin is submitted with a restricted list.
+            $changes['admin_permissions'] = null;
+        }
         if (! empty($validated['password'])) {
             $changes['password'] = Hash::make($validated['password']);
             $changes['has_password'] = true;
@@ -89,7 +115,7 @@ class AdminAccountController extends Controller
 
         return response()->json([
             'message' => 'Akun admin berhasil diperbarui.',
-            'data' => $admin->fresh()->only(['id', 'name', 'email', 'status']),
+            'data' => [...$admin->fresh()->only(['id', 'name', 'email', 'status']), 'admin_permissions' => $admin->fresh()->effectiveAdminPermissions()],
         ]);
     }
 

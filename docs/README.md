@@ -7,4 +7,4 @@ Dokumentasi proyek dikelompokkan menurut tujuan:
 - `security/` — pengaturan keamanan dan praktik perlindungan data.
 - `api/` — kontrak dan penggunaan API.
 
-Panduan khusus Cloudflare tersedia di [CLOUDFLARE_SETUP.md](CLOUDFLARE_SETUP.md). Untuk mulai memahami produk dan menjalankan aplikasi, baca [README proyek](../README.md).
+Panduan khusus Cloudflare tersedia di [Cloudflare Free Tier setup](cloudflare-setup.md). Untuk mulai memahami produk dan menjalankan aplikasi, baca [README proyek](../README.md).

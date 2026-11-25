@@ -11,4 +11,4 @@ Panduan ini mengumpulkan konfigurasi dan praktik perlindungan untuk aplikasi Bim
 - File privat tidak disajikan melalui disk publik. Respons file memuat `nosniff` dan `Content Security Policy` sandbox.
 - Pembayaran memvalidasi `webhook signature`, menerapkan `idempotency key`, dan mencatat kejadian pada kanal log khusus.
 
-Baca [panduan keamanan deployment](DEPLOYMENT_SECURITY.md) dan [pengaturan Cloudflare](../CLOUDFLARE_SETUP.md) untuk mengonfigurasi layanan.
+Baca [panduan keamanan deployment](DEPLOYMENT_SECURITY.md) dan [pengaturan Cloudflare](../cloudflare-setup.id.md) untuk mengonfigurasi layanan.

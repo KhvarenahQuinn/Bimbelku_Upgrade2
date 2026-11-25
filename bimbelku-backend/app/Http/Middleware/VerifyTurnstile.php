@@ -14,8 +14,8 @@ use Symfony\Component\HttpFoundation\Response;
  * Dua mode:
  * - `TURNSTILE_SECRET_KEY` kosong → middleware ini tembus (tidak ada friksi di
  *   pengembangan lokal dan suite test).
- * - `TURNSTILE_SECRET_KEY` terisi → permintaan wajib membawa token valid dari
- *   `cf-turnstile-response` (body) atau header `X-Turnstile-Token`.
+ * - `TURNSTILE_ENABLED=true` → permintaan wajib membawa token valid dari
+ *   `cf-turnstile-response` / `turnstile_token` (body) atau header `X-Turnstile-Token`.
  *
  * Cloudflare tidak dapat dihubungi diperlakukan sebagai gagal (fail-closed)
  * agar gangguan jaringan tidak diam-diam mematikan perlindungan anti-bot.
@@ -30,6 +30,7 @@ class VerifyTurnstile
 
         $token = trim((string) (
             $request->input('cf-turnstile-response')
+            ?: $request->input('turnstile_token')
             ?: $request->header('X-Turnstile-Token', '')
         ));
 

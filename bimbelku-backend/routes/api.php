@@ -65,7 +65,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/register', [AuthController::class, 'register'])->middleware(['throttle:auth-register', 'turnstile']);
 Route::post('/login', [AuthController::class, 'login'])->middleware(['throttle:auth-login', 'turnstile']);
-Route::post('/login/admin', [AuthController::class, 'adminLogin'])->middleware('throttle:auth-login-admin');
+Route::post('/login/admin', [AuthController::class, 'adminLogin'])->middleware(['throttle:auth-login-admin', 'turnstile']);
 Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect'])->middleware('throttle:auth-login');
 Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->middleware('throttle:auth-login');
 Route::post('/auth/google/exchange', [GoogleAuthController::class, 'exchange'])->middleware('throttle:auth-login');
@@ -308,6 +308,7 @@ Route::middleware(['auth:sanctum', 'active.account', 'persistent.session'])->gro
             ->middleware(['throttle:admin-cheap-class-session-review', 'idempotency']);
         Route::post('/cheap-classes/{cheapClass}/sessions/{session}/request-revision', [AdminCheapClassController::class, 'requestSessionReportRevision'])
             ->middleware(['throttle:admin-cheap-class-session-review', 'idempotency']);
+        Route::get('/accounts/permission-catalog', [AdminAccountController::class, 'permissionCatalog']);
         Route::get('/accounts', [AdminAccountController::class, 'index']);
         Route::post('/accounts', [AdminAccountController::class, 'store']);
         Route::put('/accounts/{admin}', [AdminAccountController::class, 'update']);

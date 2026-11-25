@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import SeoHead from "@/components/SeoHead";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
@@ -6,6 +6,7 @@ import { API_BASE_URL } from "@/lib/apiBase";
 import { notify } from "@/lib/notify";
 import { storeBrowserSession } from "@/lib/session";
 import { isValidEmail } from "@/lib/validation";
+import TurnstileWidget, { type TurnstileStatus } from "@/components/TurnstileWidget";
 
 type LoginResponse = {
   access_token?: string;
@@ -13,6 +14,7 @@ type LoginResponse = {
   message?: string;
   error_code?: string;
   errors?: Record<string, string[]>;
+  retry_after_seconds?: number;
 };
 
 const GENERIC_LOGIN_ERROR = "Email atau kata sandi salah.";
@@ -28,6 +30,12 @@ export default function AdminLogin() {
   const loadingRef = useRef(false);
   const [summaryError, setSummaryError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileStatus, setTurnstileStatus] = useState<TurnstileStatus>("idle");
+  const [turnstileRetry, setTurnstileRetry] = useState(0);
+  const turnstileEnabled = Boolean(import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim());
+  const turnstileFailed = turnstileStatus === "error" || turnstileStatus === "expired" || turnstileStatus === "stalled";
 
   const safeAdminRedirect = (value: string | null) => {
     if (!value?.startsWith("/") || value.startsWith("//")) return null;
@@ -44,9 +52,18 @@ export default function AdminLogin() {
       setErrors({ email: "Masukkan alamat email yang valid." });
       return;
     }
+    if (turnstileEnabled && !turnstileToken.trim()) {
+      const message = turnstileFailed
+        ? "Verifikasi keamanan Cloudflare gagal dimuat. Muat ulang verifikasi, lalu coba lagi."
+        : "Selesaikan verifikasi keamanan Cloudflare terlebih dahulu.";
+      setErrors({ turnstile: message });
+      setSummaryError(message);
+      return;
+    }
     loadingRef.current = true;
     setErrors({});
     setSummaryError("");
+    setRemainingSeconds(0);
     setLoading(true);
     try {
       const { default: axios } = await import("axios");
@@ -55,6 +72,8 @@ export default function AdminLogin() {
         {
           email: form.email,
           password: form.password,
+          "cf-turnstile-response": turnstileToken,
+          turnstile_token: turnstileToken,
           login_portal: "admin",
           // Sesi admin selalu pendek; server mengabaikan "ingat perangkat".
           remember_device: false,
@@ -74,14 +93,17 @@ export default function AdminLogin() {
       navigate(safeAdminRedirect(requestedRedirect) || "/admin", { replace: true });
     } catch (error: unknown) {
       const axios = (await import("axios")).default;
-      const data = axios.isAxiosError(error)
-        ? (error.response?.data as LoginResponse | undefined)
-        : undefined;
+      const responseDetails = axios.isAxiosError(error) ? error.response : undefined;
+      const data = responseDetails?.data as LoginResponse | undefined;
       // Pesan seragam: jangan pernah membedakan "bukan admin" dari "kredensial
       // salah", supaya URL portal ini tidak bisa dipakai menebak role akun.
       const message = data?.error_code === "admin_rate_limited"
         ? (data?.message || "Terlalu banyak percobaan. Coba lagi nanti.")
-        : GENERIC_LOGIN_ERROR;
+        : (data?.error_code === "turnstile_failed" ? (data.message || "Verifikasi keamanan Cloudflare gagal.") : GENERIC_LOGIN_ERROR);
+      const retryAfter = Number(data?.retry_after_seconds ?? responseDetails?.headers?.["retry-after"] ?? 0);
+      if (Number.isFinite(retryAfter) && retryAfter > 0 && (responseDetails?.status === 429 || data?.error_code === "admin_rate_limited")) {
+        setRemainingSeconds(Math.ceil(retryAfter));
+      }
       setSummaryError(message);
       setErrors(Object.fromEntries(Object.entries(data?.errors || {}).map(([key, value]) => [key, value[0] || message])));
     } finally {
@@ -89,6 +111,13 @@ export default function AdminLogin() {
       setLoading(false);
     }
   };
+
+  const countdownActive = remainingSeconds > 0;
+  useEffect(() => {
+    if (!countdownActive) return;
+    const timer = window.setInterval(() => setRemainingSeconds((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [countdownActive]);
 
   return (
     <>
@@ -133,6 +162,8 @@ export default function AdminLogin() {
               {summaryError}
             </p>
           )}
+
+          {remainingSeconds > 0 && <p role="status" aria-live="polite" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">Terlalu banyak percobaan. Coba lagi dalam {remainingSeconds} detik.</p>}
 
           <form onSubmit={handleSubmit} className="mt-7 space-y-5">
             <label htmlFor="admin-email" className="block text-sm font-bold text-slate-700">
@@ -199,9 +230,15 @@ export default function AdminLogin() {
               </Link>
             </div>
 
+            <div>
+              <TurnstileWidget onTokenChange={setTurnstileToken} onStatusChange={setTurnstileStatus} retryTrigger={turnstileRetry} action="login" />
+              {turnstileEnabled && !turnstileToken.trim() && !turnstileFailed && <p className="mt-1 text-xs font-semibold text-red-700" role="alert">{errors.turnstile || "Selesaikan verifikasi keamanan Cloudflare terlebih dahulu."}</p>}
+              {turnstileEnabled && turnstileFailed && <button type="button" onClick={() => setTurnstileRetry((value) => value + 1)} className="mt-2 min-h-11 w-full rounded-xl border border-orange-200 bg-orange-50 px-4 text-sm font-bold text-orange-800 hover:bg-orange-100">Coba muat ulang verifikasi keamanan</button>}
+            </div>
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || remainingSeconds > 0 || (turnstileEnabled && !turnstileToken.trim())}
               className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#14213D] px-5 text-sm font-extrabold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? <Loader2 className="animate-spin motion-reduce:animate-none" size={18} /> : <ArrowRight size={18} />}

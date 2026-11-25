@@ -27,7 +27,7 @@ export default function Login() {
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileStatus, setTurnstileStatus] = useState<TurnstileStatus>("idle");
   const [turnstileRetry, setTurnstileRetry] = useState(0);
-  const turnstileEnabled = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() !== "";
+  const turnstileEnabled = Boolean(import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim());
   const turnstileFailed = turnstileStatus === "error" || turnstileStatus === "expired" || turnstileStatus === "stalled";
   const countdownActive = remainingSeconds > 0;
   const googleError = searchParams.get("google_error");
@@ -61,6 +61,7 @@ export default function Login() {
       const response = await axiosModule.default.post(`${API_BASE_URL}/login`, {
         ...formData,
         "cf-turnstile-response": turnstileToken,
+        turnstile_token: turnstileToken,
         login_portal: "user",
         remember_device: rememberDevice,
       }, { withCredentials: true });

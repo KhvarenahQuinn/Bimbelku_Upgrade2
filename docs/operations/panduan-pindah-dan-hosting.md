@@ -38,4 +38,4 @@ Buat backup database dan file yang diperlukan. Simpan backup di lokasi privat. U
 
 Setelah semua pemeriksaan lolos, alihkan DNS. Pantau error aplikasi, antrean, log, serta respons API selama masa stabilisasi. Simpan konfigurasi lama dan backup sampai pemulihan tidak lagi diperlukan.
 
-Baca [panduan hosting teknisi](panduan-hosting-untuk-teknisi.md), [keamanan deployment](../security/DEPLOYMENT_SECURITY.md), [pengaturan Cloudflare](../CLOUDFLARE_SETUP.md), dan [demo pembayaran sandbox](DEMO-PEMBAYARAN-SANDBOX.md) untuk langkah terkait. Daftar variabel terbaru berada di `bimbelku-backend/.env.example`; gunakan key dan token contoh sebagai nama variabel saja, jangan salin nilai rahasia ke dokumentasi.
+Baca [panduan hosting teknisi](panduan-hosting-untuk-teknisi.md), [keamanan deployment](../security/DEPLOYMENT_SECURITY.md), [pengaturan Cloudflare](../cloudflare-setup.id.md), dan [demo pembayaran sandbox](DEMO-PEMBAYARAN-SANDBOX.md) untuk langkah terkait. Daftar variabel terbaru berada di `bimbelku-backend/.env.example`; gunakan key dan token contoh sebagai nama variabel saja, jangan salin nilai rahasia ke dokumentasi.

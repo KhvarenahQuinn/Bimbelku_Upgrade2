@@ -37,7 +37,7 @@ Log aplikasi dipisahkan menurut kanal dan memakai `daily log rotation`. Pantau k
 ## Keamanan dan pemeliharaan
 
 - Atur HTTPS, firewall, dan pembatasan akses SSH.
-- Aktifkan WAF dan rate limiting sesuai dokumentasi [Cloudflare](../CLOUDFLARE_SETUP.md).
+- Aktifkan WAF dan rate limiting sesuai dokumentasi [Cloudflare](../cloudflare-setup.id.md).
 - Pastikan respons file menyertakan `X-Content-Type-Options: nosniff` dan `Content Security Policy` sandbox.
 - Simpan backup database di lokasi privat dan lakukan uji pemulihan berkala.
 - Pantau ruang disk, kegagalan backup, queue, scheduler, serta aktivitas admin.
