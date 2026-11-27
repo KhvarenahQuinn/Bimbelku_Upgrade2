@@ -30,10 +30,10 @@ const AlertDialogContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
 >(({ className, onCloseAutoFocus, ...props }, ref) => {
   const restoreFocusRef = React.useRef<HTMLElement | null>(null);
-  const innerRef = React.useRef<React.ElementRef<typeof AlertDialogPrimitive.Content> | null>(null);
+  const dialogNodeRef = React.useRef<React.ElementRef<typeof AlertDialogPrimitive.Content> | null>(null);
   const setRefs = React.useCallback(
     (node: React.ElementRef<typeof AlertDialogPrimitive.Content> | null) => {
-      innerRef.current = node;
+      if (node) dialogNodeRef.current = node;
       if (typeof ref === "function") ref(node);
       else if (ref) ref.current = node;
     },
@@ -63,7 +63,7 @@ const AlertDialogContent = React.forwardRef<
           if (
             !event.defaultPrevented
             && restoreFocusRef.current?.isConnected
-            && (!activeDialog || activeDialog === innerRef.current)
+            && (!activeDialog || activeDialog === dialogNodeRef.current || !activeDialog.isConnected)
           ) {
             event.preventDefault();
             restoreFocusRef.current.focus();

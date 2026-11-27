@@ -66,10 +66,10 @@ const DialogContent = React.forwardRef<
   ...props
 }, ref) => {
   const restoreFocusRef = React.useRef<HTMLElement | null>(null);
-  const innerRef = React.useRef<React.ElementRef<typeof DialogPrimitive.Content> | null>(null);
+  const dialogNodeRef = React.useRef<React.ElementRef<typeof DialogPrimitive.Content> | null>(null);
   const setRefs = React.useCallback(
     (node: React.ElementRef<typeof DialogPrimitive.Content> | null) => {
-      innerRef.current = node;
+      if (node) dialogNodeRef.current = node;
       if (typeof ref === "function") ref(node);
       else if (ref) ref.current = node;
     },
@@ -116,7 +116,7 @@ const DialogContent = React.forwardRef<
           if (
             !event.defaultPrevented
             && restoreFocusRef.current?.isConnected
-            && (!activeDialog || activeDialog === innerRef.current)
+            && (!activeDialog || activeDialog === dialogNodeRef.current || !activeDialog.isConnected)
           ) {
             event.preventDefault();
             restoreFocusRef.current.focus();

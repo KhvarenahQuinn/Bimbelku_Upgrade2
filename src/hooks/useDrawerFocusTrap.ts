@@ -18,6 +18,31 @@ const getFocusableElements = (container: HTMLElement): HTMLElement[] =>
   );
 
 /**
+ * Wraps keyboard Tab / Shift+Tab focus within visible focusable elements
+ * inside a modal or drawer container.
+ */
+export function trapTabKey(event: KeyboardEvent, container: HTMLElement): void {
+  const focusables = getFocusableElements(container);
+  if (focusables.length === 0) {
+    event.preventDefault();
+    container.focus();
+    return;
+  }
+
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (event.shiftKey) {
+    if (document.activeElement === first || !container.contains(document.activeElement)) {
+      event.preventDefault();
+      last.focus();
+    }
+  } else if (document.activeElement === last || !container.contains(document.activeElement)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+/**
  * Traps keyboard Tab focus inside a mobile drawer while open, closes on Escape,
  * and restores focus to the hamburger trigger button when closed.
  */
@@ -74,24 +99,7 @@ export function useDrawerFocusTrap(
 
       if (event.key !== "Tab") return;
 
-      const focusables = getFocusableElements(container);
-      if (focusables.length === 0) {
-        event.preventDefault();
-        container.focus();
-        return;
-      }
-
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      if (event.shiftKey) {
-        if (document.activeElement === first || !container.contains(document.activeElement)) {
-          event.preventDefault();
-          last.focus();
-        }
-      } else if (document.activeElement === last || !container.contains(document.activeElement)) {
-        event.preventDefault();
-        first.focus();
-      }
+      trapTabKey(event, container);
     };
 
     const handleFocusIn = (event: FocusEvent) => {
