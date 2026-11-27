@@ -601,7 +601,7 @@ function RoleQuickGuideContent({ role }: { role: Role }) {
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 sm:p-6">
           <div className="flex gap-1">
             {tutorial.steps.map((item, index) => (
-              <button key={item.id ?? `${item.title}-${index}`} type="button" aria-label={`Buka bagian ${index + 1}`} onClick={() => setStep(index)} className="flex min-h-6 min-w-6 items-center justify-center rounded-full">
+              <button key={item.id ?? `${item.title}-${index}`} type="button" aria-label={`Buka bagian ${index + 1}`} onClick={() => setStep(index)} className="flex min-h-[24px] min-w-[24px] shrink-0 items-center justify-center rounded-full">
                 <span className={`h-2 rounded-full transition-all ${index === step ? "w-8 bg-indigo-600" : "w-2 bg-slate-200"}`} />
               </button>
             ))}

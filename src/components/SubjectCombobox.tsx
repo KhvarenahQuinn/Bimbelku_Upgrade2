@@ -234,7 +234,7 @@ export default function SubjectCombobox({
   return (
     <div ref={rootRef} className={cn("relative min-w-0 max-w-full", className)}>
       <div className={cn(
-        "flex h-12 items-center gap-2 rounded-xl border border-input bg-background px-3 ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+        "flex h-12 items-center gap-1.5 rounded-xl border border-input bg-background pl-3 pr-1.5 ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
         disabled && "cursor-not-allowed opacity-50",
       )}>
         <Search size={16} className="shrink-0 text-slate-500" />
@@ -285,7 +285,7 @@ export default function SubjectCombobox({
               setOpen(false);
             }
           }}
-          className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          className="h-full w-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
         {(query || value) && !disabled && (
           <button
@@ -298,7 +298,7 @@ export default function SubjectCombobox({
               setOpen(true);
               window.requestAnimationFrame(() => rootRef.current?.querySelector("input")?.focus());
             }}
-            className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="grid min-h-[36px] min-w-[28px] w-8 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <X size={16} />
           </button>
@@ -308,7 +308,7 @@ export default function SubjectCombobox({
           aria-label={open ? "Tutup daftar mata pelajaran" : "Buka daftar mata pelajaran"}
           disabled={disabled}
           onClick={() => setOpen((current) => !current)}
-          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          className="grid min-h-[36px] min-w-[28px] w-8 shrink-0 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
         >
           <ChevronDown size={17} className={cn("transition", open && "rotate-180")} />
         </button>
