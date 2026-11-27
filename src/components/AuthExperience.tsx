@@ -378,9 +378,9 @@ export default function AuthExperience({ children, mode, role }: AuthExperienceP
         <div className="relative z-10 w-full max-w-md" style={{ marginBlock: "auto", paddingRight: "2rem" }}>
           <div>
             <p className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-teal-800"><Sparkles size={16} /> {isUnified ? "Belajar bersama BimbelKu" : isTeacher ? "Tumbuh bersama BimbelKu" : "Belajar bersama BimbelKu"}</p>
-            <h1 className="mt-4 text-5xl font-black leading-tight tracking-tight">
+            <p className="mt-4 text-5xl font-black leading-tight tracking-tight">
               {isUnified ? <>Selamat datang kembali. <span className="text-teal-800">Lanjutkan langkah belajarmu.</span></> : isTeacher ? <>Bantu siswa maju. <span className="text-teal-800">Mulai dari sini.</span></> : <>Setiap langkah belajar <span className="text-teal-800">punya arah.</span></>}
-            </h1>
+            </p>
             <p className="mt-4 max-w-md text-sm leading-6 text-slate-800 sm:text-base sm:leading-7">
               {isUnified
                   ? "Kembali ke kegiatan belajar dan mengajar dengan lebih mudah. Jadwal, pesanan, dan perkembangan kelas tersimpan di akunmu."

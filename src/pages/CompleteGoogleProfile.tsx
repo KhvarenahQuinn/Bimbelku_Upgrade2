@@ -1,19 +1,24 @@
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Check, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import http, { getApiError } from "@/lib/http";
 import { notify } from "@/lib/notify";
-import { updateStoredSessionUser } from "@/lib/session";
+import { readStoredSession, updateStoredSessionUser } from "@/lib/session";
 
 export default function CompleteGoogleProfile() {
+  const { token, user } = readStoredSession();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const redirect = safeRedirect(params.get("redirect"));
   const [loading, setLoading] = useState(false);
   const [terms, setTerms] = useState(false);
   const [privacy, setPrivacy] = useState(false);
+
+  if (!token || !user) {
+    return <Navigate to="/login" replace />;
+  }
 
   const finish = async () => {
     setLoading(true);

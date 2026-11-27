@@ -30,22 +30,21 @@ const AlertDialogContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
 >(({ className, onCloseAutoFocus, ...props }, ref) => {
   const restoreFocusRef = React.useRef<HTMLElement | null>(null);
-  const innerRef = React.useRef<React.ElementRef<typeof AlertDialogPrimitive.Content> | null>(null);
+  const dialogNodeRef = React.useRef<React.ElementRef<typeof AlertDialogPrimitive.Content> | null>(null);
   const setRefs = React.useCallback(
     (node: React.ElementRef<typeof AlertDialogPrimitive.Content> | null) => {
-      innerRef.current = node;
+      if (node) {
+        dialogNodeRef.current = node;
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && active !== document.body && !node.contains(active)) {
+          restoreFocusRef.current = active;
+        }
+      }
       if (typeof ref === "function") ref(node);
       else if (ref) ref.current = node;
     },
     [ref],
   );
-
-  React.useLayoutEffect(() => {
-    const active = document.activeElement;
-    if (active instanceof HTMLElement && active !== document.body) {
-      restoreFocusRef.current = active;
-    }
-  }, []);
 
   return (
     <AlertDialogPortal>
@@ -59,14 +58,20 @@ const AlertDialogContent = React.forwardRef<
         )}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);
+          const target = restoreFocusRef.current;
           const activeDialog = document.activeElement?.closest?.('[role="dialog"], [role="alertdialog"]');
           if (
             !event.defaultPrevented
-            && restoreFocusRef.current?.isConnected
-            && (!activeDialog || activeDialog === innerRef.current)
+            && target?.isConnected
+            && (!activeDialog || activeDialog === dialogNodeRef.current || !activeDialog.isConnected)
           ) {
             event.preventDefault();
-            restoreFocusRef.current.focus();
+            target.focus({ preventScroll: true });
+            window.requestAnimationFrame(() => {
+              if (document.activeElement === document.body && target.isConnected) {
+                target.focus({ preventScroll: true });
+              }
+            });
           }
         }}
         {...props}

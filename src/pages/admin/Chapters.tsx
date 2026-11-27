@@ -78,6 +78,10 @@ export default function Chapters() {
       notify.error("Pilih mata pelajaran dari daftar.");
       return;
     }
+    if (form.title.trim().length < 2) {
+      notify.error("Nama bab minimal 2 karakter.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -139,7 +143,7 @@ export default function Chapters() {
               {filtered.map((chapter) => (
                 <div key={chapter.id} className="flex flex-col justify-between gap-4 p-4 hover:bg-slate-50 sm:p-5 lg:flex-row lg:items-center">
                   <div className="flex min-w-0 gap-4"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-indigo-50 text-indigo-600"><BookOpen /></div><div className="min-w-0"><p className="font-black text-slate-900">{chapter.title}</p><p className="mt-1 text-sm text-slate-500">{chapter.subject.name} · {chapter.education_level} · {chapter.grade}</p><p className="mt-1 text-xs font-bold text-indigo-600">Urutan {chapter.sort_order}{!chapter.is_active ? " · Nonaktif" : ""}</p></div></div>
-                  <div className="grid grid-cols-2 gap-2 sm:flex"><Button variant="outline" className="rounded-xl" onClick={() => openForm(chapter)}><Pencil size={16} className="sm:mr-2" /><span className="hidden sm:inline">Ubah</span></Button><Button variant="ghost" className="rounded-xl text-rose-600 hover:bg-rose-50" onClick={() => remove(chapter)}><Trash2 size={16} className="sm:mr-2" /><span className="hidden sm:inline">Hapus</span></Button></div>
+                  <div className="grid grid-cols-2 gap-2 sm:flex"><Button variant="outline" className="min-h-11 min-w-11 rounded-xl" aria-label={`Ubah bab ${chapter.title}`} onClick={() => openForm(chapter)}><Pencil size={16} className="sm:mr-2" /><span className="hidden sm:inline">Ubah</span></Button><Button variant="ghost" className="min-h-11 min-w-11 rounded-xl text-rose-600 hover:bg-rose-50" aria-label={`Hapus bab ${chapter.title}`} onClick={() => remove(chapter)}><Trash2 size={16} className="sm:mr-2" /><span className="hidden sm:inline">Hapus</span></Button></div>
                 </div>
               ))}
             </div>
@@ -149,12 +153,12 @@ export default function Chapters() {
 
       <Dialog open={editing !== undefined} onOpenChange={(open) => !open && setEditing(undefined)}>
         <DialogContent className="overflow-visible rounded-[2rem] sm:max-w-lg">
-          <form onSubmit={save} className="max-h-[calc(100dvh-5rem)] space-y-4 overflow-y-auto overscroll-contain">
+          <form onSubmit={save} noValidate className="max-h-[calc(100dvh-5rem)] space-y-4 overflow-y-auto overscroll-contain">
             <DialogHeader><DialogTitle>{editing ? "Ubah bab" : "Tambah bab"}</DialogTitle><DialogDescription>Submateri opsional dan dapat ditulis murid pada catatan kebutuhan belajar.</DialogDescription></DialogHeader>
-            <div><Label>Mata pelajaran</Label><SubjectCombobox options={subjects} value={form.subject_name} educationLevel={form.education_level} grade={form.grade} onChange={(value, option) => setForm((current) => ({ ...current, subject_name: value, curriculum_subject_id: option?.id || 0 }))} className="mt-2" /></div>
-            <div className="grid grid-cols-2 gap-3"><div><Label>Jenjang</Label><Select value={form.education_level} onValueChange={(value) => setForm((current) => ({ ...current, education_level: value, grade: grades[value][0], curriculum_subject_id: 0, subject_name: "" }))}><SelectTrigger className="mt-2 h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{Object.keys(grades).map((level) => <SelectItem key={level} value={level}>{level}</SelectItem>)}</SelectContent></Select></div><div><Label>{educationDetailLabel(form.education_level)}</Label><Select value={form.grade} onValueChange={(value) => setForm((current) => ({ ...current, grade: value, curriculum_subject_id: 0, subject_name: "" }))}><SelectTrigger className="mt-2 h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{grades[form.education_level].map((grade) => <SelectItem key={grade} value={grade}>{grade}</SelectItem>)}</SelectContent></Select></div></div>
-            <div><Label>Nama bab</Label><Input required minLength={2} className="mt-2 h-11 rounded-xl" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></div>
-            <div><Label>Urutan</Label><Input type="number" min="0" className="mt-2 h-11 rounded-xl" value={form.sort_order} onChange={(event) => setForm((current) => ({ ...current, sort_order: event.target.value }))} /></div>
+            <div><Label htmlFor="chapter-subject">Mata pelajaran</Label><SubjectCombobox id="chapter-subject" options={subjects} value={form.subject_name} educationLevel={form.education_level} grade={form.grade} onChange={(value, option) => setForm((current) => ({ ...current, subject_name: value, curriculum_subject_id: option?.id || 0 }))} className="mt-2" /></div>
+            <div className="grid grid-cols-2 gap-3"><div><Label htmlFor="chapter-level">Jenjang</Label><Select value={form.education_level} onValueChange={(value) => setForm((current) => ({ ...current, education_level: value, grade: grades[value][0], curriculum_subject_id: 0, subject_name: "" }))}><SelectTrigger id="chapter-level" className="mt-2 h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{Object.keys(grades).map((level) => <SelectItem key={level} value={level}>{level}</SelectItem>)}</SelectContent></Select></div><div><Label htmlFor="chapter-grade">{educationDetailLabel(form.education_level)}</Label><Select value={form.grade} onValueChange={(value) => setForm((current) => ({ ...current, grade: value, curriculum_subject_id: 0, subject_name: "" }))}><SelectTrigger id="chapter-grade" className="mt-2 h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{grades[form.education_level].map((grade) => <SelectItem key={grade} value={grade}>{grade}</SelectItem>)}</SelectContent></Select></div></div>
+            <div><Label htmlFor="chapter-title">Nama bab</Label><Input id="chapter-title" required minLength={2} className="mt-2 h-11 rounded-xl" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></div>
+            <div><Label htmlFor="chapter-sort-order">Urutan</Label><Input id="chapter-sort-order" type="number" min="0" className="mt-2 h-11 rounded-xl" value={form.sort_order} onChange={(event) => setForm((current) => ({ ...current, sort_order: event.target.value }))} /></div>
             <label className="flex items-center justify-between rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-700"><span>Bab aktif</span><Switch checked={form.is_active} onCheckedChange={(value) => setForm((current) => ({ ...current, is_active: value }))} /></label>
             <Button disabled={saving} className="h-12 w-full rounded-xl bg-indigo-600 font-black hover:bg-indigo-700">{saving ? <Loader2 size={17} className="mr-2 animate-spin" /> : <GraduationCap size={17} className="mr-2" />}Simpan bab</Button>
           </form>

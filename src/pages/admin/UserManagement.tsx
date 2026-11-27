@@ -224,7 +224,7 @@ export default function UserManagement() {
                     {editingUser ? "Formulir ubah data pengguna" : `Informasi lengkap ${selectedUser.name}`}
                   </DialogDescription>
                 </div>
-                <button type="button" aria-label="Tutup" onClick={() => setModalOpen(false)}><X size={24} className="text-gray-400 hover:text-gray-600" /></button>
+                <button type="button" aria-label="Tutup" onClick={() => setModalOpen(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X size={22} /></button>
               </div>
 
             <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">

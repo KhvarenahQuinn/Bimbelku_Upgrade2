@@ -15,6 +15,7 @@ import {
   FilePreviewDetail,
   setFilePreviewOpen,
 } from "@/lib/filePreview";
+import { trapTabKey } from "@/hooks/useDrawerFocusTrap";
 
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 4;
@@ -100,28 +101,7 @@ export default function FilePreviewProvider() {
       }
       if (event.key === "Tab") {
         const container = dialogRef.current;
-        if (!container) return;
-        const focusables = Array.from(
-          container.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-          ),
-        ).filter((node) => node.getClientRects().length > 0);
-        if (focusables.length === 0) {
-          event.preventDefault();
-          container.focus();
-          return;
-        }
-        const first = focusables[0];
-        const last = focusables[focusables.length - 1];
-        if (event.shiftKey) {
-          if (document.activeElement === first || !container.contains(document.activeElement)) {
-            event.preventDefault();
-            last.focus();
-          }
-        } else if (document.activeElement === last || !container.contains(document.activeElement)) {
-          event.preventDefault();
-          first.focus();
-        }
+        if (container) trapTabKey(event, container);
         return;
       }
       if (event.key === "+" || event.key === "=") {

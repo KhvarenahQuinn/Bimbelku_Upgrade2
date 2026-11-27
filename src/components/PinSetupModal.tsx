@@ -229,8 +229,9 @@ export default function PinSetupModal({
   const pinFields = (
     <>
       <div>
-        <Label className="mb-2 block font-bold text-slate-700">PIN pembayaran baru</Label>
+        <Label htmlFor="pin-setup-new" className="mb-2 block font-bold text-slate-700">PIN pembayaran baru</Label>
         <PasswordInput
+          id="pin-setup-new"
           label="PIN pembayaran baru"
           required
           inputMode="numeric"
@@ -243,8 +244,9 @@ export default function PinSetupModal({
         />
       </div>
       <div>
-        <Label className="mb-2 block font-bold text-slate-700">Ulangi PIN pembayaran</Label>
+        <Label htmlFor="pin-setup-confirm" className="mb-2 block font-bold text-slate-700">Ulangi PIN pembayaran</Label>
         <PasswordInput
+          id="pin-setup-confirm"
           label="ulangi PIN pembayaran"
           required
           inputMode="numeric"
@@ -319,11 +321,12 @@ export default function PinSetupModal({
         )}
 
         {mode === "set" && (
-          <form onSubmit={savePin} className="mt-2 space-y-5">
+          <form onSubmit={savePin} noValidate className="mt-2 space-y-5">
             {status.has_password && (
               <div>
-                <Label className="mb-2 block font-bold text-slate-700">Kata sandi akun</Label>
+                <Label htmlFor="pin-set-password" className="mb-2 block font-bold text-slate-700">Kata sandi akun</Label>
                 <PasswordInput
+                  id="pin-set-password"
                   required
                   label="kata sandi akun"
                   autoComplete="current-password"
@@ -347,11 +350,12 @@ export default function PinSetupModal({
         )}
 
         {mode === "reset" && (
-          <form onSubmit={resetPin} className="mt-2 space-y-5">
+          <form onSubmit={resetPin} noValidate className="mt-2 space-y-5">
             {forgotMethod === "email" ? (
               <div>
-                <Label className="mb-2 block font-bold text-slate-700">Kode OTP dari email</Label>
+                <Label htmlFor="pin-reset-code" className="mb-2 block font-bold text-slate-700">Kode OTP dari email</Label>
                 <Input
+                  id="pin-reset-code"
                   required
                   inputMode="numeric"
                   maxLength={6}
@@ -364,8 +368,9 @@ export default function PinSetupModal({
               </div>
             ) : (
               <div>
-                <Label className="mb-2 block font-bold text-slate-700">Kata sandi akun</Label>
+                <Label htmlFor="pin-reset-password" className="mb-2 block font-bold text-slate-700">Kata sandi akun</Label>
                 <PasswordInput
+                  id="pin-reset-password"
                   required
                   label="kata sandi akun"
                   autoComplete="current-password"
