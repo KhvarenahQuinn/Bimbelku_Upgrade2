@@ -430,7 +430,7 @@ export default function Profile() {
     <StudentLayout title="Profil Saya">
       <div className="mx-auto max-w-5xl pb-28 md:pb-20">
         
-        <form id="student-profile-form" onSubmit={handleUpdateProfile} className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-700 sm:space-y-8">
+        <form id="student-profile-form" onSubmit={handleUpdateProfile} noValidate className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-700 sm:space-y-8">
             
             {/* === 1. HEADER & AVATAR === */}
             <div className="relative overflow-hidden rounded-[2rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/50 sm:p-8 md:rounded-[2.5rem] md:p-10">
@@ -542,8 +542,9 @@ export default function Profile() {
 
                     <div className="space-y-5 sm:space-y-6">
                         <div className="space-y-2">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Nama Lengkap</label>
+                            <label htmlFor="student-profile-name" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Nama Lengkap</label>
                             <input 
+                                id="student-profile-name"
                                 type="text" 
                                 value={user.name}
                                 onChange={(e) => setUser({...user, name: sanitizePersonName(e.target.value)})}
@@ -553,8 +554,9 @@ export default function Profile() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Nomor WhatsApp/telepon</label>
+                            <label htmlFor="student-profile-phone" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Nomor WhatsApp/telepon</label>
                             <input
+                                id="student-profile-phone"
                                 type="tel"
                                 inputMode="tel"
                                 autoComplete="tel"
@@ -568,8 +570,9 @@ export default function Profile() {
 
                         <div className="grid gap-4 sm:grid-cols-2">
                           <div className="space-y-2">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Jenjang</label>
+                            <label htmlFor="student-profile-level" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Jenjang</label>
                             <ResponsiveSelect
+                              id="student-profile-level"
                               value={user.student_education_level}
                               ariaLabel="Pilih jenjang pendidikan"
                               options={EDUCATION_LEVELS.map((item) => ({ value: item, label: item }))}
@@ -578,8 +581,9 @@ export default function Profile() {
                             />
                           </div>
                           <div className="space-y-2">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">{user.student_education_level === "Umum" ? "Tingkat" : "Kelas"}</label>
+                            <label htmlFor="student-profile-grade" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">{user.student_education_level === "Umum" ? "Tingkat" : "Kelas"}</label>
                             <ResponsiveSelect
+                              id="student-profile-grade"
                               value={user.grade}
                               ariaLabel={user.student_education_level === "Umum" ? "Pilih tingkat" : "Pilih kelas"}
                               options={GRADES_BY_EDUCATION_LEVEL[user.student_education_level].map((item) => ({ value: item, label: item }))}
@@ -590,19 +594,20 @@ export default function Profile() {
                         </div>
 
                         <div className="space-y-2">
-                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Sekolah atau lembaga</label>
-                          <input value={user.school_name} onChange={(event) => setUser({ ...user, school_name: event.target.value })} className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-50 border border-transparent focus:border-blue-200 transition-all" placeholder="Opsional" />
+                          <label htmlFor="student-profile-school" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Sekolah atau lembaga</label>
+                          <input id="student-profile-school" value={user.school_name} onChange={(event) => setUser({ ...user, school_name: event.target.value })} className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-50 border border-transparent focus:border-blue-200 transition-all" placeholder="Opsional" />
                         </div>
 
                         <div className="space-y-2">
-                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Kebutuhan belajar</label>
-                          <textarea value={user.learning_needs} onChange={(event) => setUser({ ...user, learning_needs: event.target.value })} rows={3} className="w-full resize-y p-4 bg-slate-50 rounded-2xl font-medium text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-50 border border-transparent focus:border-blue-200 transition-all" placeholder="Contoh: perlu penguatan konsep dan latihan soal cerita" />
+                          <label htmlFor="student-profile-needs" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Kebutuhan belajar</label>
+                          <textarea id="student-profile-needs" value={user.learning_needs} onChange={(event) => setUser({ ...user, learning_needs: event.target.value })} rows={3} className="w-full resize-y p-4 bg-slate-50 rounded-2xl font-medium text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-50 border border-transparent focus:border-blue-200 transition-all" placeholder="Contoh: perlu penguatan konsep dan latihan soal cerita" />
                         </div>
                         
                         <div className="space-y-2">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Alamat Email</label>
+                            <label htmlFor="student-profile-email" className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Alamat Email</label>
                             <div className="relative group cursor-not-allowed">
                                 <input 
+                                    id="student-profile-email"
                                     type="email" 
                                     value={user.email}
                                     disabled
@@ -676,8 +681,8 @@ export default function Profile() {
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2 md:col-span-2">
-                  <label className="text-xs font-black uppercase tracking-widest text-slate-400">Alamat lengkap</label>
-                  <textarea ref={addressInputRef} value={user.address} onChange={(event) => setUser({ ...user, address: event.target.value })} rows={3} className="w-full resize-y rounded-2xl border border-transparent bg-slate-50 p-4 font-medium text-slate-700 outline-none transition focus:border-emerald-200 focus:bg-white focus:ring-4 focus:ring-emerald-50" placeholder="Alamat belajar untuk kelas offline" />
+                  <label htmlFor="student-profile-address" className="text-xs font-black uppercase tracking-widest text-slate-400">Alamat lengkap</label>
+                  <textarea id="student-profile-address" ref={addressInputRef} value={user.address} onChange={(event) => setUser({ ...user, address: event.target.value })} rows={3} className="w-full resize-y rounded-2xl border border-transparent bg-slate-50 p-4 font-medium text-slate-700 outline-none transition focus:border-emerald-200 focus:bg-white focus:ring-4 focus:ring-emerald-50" placeholder="Alamat belajar untuk kelas offline" />
                 </div>
                 <div className="md:col-span-2">
                   <div className={`flex items-start gap-3 rounded-2xl border p-4 ${user.latitude && user.longitude ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>

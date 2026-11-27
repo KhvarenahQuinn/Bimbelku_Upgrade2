@@ -15,6 +15,7 @@ export interface SubjectOption {
 }
 
 interface SubjectComboboxProps {
+  id?: string;
   options: SubjectOption[];
   value: string;
   onChange: (value: string, option?: SubjectOption) => void;
@@ -39,6 +40,7 @@ const normalize = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleL
 const clamp = (value: number, minimum: number, maximum: number) => Math.min(Math.max(value, minimum), Math.max(minimum, maximum));
 
 export default function SubjectCombobox({
+  id,
   options,
   value,
   onChange,
@@ -237,6 +239,7 @@ export default function SubjectCombobox({
       )}>
         <Search size={16} className="shrink-0 text-slate-500" />
         <input
+          id={id}
           role="combobox"
           aria-label={placeholder}
           aria-expanded={open}

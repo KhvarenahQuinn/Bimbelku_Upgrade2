@@ -41,6 +41,11 @@ export default function Login() {
       setSummaryError("Periksa alamat email Anda, lalu coba lagi.");
       return;
     }
+    if (!formData.password) {
+      setErrors({ password: "Masukkan kata sandi Anda." });
+      setSummaryError("Masukkan kata sandi Anda sebelum melanjutkan.");
+      return;
+    }
     // Verifikasi keamanan ikut dikirim bersama kredensial; server menolak
     // permintaan tanpa token saat Turnstile diaktifkan.
     if (turnstileEnabled && !turnstileToken.trim()) {
@@ -147,7 +152,7 @@ export default function Login() {
         {googleError && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{googleError}</p>}
         {summaryError && <p role="alert" aria-live="assertive" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{summaryError}</p>}
         {remainingSeconds > 0 && <p role="status" aria-live="polite" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">Terlalu banyak percobaan. Coba lagi dalam {remainingSeconds} detik.</p>}
-        <form onSubmit={handleLogin} className="auth-login-form mt-7 space-y-5">
+        <form onSubmit={handleLogin} noValidate className="auth-login-form mt-7 space-y-5">
           <label htmlFor="login-email" className="block text-sm font-bold text-slate-700">Email<div className="auth-control mt-2" data-invalid={Boolean(errors.email)}><span className="auth-control-icon" aria-hidden="true"><Mail size={19} /></span><input id="login-email" name="email" type="email" autoComplete="email" required aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? "login-email-error" : undefined} value={formData.email} onChange={(event) => { setFormData((value) => ({ ...value, email: event.target.value })); setErrors((value) => ({ ...value, email: "" })); }} placeholder="nama@email.com" /></div>{errors.email && <span id="login-email-error" className="mt-1 block text-xs font-semibold text-red-700">{errors.email}</span>}</label>
           <label htmlFor="login-password" className="block text-sm font-bold text-slate-700">Kata sandi<div className="auth-control mt-2" data-invalid={Boolean(errors.password)}><span className="auth-control-icon" aria-hidden="true"><Lock size={19} /></span><input id="login-password" name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" required aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? "login-password-error" : undefined} value={formData.password} onChange={(event) => { setFormData((value) => ({ ...value, password: event.target.value })); setErrors((value) => ({ ...value, password: "" })); }} placeholder="Masukkan kata sandi" /><button type="button" onClick={() => setShowPassword((value) => !value)} className="auth-control-action" aria-controls="login-password" aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>{errors.password && <span id="login-password-error" className="mt-1 block text-xs font-semibold text-red-700">{errors.password}</span>}</label>
           <div className="flex flex-wrap items-center justify-between gap-3"><label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-bold text-slate-600"><input type="checkbox" checked={rememberDevice} onChange={(event) => setRememberDevice(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500" /><span>Ingat perangkat ini selama 30 hari</span></label><Link to="/forgot-password" className="inline-flex min-h-11 items-center text-sm font-bold text-orange-700">Lupa kata sandi?</Link></div>

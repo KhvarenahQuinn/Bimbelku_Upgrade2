@@ -276,6 +276,11 @@ export default function TeacherProfile() {
       notify.error("Alamat lengkap maksimal 500 karakter.");
       return;
     }
+    const maxTravelKm = Number(profile.max_travel_km);
+    if (!Number.isFinite(maxTravelKm) || maxTravelKm < 1 || maxTravelKm > 12) {
+      notify.error("Batas perjalanan offline harus antara 1 sampai 12 km.");
+      return;
+    }
     setSavingProfile(true);
     try {
       const formData = new FormData();
@@ -493,20 +498,21 @@ export default function TeacherProfile() {
         </section>
 
         <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_.9fr] gap-7 items-start">
-          <form onSubmit={saveProfile} className="rounded-[2rem] border border-slate-100 bg-white p-6 md:p-8 shadow-sm animate-in fade-in slide-in-from-left-3 duration-500">
+          <form onSubmit={saveProfile} noValidate className="rounded-[2rem] border border-slate-100 bg-white p-6 md:p-8 shadow-sm animate-in fade-in slide-in-from-left-3 duration-500">
             <div className="flex items-start justify-between gap-4"><div><h2 className="text-2xl font-black text-slate-900">Identitas dan wilayah</h2><p className="mt-1 text-sm text-slate-500">Alamat lengkap murid hanya muncul setelah pembayaran dikonfirmasi.</p></div><div className="h-11 w-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><User size={20} /></div></div>
 
             <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-5">
-              <Field label="Nama lengkap"><Input value={profile.name} onChange={(event) => setProfile((current) => ({ ...current, name: sanitizePersonName(event.target.value) }))} className="h-12 rounded-xl" required /></Field>
-              <Field label="Email"><Input value={profile.email} className="h-12 rounded-xl bg-slate-50" disabled /></Field>
-              <Field label="Judul profil"><Input value={profile.title} onChange={(event) => setProfile((current) => ({ ...current, title: event.target.value }))} className="h-12 rounded-xl" placeholder="Contoh: Tutor Matematika" /></Field>
-              <Field label="Gelar atau pendidikan terakhir"><Input value={profile.public_degree} onChange={(event) => setProfile((current) => ({ ...current, public_degree: event.target.value }))} maxLength={120} className="h-12 rounded-xl" placeholder="Contoh: S.Pd. / Mahasiswa S1 Pendidikan Matematika" /></Field>
-              <Field label="Pengalaman"><Input value={profile.experience} onChange={(event) => setProfile((current) => ({ ...current, experience: event.target.value }))} className="h-12 rounded-xl" placeholder="Contoh: 4 tahun" /></Field>
-              <div className="md:col-span-2"><Field label="Nomor WhatsApp/telepon"><Input required inputMode="tel" autoComplete="tel" maxLength={16} value={profile.whatsapp_number} onChange={(event) => setProfile((current) => ({ ...current, whatsapp_number: sanitizePhoneInput(event.target.value) }))} className="h-12 rounded-xl" placeholder="Contoh: 0812 3456 7890" /></Field></div>
-              <div className="md:col-span-2"><Field label="Kota atau wilayah tinggal"><Input value={profile.location} onChange={(event) => setProfile((current) => ({ ...current, location: event.target.value }))} className="h-12 rounded-xl" placeholder="Contoh: Jakarta Selatan" /></Field></div>
+              <Field label="Nama lengkap" htmlFor="teacher-name"><Input id="teacher-name" value={profile.name} onChange={(event) => setProfile((current) => ({ ...current, name: sanitizePersonName(event.target.value) }))} className="h-12 rounded-xl" required /></Field>
+              <Field label="Email" htmlFor="teacher-email"><Input id="teacher-email" value={profile.email} className="h-12 rounded-xl bg-slate-50" disabled /></Field>
+              <Field label="Judul profil" htmlFor="teacher-title"><Input id="teacher-title" value={profile.title} onChange={(event) => setProfile((current) => ({ ...current, title: event.target.value }))} className="h-12 rounded-xl" placeholder="Contoh: Tutor Matematika" /></Field>
+              <Field label="Gelar atau pendidikan terakhir" htmlFor="teacher-degree"><Input id="teacher-degree" value={profile.public_degree} onChange={(event) => setProfile((current) => ({ ...current, public_degree: event.target.value }))} maxLength={120} className="h-12 rounded-xl" placeholder="Contoh: S.Pd. / Mahasiswa S1 Pendidikan Matematika" /></Field>
+              <Field label="Pengalaman" htmlFor="teacher-experience"><Input id="teacher-experience" value={profile.experience} onChange={(event) => setProfile((current) => ({ ...current, experience: event.target.value }))} className="h-12 rounded-xl" placeholder="Contoh: 4 tahun" /></Field>
+              <div className="md:col-span-2"><Field label="Nomor WhatsApp/telepon" htmlFor="teacher-whatsapp"><Input id="teacher-whatsapp" required inputMode="tel" autoComplete="tel" maxLength={16} value={profile.whatsapp_number} onChange={(event) => setProfile((current) => ({ ...current, whatsapp_number: sanitizePhoneInput(event.target.value) }))} className="h-12 rounded-xl" placeholder="Contoh: 0812 3456 7890" /></Field></div>
+              <div className="md:col-span-2"><Field label="Kota atau wilayah tinggal" htmlFor="teacher-location"><Input id="teacher-location" value={profile.location} onChange={(event) => setProfile((current) => ({ ...current, location: event.target.value }))} className="h-12 rounded-xl" placeholder="Contoh: Jakarta Selatan" /></Field></div>
               <div className="md:col-span-2">
-                <Field label="Alamat lengkap (sesuai KTP)">
+                <Field label="Alamat lengkap (sesuai KTP)" htmlFor="teacher-address">
                   <textarea
+                    id="teacher-address"
                     value={profile.address}
                     onChange={(event) => setProfile((current) => ({ ...current, address: event.target.value }))}
                     maxLength={500}
@@ -538,15 +544,15 @@ export default function TeacherProfile() {
                   </Button>
                 </div>
               </div>
-              <Field label="Batas perjalanan offline (maks. 12 km)"><Input type="number" min="1" max="12" value={profile.max_travel_km} onChange={(event) => setProfile((current) => ({ ...current, max_travel_km: event.target.value }))} className="h-12 rounded-xl" /></Field>
+              <Field label="Batas perjalanan offline (maks. 12 km)" htmlFor="teacher-max-travel"><Input id="teacher-max-travel" type="number" min="1" max="12" value={profile.max_travel_km} onChange={(event) => setProfile((current) => ({ ...current, max_travel_km: event.target.value }))} className="h-12 rounded-xl" /></Field>
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 flex items-center justify-between gap-4"><div><p className="font-bold text-slate-800">Terima permintaan baru</p><p className="mt-1 text-xs text-slate-500">Matikan saat sedang tidak tersedia.</p></div><Switch checked={profile.is_accepting_requests} onCheckedChange={(checked) => setProfile((current) => ({ ...current, is_accepting_requests: checked }))} /></div>
             </div>
 
-            <div className="mt-5"><Field label="Tentang saya"><Textarea maxLength={3000} value={profile.bio} onChange={(event) => setProfile((current) => ({ ...current, bio: event.target.value }))} className="min-h-32 rounded-xl" placeholder="Jelaskan pendekatan mengajar secara ringkas." /></Field></div>
+            <div className="mt-5"><Field label="Tentang saya" htmlFor="teacher-bio"><Textarea id="teacher-bio" maxLength={3000} value={profile.bio} onChange={(event) => setProfile((current) => ({ ...current, bio: event.target.value }))} className="min-h-32 rounded-xl" placeholder="Jelaskan pendekatan mengajar secara ringkas." /></Field></div>
 
             <div className="mt-6 rounded-2xl border border-teal-200 bg-teal-50 p-5">
               <div className="flex items-start justify-between gap-4"><div><p className="font-black text-slate-900">Izin profil publik</p><p className="mt-1 text-xs leading-5 text-slate-600">Jika diaktifkan, nama, foto profil, judul, mapel, pengalaman, dan jejak pendidikan/karier di bawah dapat tampil di halaman Kenali Tutor dan mapel setelah akun lulus verifikasi serta disetujui admin. Nomor kontak, lokasi rinci, dan dokumen tidak pernah dipublikasikan.</p></div><Switch checked={profile.public_profile_enabled} onCheckedChange={(checked) => setProfile((current) => ({ ...current, public_profile_enabled: checked }))} /></div>
-              <div className="mt-4"><Field label="Jejak pendidikan, karier, atau prestasi publik"><Textarea maxLength={300} value={profile.public_credentials} onChange={(event) => setProfile((current) => ({ ...current, public_credentials: event.target.value }))} className="min-h-24 rounded-xl bg-white" placeholder="Contoh: Alumni Pendidikan Matematika UNY · Finalis Olimpiade Matematika 2024" /></Field></div>
+              <div className="mt-4"><Field label="Jejak pendidikan, karier, atau prestasi publik" htmlFor="teacher-public-credentials"><Textarea id="teacher-public-credentials" maxLength={300} value={profile.public_credentials} onChange={(event) => setProfile((current) => ({ ...current, public_credentials: event.target.value }))} className="min-h-24 rounded-xl bg-white" placeholder="Contoh: Alumni Pendidikan Matematika UNY · Finalis Olimpiade Matematika 2024" /></Field></div>
               <p className="mt-3 text-xs font-semibold leading-5 text-teal-900">Mengaktifkan pilihan ini memberi izin publikasi, bukan langsung menayangkan profil. Admin meninjau sebelum tampil. Perubahan informasi publik memerlukan persetujuan ulang, dan izin dapat dicabut kapan saja.</p>
             </div>
 
@@ -635,8 +641,8 @@ export default function TeacherProfile() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><Label className="mb-2 block font-bold text-slate-700">{label}</Label>{children}</div>;
+function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
+  return <div><Label htmlFor={htmlFor} className="mb-2 block font-bold text-slate-700">{label}</Label>{children}</div>;
 }
 
 function ModeRow({ icon: Icon, title, description, checked, onChange }: { icon: typeof Monitor; title: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {

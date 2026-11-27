@@ -1,5 +1,5 @@
 import { notify } from "@/lib/notify";
-import { FormEvent, useState } from "react";
+import { FormEvent, useId, useState } from "react";
 import { Eye, EyeOff, KeyRound, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +52,10 @@ export default function ChangePasswordDialog({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (hasPassword && !form.current_password) {
+      notify.error("Masukkan kata sandi saat ini terlebih dahulu.");
+      return;
+    }
     if (form.password.length < 8) {
       notify.error("Kata sandi baru minimal 8 karakter.");
       return;
@@ -109,7 +113,7 @@ export default function ChangePasswordDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={submit} className="mt-2 space-y-5">
+        <form onSubmit={submit} noValidate className="mt-2 space-y-5">
           {hasPassword && (
             <PasswordField
               label="Kata sandi saat ini"
@@ -129,8 +133,9 @@ export default function ChangePasswordDialog({
             autoComplete="new-password"
           />
           <div>
-            <Label className="mb-2 block font-bold text-slate-700">Konfirmasi kata sandi baru</Label>
+            <Label htmlFor="change-password-confirmation" className="mb-2 block font-bold text-slate-700">Konfirmasi kata sandi baru</Label>
             <Input
+              id="change-password-confirmation"
               required
               minLength={8}
               type={showNew ? "text" : "password"}
@@ -179,11 +184,13 @@ function PasswordField({
   onChange: (value: string) => void;
   autoComplete: string;
 }) {
+  const inputId = useId();
   return (
     <div>
-      <Label className="mb-2 block font-bold text-slate-700">{label}</Label>
+      <Label htmlFor={inputId} className="mb-2 block font-bold text-slate-700">{label}</Label>
       <div className="relative">
         <Input
+          id={inputId}
           required
           type={visible ? "text" : "password"}
           autoComplete={autoComplete}
@@ -194,7 +201,8 @@ function PasswordField({
         <button
           type="button"
           onClick={() => onVisibleChange(!visible)}
-          className="absolute inset-y-0 right-0 px-4 text-slate-400 hover:text-indigo-600"
+          className="absolute inset-y-0 right-0 grid min-h-11 min-w-11 place-items-center rounded-r-xl text-slate-400 hover:text-indigo-600"
+          aria-controls={inputId}
           aria-label={visible ? `Sembunyikan ${label.toLowerCase()}` : `Tampilkan ${label.toLowerCase()}`}
         >
           {visible ? <EyeOff size={18} /> : <Eye size={18} />}

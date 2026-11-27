@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 
 type DateOfBirthInputProps = {
+  id?: string;
   value: string;
   max: string;
   onChange: (value: string) => void;
@@ -37,9 +38,10 @@ const toIsoDate = (value: string, max: string) => {
   return iso <= max ? iso : "";
 };
 
-export default function DateOfBirthInput({ value, max, onChange, className = "" }: DateOfBirthInputProps) {
+export default function DateOfBirthInput({ id, value, max, onChange, className = "" }: DateOfBirthInputProps) {
   const [displayValue, setDisplayValue] = useState(() => formatIsoDate(value));
   const inputRef = useRef<HTMLInputElement>(null);
+  const helpId = id ? `${id}-help` : "date-of-birth-help";
 
   useEffect(() => {
     if (value && value !== toIsoDate(displayValue, max)) {
@@ -63,6 +65,7 @@ export default function DateOfBirthInput({ value, max, onChange, className = "" 
     <div>
       <Input
         ref={inputRef}
+        id={id}
         required
         type="text"
         inputMode="numeric"
@@ -70,7 +73,7 @@ export default function DateOfBirthInput({ value, max, onChange, className = "" 
         enterKeyHint="next"
         maxLength={10}
         pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}"
-        aria-describedby="date-of-birth-help"
+        aria-describedby={helpId}
         className={className}
         value={displayValue}
         onChange={(event) => update(event.target.value)}
@@ -81,7 +84,7 @@ export default function DateOfBirthInput({ value, max, onChange, className = "" 
         }}
         placeholder="HH/BB/TTTT"
       />
-      <p id="date-of-birth-help" className="mt-2 text-xs font-medium leading-5 text-slate-500">
+      <p id={helpId} className="mt-2 text-xs font-medium leading-5 text-slate-500">
         Ketik delapan angka. Contoh: 17082005.
       </p>
     </div>

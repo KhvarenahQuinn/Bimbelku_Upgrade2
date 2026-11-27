@@ -31,6 +31,7 @@ const encodeValue = (value: string | number) => String(value) === "" ? EMPTY_VAL
 const decodeValue = (value: string) => value === EMPTY_VALUE ? "" : value;
 
 export function ResponsiveSelect({
+  id,
   value,
   onValueChange,
   options,
@@ -41,6 +42,7 @@ export function ResponsiveSelect({
   disabled = false,
   tone = "indigo",
 }: {
+  id?: string;
   value: string | number;
   onValueChange: (value: string) => void;
   options: ResponsiveSelectOption[];
@@ -60,6 +62,7 @@ export function ResponsiveSelect({
       disabled={disabled}
     >
       <SelectTrigger
+        id={id}
         aria-label={ariaLabel || placeholder}
         className={cn(
           "form-field min-w-0 justify-between text-left focus:ring-4 focus:ring-indigo-100 focus:ring-offset-0",

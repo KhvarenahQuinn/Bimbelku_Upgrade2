@@ -122,6 +122,18 @@ export default function CaseCenter() {
     event.preventDefault();
     if (scope === "history") return;
     if (!selected) return;
+    if (needsRefundAmount) {
+      const amount = Number(refundAmount.replace(/[^0-9]/g, ""));
+      const cap = itemRefundCap(selected.item);
+      if (!Number.isFinite(amount) || amount < 1 || amount > cap) {
+        notify.error(`Nominal refund harus antara Rp1 sampai Rp${new Intl.NumberFormat("id-ID").format(cap)}.`);
+        return;
+      }
+    }
+    if (notes.trim().length < 20) {
+      notify.error("Catatan keputusan minimal 20 karakter.");
+      return;
+    }
     const { type, item } = selected;
     const approved = await confirm({
       title: "Simpan keputusan kasus?",
@@ -199,7 +211,7 @@ export default function CaseCenter() {
             menjulur ~69px di balik navigasi bawah. Tanpa `pb-24` tombol kirim
             form tutor-exit tertutup navigasi. */}
         <DialogContent layer="detail" hideCloseButton className="max-h-[92dvh] overflow-y-auto rounded-[2rem] pb-24 sm:max-w-2xl sm:pb-6">
-          {selected && <form onSubmit={submit} className="space-y-5">
+          {selected && <form onSubmit={submit} noValidate className="space-y-5">
             <DialogHeader>
               <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-start gap-2">
                 <Button type="button" variant="ghost" size="icon" className="h-10 w-10 rounded-xl" onClick={() => setSelected(null)} aria-label="Kembali ke daftar kasus"><ArrowLeft size={18} /></Button>
@@ -213,13 +225,13 @@ export default function CaseCenter() {
             )}
             {scope === "history" && <HistoryDecision item={selected.item} />}
             <fieldset disabled={scope === "history"} className={scope === "history" ? "hidden" : "space-y-5"}>
-            <div><Label>Keputusan</Label><Select value={decision} onValueChange={setDecision}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{selected.type === "report" ? (isEmergencyReport ? <><SelectItem value="accepted">Laporan valid · refund sesi</SelectItem><SelectItem value="rejected">Laporan ditolak · sesi tetap berjalan</SelectItem></> : <><SelectItem value="accepted">Laporan valid</SelectItem><SelectItem value="rejected">Laporan ditolak</SelectItem></>) : selected.type === "dispute" ? (isLapsedAppeal ? <><SelectItem value="full_refund">Refund penuh nilai sesi</SelectItem><SelectItem value="partial_refund">Refund sebagian</SelectItem><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem></> : <><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem><SelectItem value="student_refund">Refund penuh murid</SelectItem></>) : selected.type === "replacement" ? <><SelectItem value="approve">Setujui dan mulai pencarian</SelectItem><SelectItem value="reject">Tolak pengajuan</SelectItem></> : <><SelectItem value="approve">Sahkan sesi</SelectItem><SelectItem value="refund">Refund penuh</SelectItem></>}</SelectContent></Select></div>
-            {needsRefundAmount && <div><Label>Nominal Refund (Rp)</Label><Input inputMode="numeric" type="number" min={1} max={itemRefundCap(selected?.item)} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value.replace(/[^0-9]/g, ""))} className="mt-2 h-11 rounded-xl" placeholder="1" required /><p className="mt-1 text-xs text-slate-500">Maksimal {new Intl.NumberFormat("id-ID").format(itemRefundCap(selected?.item))} sesuai nilai sesi. Nominal harus lebih dari Rp0.</p></div>}
+            <div><Label htmlFor="case-decision">Keputusan</Label><Select value={decision} onValueChange={setDecision}><SelectTrigger id="case-decision" className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent>{selected.type === "report" ? (isEmergencyReport ? <><SelectItem value="accepted">Laporan valid · refund sesi</SelectItem><SelectItem value="rejected">Laporan ditolak · sesi tetap berjalan</SelectItem></> : <><SelectItem value="accepted">Laporan valid</SelectItem><SelectItem value="rejected">Laporan ditolak</SelectItem></>) : selected.type === "dispute" ? (isLapsedAppeal ? <><SelectItem value="full_refund">Refund penuh nilai sesi</SelectItem><SelectItem value="partial_refund">Refund sebagian</SelectItem><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem></> : <><SelectItem value="teacher_paid">Sesi valid · hak tutor diproses</SelectItem><SelectItem value="student_refund">Refund penuh murid</SelectItem></>) : selected.type === "replacement" ? <><SelectItem value="approve">Setujui dan mulai pencarian</SelectItem><SelectItem value="reject">Tolak pengajuan</SelectItem></> : <><SelectItem value="approve">Sahkan sesi</SelectItem><SelectItem value="refund">Refund penuh</SelectItem></>}</SelectContent></Select></div>
+            {needsRefundAmount && <div><Label htmlFor="case-refund-amount">Nominal Refund (Rp)</Label><Input id="case-refund-amount" inputMode="numeric" type="number" min={1} max={itemRefundCap(selected?.item)} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value.replace(/[^0-9]/g, ""))} className="mt-2 h-11 rounded-xl" placeholder="1" required /><p className="mt-1 text-xs text-slate-500">Maksimal {new Intl.NumberFormat("id-ID").format(itemRefundCap(selected?.item))} sesuai nilai sesi. Nominal harus lebih dari Rp0.</p></div>}
             {isEmergencyReport && decision === "accepted" && selected && <SessionRefundSummary item={selected.item} />}
-            {isEmergencyReport && decision === "accepted" && selectedPackageId && <div><Label>Cakupan refund</Label><Select value={refundScope} onValueChange={(value) => setRefundScope(value as RefundScope)}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="session">Refund sesi yang terdampak saja</SelectItem><SelectItem value="remaining_package">Refund seluruh sisa paket</SelectItem><SelectItem value="none">Tanpa refund</SelectItem></SelectContent></Select><p className="mt-1 text-xs text-slate-500">Rincian sesi dan nominal sisa paket ada pada kartu &quot;Hentikan tutor &amp; refund sisa paket&quot; di atas.</p></div>}
-            {needsCostBearer && <div><Label>Penanggung biaya</Label><Select value={costBearer} onValueChange={setCostBearer}><SelectTrigger className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="tutor_share">Potong hak tutor</SelectItem><SelectItem value="platform">Ditanggung platform</SelectItem></SelectContent></Select></div>}
+            {isEmergencyReport && decision === "accepted" && selectedPackageId && <div><Label htmlFor="case-refund-scope">Cakupan refund</Label><Select value={refundScope} onValueChange={(value) => setRefundScope(value as RefundScope)}><SelectTrigger id="case-refund-scope" className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="session">Refund sesi yang terdampak saja</SelectItem><SelectItem value="remaining_package">Refund seluruh sisa paket</SelectItem><SelectItem value="none">Tanpa refund</SelectItem></SelectContent></Select><p className="mt-1 text-xs text-slate-500">Rincian sesi dan nominal sisa paket ada pada kartu &quot;Hentikan tutor &amp; refund sisa paket&quot; di atas.</p></div>}
+            {needsCostBearer && <div><Label htmlFor="case-cost-bearer">Penanggung biaya</Label><Select value={costBearer} onValueChange={setCostBearer}><SelectTrigger id="case-cost-bearer" className="mt-2 h-12 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="tutor_share">Potong hak tutor</SelectItem><SelectItem value="platform">Ditanggung platform</SelectItem></SelectContent></Select></div>}
             {(isLapsedAppeal || isEmergencyReport) && selected && <AttendanceEvidence bookingId={isLapsedAppeal ? selected.item.booking_id ?? selected.item.booking?.id : selected.item.booking_id ?? selected.item.booking?.id} />}
-            <div><Label>Catatan keputusan</Label><Textarea required minLength={20} className="mt-2 min-h-32 rounded-xl" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Dasar pemeriksaan dan keputusan admin" /></div>
+            <div><Label htmlFor="case-notes">Catatan keputusan</Label><Textarea id="case-notes" required minLength={20} className="mt-2 min-h-32 rounded-xl" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Dasar pemeriksaan dan keputusan admin" /></div>
             <Button disabled={processing} className="h-12 w-full rounded-xl bg-indigo-600 font-black hover:bg-indigo-700">{processing && <Loader2 size={17} className="mr-2 animate-spin" />}Simpan keputusan</Button>
             </fieldset>
           </form>}
@@ -327,9 +339,9 @@ function TutorExitForm({ packageId, preview, onCancel, onQueued }: { packageId: 
 
   return <div className="mt-3 space-y-3 rounded-xl border border-rose-300 bg-white p-3">
     <p className="text-xs font-semibold leading-5 text-rose-900">Tindakan ini menghentikan tutor untuk {preview.sessions.length} sesi tersisa sekaligus dan mengantrekan refund sebesar {rupiah(preview.total_amount)}.</p>
-    <div><Label>Alasan penghentian</Label><Textarea minLength={20} maxLength={500} className="mt-2 min-h-20 rounded-xl" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Contoh: tutor mengundurkan diri dan tidak dapat melanjutkan paket" /></div>
-    <div><Label>Catatan bukti</Label><Textarea minLength={50} maxLength={3000} className="mt-2 min-h-28 rounded-xl" value={evidence} onChange={(event) => setEvidence(event.target.value)} placeholder="Uraikan bukti penghentian: pesan tutor, tanggal, dan sesi yang belum terlaksana" /><p className="mt-1 text-xs text-slate-500">Minimal 50 karakter. Tersimpan pada jejak audit dan keputusan refund.</p></div>
-    <div><Label>Konfirmasi</Label><Input className="mt-2 h-11 rounded-xl" value={token} onChange={(event) => setToken(event.target.value)} placeholder={TUTOR_EXIT_CONFIRM_TOKEN} /><p className="mt-1 text-xs text-slate-500">Ketik <strong>{TUTOR_EXIT_CONFIRM_TOKEN}</strong> untuk mengonfirmasi refund seluruh sisa paket.</p></div>
+    <div><Label htmlFor="tutor-exit-reason">Alasan penghentian</Label><Textarea id="tutor-exit-reason" minLength={20} maxLength={500} className="mt-2 min-h-20 rounded-xl" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Contoh: tutor mengundurkan diri dan tidak dapat melanjutkan paket" /></div>
+    <div><Label htmlFor="tutor-exit-evidence">Catatan bukti</Label><Textarea id="tutor-exit-evidence" minLength={50} maxLength={3000} className="mt-2 min-h-28 rounded-xl" value={evidence} onChange={(event) => setEvidence(event.target.value)} placeholder="Uraikan bukti penghentian: pesan tutor, tanggal, dan sesi yang belum terlaksana" /><p className="mt-1 text-xs text-slate-500">Minimal 50 karakter. Tersimpan pada jejak audit dan keputusan refund.</p></div>
+    <div><Label htmlFor="tutor-exit-confirm">Konfirmasi</Label><Input id="tutor-exit-confirm" className="mt-2 h-11 rounded-xl" value={token} onChange={(event) => setToken(event.target.value)} placeholder={TUTOR_EXIT_CONFIRM_TOKEN} /><p className="mt-1 text-xs text-slate-500">Ketik <strong>{TUTOR_EXIT_CONFIRM_TOKEN}</strong> untuk mengonfirmasi refund seluruh sisa paket.</p></div>
     <div className="flex flex-col gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" className="h-11 rounded-xl" onClick={onCancel}>Batal</Button><Button type="button" disabled={processing || token.trim() !== TUTOR_EXIT_CONFIRM_TOKEN || reason.trim().length < 20 || evidence.trim().length < 50} onClick={() => void submit()} className="h-11 rounded-xl bg-rose-600 font-black hover:bg-rose-700">{processing && <Loader2 size={16} className="mr-2 animate-spin" />}Hentikan tutor &amp; refund</Button></div>
   </div>;
 }
