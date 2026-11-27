@@ -12,11 +12,17 @@ use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\RefreshPersistentSession;
 use App\Http\Middleware\VerifyTurnstile;
 use App\Models\Promotion;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -60,17 +66,66 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $isApiOrJson = fn (Request $request): bool => $request->is('api/*') || $request->expectsJson();
+
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request, Throwable $exception): bool => $request->is('api/*') || $request->expectsJson()
+            fn (Request $request, Throwable $exception): bool => $isApiOrJson($request)
         );
 
-        $exceptions->render(function (ModelNotFoundException $exception, Request $request) {
+        $exceptions->render(function (ModelNotFoundException $exception, Request $request) use ($isApiOrJson) {
+            if (! $isApiOrJson($request)) {
+                return null;
+            }
+
             if ($request->is('api/*') && $exception->getModel() === Promotion::class) {
                 return response()->json([
                     'message' => 'Promo tidak ditemukan atau sudah dihapus.',
                 ], 404);
             }
 
-            return null;
+            return response()->json([
+                'message' => 'Data tidak ditemukan.',
+            ], 404);
+        });
+
+        $exceptions->render(function (AuthorizationException $exception, Request $request) use ($isApiOrJson) {
+            if (! $isApiOrJson($request)) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => trim($exception->getMessage()) ?: 'Anda tidak memiliki akses untuk melakukan aksi ini.',
+            ], 403);
+        });
+
+        $exceptions->render(function (HttpExceptionInterface $exception, Request $request) use ($isApiOrJson) {
+            if (! $isApiOrJson($request)) {
+                return null;
+            }
+
+            $status = $exception->getStatusCode();
+            $message = trim($exception->getMessage());
+            if ($message === '') {
+                $message = Response::$statusTexts[$status] ?? 'Terjadi kesalahan.';
+            }
+
+            return response()->json([
+                'message' => $message,
+            ], $status, $exception->getHeaders());
+        });
+
+        $exceptions->render(function (Throwable $exception, Request $request) use ($isApiOrJson) {
+            if (
+                ! $isApiOrJson($request)
+                || $exception instanceof ValidationException
+                || $exception instanceof AuthenticationException
+                || $exception instanceof HttpResponseException
+            ) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => 'Terjadi kesalahan pada server.',
+            ], 500);
         });
     })->create();
