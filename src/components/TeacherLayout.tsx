@@ -238,7 +238,7 @@ export default function TeacherLayout({ children, title, lockContentScroll = fal
         <div className="h-24 flex items-center px-8 border-b border-slate-50">
              <DashboardBrand className="mr-3 h-10 w-10" />
              <div><h1 className="text-xl font-black text-slate-900 tracking-tight leading-none">BimbelKu</h1><span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest bg-indigo-50 px-1.5 py-0.5 rounded mt-1 inline-block">Teacher</span></div>
-             <button aria-label="Tutup menu" className="xl:hidden ml-auto text-slate-400 hover:text-indigo-600 transition" onClick={() => setSidebarOpen(false)}><X size={20} /></button>
+             <button type="button" aria-label="Tutup menu" className="xl:hidden ml-auto grid h-10 w-10 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition" onClick={() => setSidebarOpen(false)}><X size={20} /></button>
         </div>
 
         <nav ref={sidebarScrollRef} onScroll={handleSidebarScroll} className="flex-1 px-5 py-6 space-y-8 overflow-y-auto custom-scrollbar">
@@ -349,7 +349,7 @@ export default function TeacherLayout({ children, title, lockContentScroll = fal
                             <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100">
                                 <MessageSquare size={28}/>
                             </div>
-                            <button aria-label="Tutup notifikasi" onClick={() => setSelectedNotif(null)} className="p-2 bg-slate-50 text-slate-400 rounded-full hover:bg-rose-50 hover:text-rose-500 transition"><X size={20}/></button>
+                            <button type="button" aria-label="Tutup notifikasi" onClick={() => setSelectedNotif(null)} className="grid h-10 w-10 shrink-0 place-items-center bg-slate-50 text-slate-400 rounded-full hover:bg-rose-50 hover:text-rose-500 transition"><X size={20}/></button>
                         </div>
 
                         <div>

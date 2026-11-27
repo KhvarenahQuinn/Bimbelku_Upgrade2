@@ -258,7 +258,7 @@ export default function StudentLayout({ children, title, lockContentScroll = fal
                   <span className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em] bg-blue-50 px-1.5 py-0.5 rounded mt-1 inline-block">Student</span>
                 </div>
             </div>
-            <button type="button" aria-label="Tutup menu" className="ml-auto rounded-xl bg-slate-50 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 xl:hidden" onClick={() => setSidebarOpen(false)}>
+            <button type="button" aria-label="Tutup menu" className="ml-auto grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-600 xl:hidden" onClick={() => setSidebarOpen(false)}>
               <X size={20} />
             </button>
         </div>
@@ -400,7 +400,7 @@ export default function StudentLayout({ children, title, lockContentScroll = fal
                                 type="button"
                                 onClick={() => setSelectedNotif(null)}
                                 aria-label="Tutup notifikasi"
-                                className="p-2 bg-slate-50 text-slate-500 rounded-full hover:bg-rose-50 hover:text-rose-500 transition"
+                                className="grid h-10 w-10 shrink-0 place-items-center bg-slate-50 text-slate-500 rounded-full hover:bg-rose-50 hover:text-rose-500 transition"
                             >
                                 <X size={20}/>
                             </button>

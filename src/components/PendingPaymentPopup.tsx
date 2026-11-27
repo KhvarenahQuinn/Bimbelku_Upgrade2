@@ -228,7 +228,7 @@ export default function PendingPaymentPopup() {
                 <Clock size={14} />
                 <span className="min-w-0 font-mono tracking-tighter">{formatTime(timeLeft)}</span>
              </div>
-             <button aria-label="Tutup pengingat tagihan" onClick={() => setIsVisible(false)} className="p-1.5 hover:bg-slate-50 rounded-full text-slate-300 hover:text-slate-500 transition">
+             <button type="button" aria-label="Tutup pengingat tagihan" onClick={() => setIsVisible(false)} className="grid h-10 w-10 shrink-0 place-items-center hover:bg-slate-50 rounded-full text-slate-400 hover:text-slate-600 transition">
                 <X size={18} />
              </button>
           </div>
