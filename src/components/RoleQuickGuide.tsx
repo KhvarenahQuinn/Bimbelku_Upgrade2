@@ -6,6 +6,7 @@ import { useLocation } from "react-router-dom";
 import { getCached } from "@/lib/http";
 import { publicMediaUrl } from "@/lib/apiBase";
 import { scheduleNonCriticalTask } from "@/lib/schedule";
+import { getPackageBuilderTutorialKey, getTutorialAccountKey } from "@/lib/tutorialStorage";
 
 type Role = "student" | "teacher" | "admin";
 type Callout = { selector?: string; target?: string } | string | null;
@@ -256,7 +257,6 @@ class TutorialBoundary extends Component<{ children: ReactNode }, { hasError: bo
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(Math.max(value, minimum), Math.max(minimum, maximum));
 
-const packageBuilderTutorialKey = "bimbelku.tutorial.student.multi-subject.v1";
 const autoOpenContexts = new Set([
   "dashboard",
   "package-builder",
@@ -279,22 +279,9 @@ function RoleQuickGuideContent({ role }: { role: Role }) {
   const touchStart = useRef<number | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
-  const tutorialAccountKey = useMemo(() => {
-    try {
-      const storedUser = JSON.parse(localStorage.getItem("user") || "null") as {
-        id?: number | string;
-        email?: string;
-      } | null;
-      const identity = storedUser?.id ?? storedUser?.email;
-      return identity !== undefined && identity !== null && String(identity).trim()
-        ? String(identity).trim()
-        : "anonymous";
-    } catch {
-      return "anonymous";
-    }
-  }, []);
+  const tutorialAccountKey = useMemo(() => getTutorialAccountKey(), []);
   const firstVisitKey = context === "package-builder"
-    ? `${packageBuilderTutorialKey}.${tutorialAccountKey}.easy-v2`
+    ? getPackageBuilderTutorialKey(tutorialAccountKey)
     : `bimbelku.tutorial.${role}.${context}.${tutorialAccountKey}.easy-v1`;
   const dashboardPath = role === "student" ? "/student/dashboard" : role === "teacher" ? "/guru" : "/admin";
   const activeStep = tutorial.steps[step] ?? fallback[role].steps[0];

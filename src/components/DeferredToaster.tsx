@@ -1,6 +1,16 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { markToasterReady, markToasterUnmounted } from "@/lib/notify";
 
 const Toaster = lazy(() => import("@/components/ui/sonner").then((module) => ({ default: module.Toaster })));
+
+function MountedToaster() {
+  useEffect(() => {
+    markToasterReady();
+    return () => markToasterUnmounted();
+  }, []);
+
+  return <Toaster position="top-center" richColors closeButton />;
+}
 
 export default function DeferredToaster() {
   const [ready, setReady] = useState(false);
@@ -22,7 +32,7 @@ export default function DeferredToaster() {
 
   return ready ? (
     <Suspense fallback={null}>
-      <Toaster position="top-center" richColors closeButton />
+      <MountedToaster />
     </Suspense>
   ) : null;
 }

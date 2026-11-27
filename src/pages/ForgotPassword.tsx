@@ -1,6 +1,7 @@
 import { notify } from "@/lib/notify";
 import { API_BASE_URL } from "@/lib/apiBase";
 import { getApiErrorDetails } from "@/lib/http";
+import { isTurnstileEnabled } from "@/lib/turnstile";
 import { isValidEmail } from "@/lib/validation";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -13,7 +14,7 @@ const ForgotPassword = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
-  const turnstileEnabled = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() !== "";
+  const turnstileEnabled = isTurnstileEnabled();
 
   // Memoize Turnstile token handler to prevent infinite loop
   const handleTurnstileToken = useCallback((token: string) => {

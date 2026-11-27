@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } 
 import { API_BASE_URL } from "@/lib/apiBase";
 import { notify } from "@/lib/notify";
 import { storeBrowserSession } from "@/lib/session";
+import { isTurnstileEnabled } from "@/lib/turnstile";
 import { isValidEmail } from "@/lib/validation";
 import TurnstileWidget, { type TurnstileStatus } from "@/components/TurnstileWidget";
 
@@ -34,7 +35,7 @@ export default function AdminLogin() {
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileStatus, setTurnstileStatus] = useState<TurnstileStatus>("idle");
   const [turnstileRetry, setTurnstileRetry] = useState(0);
-  const turnstileEnabled = Boolean(import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim());
+  const turnstileEnabled = isTurnstileEnabled();
   const turnstileFailed = turnstileStatus === "error" || turnstileStatus === "expired" || turnstileStatus === "stalled";
 
   const safeAdminRedirect = (value: string | null) => {

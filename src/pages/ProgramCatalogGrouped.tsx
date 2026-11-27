@@ -67,13 +67,15 @@ export default function ProgramCatalogGrouped() {
   const displayGroups = useMemo(() => {
     const source: ProgramGroup[] = groups.length ? groups : [{ id: 0, slug: "mapel", name: "Mata pelajaran tersedia", description: "Pilih mata pelajaran yang sesuai dengan kebutuhan belajar.", subjects }];
     const search = query.trim().toLocaleLowerCase("id-ID");
-    return source.map((item) => ({
-      ...item,
-      subjects: item.subjects.filter((subject) =>
-        (level === "Semua" || supportedLevels(subject).includes(level))
-        && (!search || `${subject.name} ${item.name}`.toLocaleLowerCase("id-ID").includes(search))),
-    })).filter((item) => item.subjects.length > 0);
-  }, [groups, level, query, subjects]);
+    return source
+      .filter((item) => group === "all" || item.slug === group)
+      .map((item) => ({
+        ...item,
+        subjects: item.subjects.filter((subject) =>
+          (level === "Semua" || supportedLevels(subject).includes(level))
+          && (!search || `${subject.name} ${item.name}`.toLocaleLowerCase("id-ID").includes(search))),
+      })).filter((item) => item.subjects.length > 0);
+  }, [group, groups, level, query, subjects]);
   const totalUnique = new Set(displayGroups.flatMap((item) => item.subjects.map((subject) => subject.id))).size;
   const visibleProducts = learningPrograms.filter((item) =>
     (level === "Semua" || (item.education_levels?.length ? item.education_levels : [item.education_level]).includes(level))

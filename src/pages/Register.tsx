@@ -35,6 +35,7 @@ import { whatsappHref } from "@/lib/websiteContent";
 import GoogleAuthButton from "@/components/GoogleAuthButton";
 import AuthExperience from "@/components/AuthExperience";
 import TurnstileWidget from "@/components/TurnstileWidget";
+import { isTurnstileEnabled } from "@/lib/turnstile";
 
 
 const CameraCapture = lazy(() => import("@/components/CameraCapture"));
@@ -97,7 +98,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
     ? `/login?redirect=${encodeURIComponent(safeRedirect)}`
     : "/login";
   const { settings } = useWebsiteContent();
-  const turnstileEnabled = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() !== "";
+  const turnstileEnabled = isTurnstileEnabled();
 
   const [form, setForm] = useState(() => ({ ...initialForm, email: searchParams.get("email") || guestEmail }));
   const [levels, setLevels] = useState<string[]>([]);

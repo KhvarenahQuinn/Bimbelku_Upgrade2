@@ -7,6 +7,7 @@ import GoogleAuthButton from "@/components/GoogleAuthButton";
 import AuthExperience from "@/components/AuthExperience";
 import TurnstileWidget, { type TurnstileStatus } from "@/components/TurnstileWidget";
 import { storeBrowserSession } from "@/lib/session";
+import { isTurnstileEnabled } from "@/lib/turnstile";
 import { isValidEmail } from "@/lib/validation";
 
 export default function Login() {
@@ -27,7 +28,7 @@ export default function Login() {
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileStatus, setTurnstileStatus] = useState<TurnstileStatus>("idle");
   const [turnstileRetry, setTurnstileRetry] = useState(0);
-  const turnstileEnabled = Boolean(import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim());
+  const turnstileEnabled = isTurnstileEnabled();
   const turnstileFailed = turnstileStatus === "error" || turnstileStatus === "expired" || turnstileStatus === "stalled";
   const countdownActive = remainingSeconds > 0;
   const googleError = searchParams.get("google_error");

@@ -315,6 +315,23 @@ const validationMessageAliases: Record<string, string> = {
   "validation.exists": "Pilihan sudah tidak tersedia. Muat ulang lalu pilih kembali.",
   "validation.array": "Format pilihan tidak sesuai.",
   "validation.date": "Tanggal yang dipilih tidak valid.",
+  "validation.date_format": "Format tanggal tidak sesuai.",
+  "validation.min.string": "Isian terlalu pendek. Periksa kembali data yang dimasukkan.",
+  "validation.min.numeric": "Nilai yang dimasukkan terlalu kecil.",
+  "validation.max.string": "Isian melebihi batas panjang yang diperbolehkan.",
+  "validation.max.numeric": "Nilai yang dimasukkan melebihi batas maksimum.",
+  "validation.after_or_equal": "Tanggal akhir harus sama dengan atau setelah tanggal mulai.",
+  "validation.before_or_equal": "Tanggal harus sama dengan atau sebelum batas yang ditentukan.",
+  "validation.after": "Tanggal akhir harus setelah tanggal mulai.",
+  "validation.before": "Tanggal harus sebelum batas yang ditentukan.",
+  "validation.in": "Pilihan yang dikirim tidak valid.",
+  "validation.not_in": "Pilihan yang dikirim tidak diperbolehkan.",
+  "validation.integer": "Nilai harus berupa bilangan bulat.",
+  "validation.numeric": "Nilai harus berupa angka.",
+  "validation.boolean": "Pilihan harus bernilai ya atau tidak.",
+  "validation.string": "Format teks tidak valid.",
+  "validation.email": "Format alamat email tidak valid.",
+  "validation.confirmed": "Konfirmasi isian tidak cocok.",
 };
 
 const duplicateFieldMessage = (field?: string): string => {

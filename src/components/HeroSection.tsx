@@ -56,8 +56,19 @@ export default function HeroSection() {
   };
   const submitSearch = (event: FormEvent) => {
     event.preventDefault();
-    window.dispatchEvent(new CustomEvent("bimbelku:program-search", { detail: query.trim() }));
-    window.history.replaceState(null, "", "#program");
+    const trimmed = query.trim();
+    try {
+      if (trimmed) sessionStorage.setItem("bimbelku:pending-program-search", trimmed);
+      else sessionStorage.removeItem("bimbelku:pending-program-search");
+    } catch {
+      // Abaikan bila sessionStorage tidak tersedia.
+    }
+    const nextUrl = trimmed
+      ? `${window.location.pathname}?q=${encodeURIComponent(trimmed)}#program`
+      : `${window.location.pathname}#program`;
+    window.history.replaceState(null, "", nextUrl);
+    window.dispatchEvent(new CustomEvent("bimbelku:load-anchor", { detail: "program" }));
+    window.dispatchEvent(new CustomEvent("bimbelku:program-search", { detail: trimmed }));
     scrollToSection("program");
   };
 

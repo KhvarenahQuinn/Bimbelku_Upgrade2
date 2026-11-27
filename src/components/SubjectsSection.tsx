@@ -58,7 +58,18 @@ export default function SubjectsSection() {
   const [subjects, setSubjects] = useState<LandingSubject[]>([]);
   const [level, setLevel] = useState("Semua");
   const [category, setCategory] = useState<CategoryKey>("all");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const urlQuery = new URLSearchParams(window.location.search).get("q")?.trim();
+    if (urlQuery) return urlQuery;
+    try {
+      const pending = sessionStorage.getItem("bimbelku:pending-program-search")?.trim() || "";
+      if (pending) sessionStorage.removeItem("bimbelku:pending-program-search");
+      return pending;
+    } catch {
+      return "";
+    }
+  });
   const [visibleLimit, setVisibleLimit] = useState(12);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -82,6 +93,11 @@ export default function SubjectsSection() {
     const receiveSearch = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail;
       if (typeof detail === "string") {
+        try {
+          sessionStorage.removeItem("bimbelku:pending-program-search");
+        } catch {
+          // Abaikan bila sessionStorage tidak tersedia.
+        }
         setQuery(detail);
         setVisibleLimit(12);
       }
@@ -118,7 +134,24 @@ export default function SubjectsSection() {
               <span className="sr-only">Cari mata pelajaran</span>
               <span className="flex min-h-14 items-center gap-3 rounded-2xl border border-stone-300 bg-white px-4 shadow-sm focus-within:border-orange-500 focus-within:ring-4 focus-within:ring-orange-100">
                 <Search className="shrink-0 text-slate-400" size={20} aria-hidden="true" />
-                <input value={query} onChange={(event) => { setQuery(event.target.value); setVisibleLimit(12); }} placeholder={programs?.content?.search_placeholder || "Cari Matematika, Bahasa Inggris, Fisika..."} className="h-12 min-w-0 flex-1 bg-transparent text-base font-semibold text-[#14213D] outline-none placeholder:text-slate-400" />
+                <input value={query} onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setQuery(nextValue);
+                  setVisibleLimit(12);
+                  if (!nextValue.trim()) {
+                    try {
+                      sessionStorage.removeItem("bimbelku:pending-program-search");
+                    } catch {
+                      // Abaikan bila sessionStorage tidak tersedia.
+                    }
+                    const params = new URLSearchParams(window.location.search);
+                    if (params.has("q")) {
+                      params.delete("q");
+                      const searchStr = params.toString();
+                      window.history.replaceState(null, "", `${window.location.pathname}${searchStr ? `?${searchStr}` : ""}${window.location.hash}`);
+                    }
+                  }
+                }} placeholder={programs?.content?.search_placeholder || "Cari Matematika, Bahasa Inggris, Fisika..."} className="h-12 min-w-0 flex-1 bg-transparent text-base font-semibold text-[#14213D] outline-none placeholder:text-slate-400" />
               </span>
             </label>
           </Reveal>

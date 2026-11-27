@@ -30,6 +30,7 @@ import { EDUCATION_LEVELS, GRADES_BY_EDUCATION_LEVEL } from "@/lib/educationCata
 import { notify } from "@/lib/notify";
 import LearningFocusPicker, { type LearningFocusMode } from "@/components/LearningFocusPicker";
 import { maxWeekdaysForSessions, normalizePackageWeekdays, normalizeWeekdays } from "@/lib/packageWeekdays";
+import { getPackageBuilderTutorialKey } from "@/lib/tutorialStorage";
 
 type Plan = {
   id: number;
@@ -128,7 +129,6 @@ type SavedDraft = {
 };
 
 const DRAFT_KEY = "bimbelku.package-builder.stage-6a";
-const MULTI_SUBJECT_TUTORIAL_KEY = "bimbelku.tutorial.student.multi-subject.v1";
 
 const draftKeyForCurrentUser = () => {
   try {
@@ -683,16 +683,16 @@ export default function PackageBuilder() {
   };
 
   useEffect(() => {
-    if (loading || !tutorialStatusLoaded || hasMultiSubjectPackage || !plan || plan.maximum_subjects < 2 || multiSubjectGuideOpened.current) return;
+    if (loading || !tutorialStatusLoaded || step !== 0 || hasMultiSubjectPackage || !plan || plan.maximum_subjects < 2 || multiSubjectGuideOpened.current) return;
     try {
-      if (localStorage.getItem(MULTI_SUBJECT_TUTORIAL_KEY)) return;
+      if (localStorage.getItem(getPackageBuilderTutorialKey())) return;
     } catch {
       return;
     }
     multiSubjectGuideOpened.current = true;
     const timer = window.setTimeout(openMultiSubjectGuide, 450);
     return () => window.clearTimeout(timer);
-  }, [hasMultiSubjectPackage, loading, plan, tutorialStatusLoaded]);
+  }, [hasMultiSubjectPackage, loading, plan, step, tutorialStatusLoaded]);
 
   useEffect(() => {
     if (!summaryOpen) return;
@@ -1162,8 +1162,9 @@ export default function PackageBuilder() {
             ].map((item, index) => {
               const active = index === activeStepIndex;
               const done = completedSteps[index] && !active;
+              const canReachStep = index <= activeStepIndex || completedSteps.slice(0, index).every(Boolean);
               return <li key={item.label} className="min-w-0">
-                <button type="button" disabled={index > activeStepIndex} onClick={() => moveStep(index)} aria-current={active ? "step" : undefined} className={`flex min-h-[4.75rem] w-full min-w-0 items-start gap-3 rounded-2xl border p-3 text-left transition ${active ? "border-slate-950 bg-slate-950 text-white shadow-lg shadow-slate-200" : done ? "border-emerald-200 bg-emerald-50 text-emerald-900 hover:border-emerald-300" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
+                <button type="button" disabled={!canReachStep} onClick={() => moveStep(index)} aria-current={active ? "step" : undefined} className={`flex min-h-[4.75rem] w-full min-w-0 items-start gap-3 rounded-2xl border p-3 text-left transition ${active ? "border-slate-950 bg-slate-950 text-white shadow-lg shadow-slate-200" : done ? "border-emerald-200 bg-emerald-50 text-emerald-900 hover:border-emerald-300" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
                   <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-black ${active ? "bg-orange-500 text-white" : done ? "bg-emerald-600 text-white" : "bg-white text-slate-500"}`}>{done ? <Check size={15} strokeWidth={3} /> : index + 1}</span>
                   <span className="min-w-0"><span className="block break-words text-xs font-black sm:text-sm">{item.label}</span><span className={`mt-1 block break-words text-[10px] font-semibold leading-4 ${active ? "text-slate-300" : done ? "text-emerald-700" : "text-slate-400"}`}>{item.detail}</span></span>
                 </button>
