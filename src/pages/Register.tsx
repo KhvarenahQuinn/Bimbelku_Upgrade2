@@ -375,7 +375,7 @@ export default function Register({ role = "student" }: { role?: Role }) {
     <AuthExperience mode="register" role={role}>
       <section className="min-w-0">
 <div className="flex items-start justify-between gap-4">
-        <div><p className="text-xs font-black uppercase tracking-[.2em] text-orange-600">Buat akun</p><h2 className="mt-2 text-3xl font-black text-slate-900">{role === "teacher" ? "Daftar jadi tutor" : "Mulai bersama BimbelKu"}</h2><p className="mt-2 text-sm text-slate-500">Sudah punya akun? <Link to={loginHref} state={guestEmail ? { email: guestEmail } : undefined} className="font-bold text-indigo-600">Masuk di sini</Link></p></div>
+        <div><p className="text-xs font-black uppercase tracking-[.2em] text-orange-600">Buat akun</p><h1 className="mt-2 text-3xl font-black text-slate-900">{role === "teacher" ? "Daftar jadi tutor" : "Mulai bersama BimbelKu"}</h1><p className="mt-2 text-sm text-slate-500">Sudah punya akun? <Link to={loginHref} state={guestEmail ? { email: guestEmail } : undefined} className="font-bold text-indigo-600">Masuk di sini</Link></p></div>
       </div>
 
         <ol className="mt-6 grid grid-cols-3 gap-2" aria-label={`Langkah pendaftaran, langkah ${step} dari ${totalSteps}`}>

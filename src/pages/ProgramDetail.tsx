@@ -162,7 +162,19 @@ export default function ProgramDetail() {
   }
 
   if (!program) {
-    return <div className="public-site min-h-screen bg-[#FFFBF7]"><Navbar /><main className="mx-auto grid min-h-80 max-w-2xl place-items-center px-5 text-center"><div><BookOpenCheck size={42} className="mx-auto text-orange-600" /><h1 className="mt-5 text-3xl font-extrabold text-[#14213D]">Program tidak ditemukan</h1><p className="mt-3 leading-7 text-slate-600">Program mungkin sudah tidak aktif atau alamatnya berubah.</p><Link to="/program" className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#14213D] px-5 text-sm font-extrabold text-white"><ArrowLeft size={17} />Kembali ke katalog</Link></div></main><Footer /></div>;
+    return (
+      <div className="public-site min-h-screen bg-[#FFFBF7]">
+        <SeoHead
+          title="Program Tidak Ditemukan | BimbelKu"
+          description="Program mungkin sudah tidak aktif atau alamatnya berubah."
+          canonicalPath={`/program/${slug}`}
+          robots="noindex,follow"
+        />
+        <Navbar />
+        <main className="mx-auto grid min-h-80 max-w-2xl place-items-center px-5 text-center"><div><BookOpenCheck size={42} className="mx-auto text-orange-600" /><h1 className="mt-5 text-3xl font-extrabold text-[#14213D]">Program tidak ditemukan</h1><p className="mt-3 leading-7 text-slate-600">Program mungkin sudah tidak aktif atau alamatnya berubah.</p><Link to="/program" className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#14213D] px-5 text-sm font-extrabold text-white"><ArrowLeft size={17} />Kembali ke katalog</Link></div></main>
+        <Footer />
+      </div>
+    );
   }
 
   const builderUrl = packagePath(program, selectedLevel);

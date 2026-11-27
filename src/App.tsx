@@ -315,6 +315,7 @@ export const AppContent = () => (
               <Route path="/admin/tutor-searches" element={<TutorSearchMonitoring />} />
               <Route path="/admin/guru" element={<TeacherVerification />} />
               <Route path="/admin/users" element={<UserManagement />} />
+              <Route path="/admin/accounts" element={<Navigate to="/admin/users" replace />} />
               <Route path="/admin/settings-footer" element={<EditFooter />} />
               <Route path="/admin/website" element={<PublicWebsiteSettings />} />
               <Route path="/admin/website-media" element={<WebsiteMediaSettings />} />

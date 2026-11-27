@@ -142,7 +142,7 @@ export default function Login() {
   return <AuthExperience mode="login" role="all">
       <section>
         <p className="mt-8 text-xs font-extrabold uppercase tracking-wider text-orange-700">Selamat datang kembali</p>
-        <h2 className="mt-2 text-3xl font-extrabold text-[#14213D]">Masuk ke BimbelKu</h2>
+        <h1 className="mt-2 text-3xl font-extrabold text-[#14213D]">Masuk ke BimbelKu</h1>
         <p className="mt-2 text-sm leading-6 text-slate-500">Lanjutkan belajar, lihat jadwal, dan kelola kelasmu dalam satu akun.</p>
         {googleError && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{googleError}</p>}
         {summaryError && <p role="alert" aria-live="assertive" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{summaryError}</p>}
