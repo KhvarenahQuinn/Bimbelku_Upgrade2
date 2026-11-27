@@ -69,19 +69,18 @@ const DialogContent = React.forwardRef<
   const dialogNodeRef = React.useRef<React.ElementRef<typeof DialogPrimitive.Content> | null>(null);
   const setRefs = React.useCallback(
     (node: React.ElementRef<typeof DialogPrimitive.Content> | null) => {
-      if (node) dialogNodeRef.current = node;
+      if (node) {
+        dialogNodeRef.current = node;
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && active !== document.body && !node.contains(active)) {
+          restoreFocusRef.current = active;
+        }
+      }
       if (typeof ref === "function") ref(node);
       else if (ref) ref.current = node;
     },
     [ref],
   );
-
-  React.useLayoutEffect(() => {
-    const active = document.activeElement;
-    if (active instanceof HTMLElement && active !== document.body) {
-      restoreFocusRef.current = active;
-    }
-  }, []);
 
   return (
     <DialogPortal>
@@ -112,14 +111,20 @@ const DialogContent = React.forwardRef<
         }}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);
+          const target = restoreFocusRef.current;
           const activeDialog = document.activeElement?.closest?.('[role="dialog"], [role="alertdialog"]');
           if (
             !event.defaultPrevented
-            && restoreFocusRef.current?.isConnected
+            && target?.isConnected
             && (!activeDialog || activeDialog === dialogNodeRef.current || !activeDialog.isConnected)
           ) {
             event.preventDefault();
-            restoreFocusRef.current.focus();
+            target.focus({ preventScroll: true });
+            window.requestAnimationFrame(() => {
+              if (document.activeElement === document.body && target.isConnected) {
+                target.focus({ preventScroll: true });
+              }
+            });
           }
         }}
         {...props}
