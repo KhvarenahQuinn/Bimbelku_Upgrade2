@@ -18,6 +18,7 @@ import ProtectedImage from "@/components/ProtectedImage";
 import { ResponsiveSelect } from "@/components/ResponsiveSelect";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import http, { getApiError, getApiErrorDetails } from "@/lib/http";
 
@@ -311,37 +312,51 @@ export default function PaymentVerification({ embedded = false }: { embedded?: b
       </div>
 
       {proof && <ProofModal payment={proof} onClose={() => setProof(null)} onAccept={() => void accept(proof)} onReject={() => { setRejecting(proof); setRejectReason(""); setProof(null); }} pending={tab === "pending"} />}
-      {rejecting && (
-        <div className="fixed inset-0 z-[var(--layer-modal)] grid place-items-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-4">
-          <div role="dialog" aria-modal="true" className="w-full max-w-lg rounded-[1.75rem] bg-white p-5 shadow-2xl sm:p-6">
-            <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-start gap-2"><button type="button" aria-label="Kembali ke daftar pembayaran" onClick={() => setRejecting(null)} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><ArrowLeft size={18} /></button><div className="min-w-0 text-center"><p className="text-lg font-black text-slate-950">Tolak bukti pembayaran</p><p className="mt-1 break-words text-sm text-slate-500">{rejecting.will_refund_if_accepted ? (rejecting.refund_reason_if_accepted === "capacity_full" ? "Kapasitas peserta terverifikasi sudah penuh. Penolakan akan mengakhiri kursi anomali tanpa refund." : "Kelas sudah dibatalkan. Penolakan akan menyelesaikan pembatalan tanpa refund.") : rejecting.is_cheap_class && !rejecting.can_resubmit_if_rejected ? "Masa unggah ulang tidak tersedia; penolakan akan mengakhiri kursi." : "Tuliskan alasan yang dapat dipahami murid."}</p></div><button type="button" aria-label="Tutup" onClick={() => setRejecting(null)} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><X size={18} /></button></div>
-            <textarea autoFocus value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} maxLength={500} className="mt-5 min-h-32 w-full rounded-xl border border-slate-200 p-4 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="Contoh: nominal pada bukti tidak sesuai dengan tagihan..." />
-            <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setRejecting(null)} className="rounded-xl">Batal</Button><Button onClick={() => void reject()} disabled={processingId === rejecting.id} className="rounded-xl bg-rose-600 hover:bg-rose-700">Tolak bukti</Button></div>
-          </div>
-        </div>
-      )}
-      {reconciling && (
-        <div className="fixed inset-0 z-[var(--layer-modal)] grid place-items-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-4">
-          <div role="dialog" aria-modal="true" className="w-full max-w-lg rounded-[1.75rem] bg-white p-5 shadow-2xl sm:p-6">
-            <div className="flex items-start justify-between gap-3">
-              <div><p className="text-lg font-black text-slate-950">Rekonsiliasi pembayaran</p><p className="mt-1 text-sm text-slate-500">{reconciling.order_id} · {reconciling.student?.name}</p></div>
-              <button type="button" aria-label="Tutup" onClick={() => setReconciling(null)} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><X size={18} /></button>
-            </div>
-            <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm">
-              <div><p className="text-xs font-bold text-slate-400">Total tagihan</p><p className="mt-1 font-black">{rupiah(reconciling.amount)}</p></div>
-              <div><p className="text-xs font-bold text-slate-400">Transfer yang diperlukan</p><p className="mt-1 font-black">{rupiah(reconciling.payment_outstanding_amount && reconciling.payment_outstanding_amount > 0 ? reconciling.payment_outstanding_amount : (reconciling.external_payment_amount ?? reconciling.amount))}</p></div>
-              {Boolean(reconciling.external_received_amount) && <div className="col-span-2"><p className="text-xs font-bold text-slate-400">Sudah diterima sebelumnya</p><p className="mt-1 font-black text-indigo-700">{rupiah(reconciling.external_received_amount || 0)}</p></div>}
-            </div>
-            <label className="mt-5 block"><span className="text-sm font-black text-slate-800">Nominal dana yang masuk</span><div className="mt-2 flex h-12 items-center rounded-xl border border-slate-200 px-4 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100"><span className="mr-2 text-sm font-bold text-slate-500">Rp</span><input autoFocus inputMode="numeric" value={actualReceived} onChange={(event) => setActualReceived(event.target.value.replace(/[^0-9]/g, ""))} className="min-w-0 flex-1 bg-transparent text-lg font-black outline-none" placeholder="0" /></div></label>
-            {actualReceived && (() => {
-              const required = reconciling.payment_outstanding_amount && reconciling.payment_outstanding_amount > 0 ? reconciling.payment_outstanding_amount : (reconciling.external_payment_amount ?? reconciling.amount);
-              const difference = Number(actualReceived) - required;
-              return <div className={`mt-3 rounded-xl p-3 text-sm font-bold ${difference < 0 ? "bg-amber-50 text-amber-800" : difference > 0 ? "bg-indigo-50 text-indigo-800" : "bg-emerald-50 text-emerald-800"}`}>{difference < 0 ? `Kurang ${rupiah(Math.abs(difference))}` : difference > 0 ? `Lebih ${rupiah(difference)} · masuk Saldo BimbelKu` : "Nominal tepat"}</div>;
-            })()}
-            <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setReconciling(null)} className="rounded-xl">Batal</Button><Button onClick={() => void reconcile()} disabled={processingId === reconciling.id} className="rounded-xl bg-slate-950">Konfirmasi nominal</Button></div>
-          </div>
-        </div>
-      )}
+      <Dialog open={Boolean(rejecting)} onOpenChange={(open) => { if (!open) setRejecting(null); }}>
+        <DialogContent hideCloseButton className="w-full max-w-lg gap-0 rounded-[1.75rem] border-0 bg-white p-5 shadow-2xl sm:p-6">
+          {rejecting && (
+            <>
+              <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-start gap-2">
+                <button type="button" aria-label="Kembali ke daftar pembayaran" onClick={() => setRejecting(null)} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><ArrowLeft size={18} /></button>
+                <div className="min-w-0 text-center">
+                  <DialogTitle asChild><p className="px-0 text-lg font-black text-slate-950">Tolak bukti pembayaran</p></DialogTitle>
+                  <DialogDescription asChild><p className="mt-1 break-words text-sm text-slate-500">{rejecting.will_refund_if_accepted ? (rejecting.refund_reason_if_accepted === "capacity_full" ? "Kapasitas peserta terverifikasi sudah penuh. Penolakan akan mengakhiri kursi anomali tanpa refund." : "Kelas sudah dibatalkan. Penolakan akan menyelesaikan pembatalan tanpa refund.") : rejecting.is_cheap_class && !rejecting.can_resubmit_if_rejected ? "Masa unggah ulang tidak tersedia; penolakan akan mengakhiri kursi." : "Tuliskan alasan yang dapat dipahami murid."}</p></DialogDescription>
+                </div>
+                <button type="button" aria-label="Tutup" onClick={() => setRejecting(null)} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><X size={18} /></button>
+              </div>
+              <textarea autoFocus value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} maxLength={500} className="mt-5 min-h-32 w-full rounded-xl border border-slate-200 p-4 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="Contoh: nominal pada bukti tidak sesuai dengan tagihan..." />
+              <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setRejecting(null)} className="rounded-xl">Batal</Button><Button onClick={() => void reject()} disabled={processingId === rejecting.id} className="rounded-xl bg-rose-600 hover:bg-rose-700">Tolak bukti</Button></div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(reconciling)} onOpenChange={(open) => { if (!open) setReconciling(null); }}>
+        <DialogContent hideCloseButton className="w-full max-w-lg gap-0 rounded-[1.75rem] border-0 bg-white p-5 shadow-2xl sm:p-6">
+          {reconciling && (
+            <>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <DialogTitle asChild><p className="px-0 text-left text-lg font-black text-slate-950">Rekonsiliasi pembayaran</p></DialogTitle>
+                  <DialogDescription asChild><p className="mt-1 text-sm text-slate-500">{reconciling.order_id} · {reconciling.student?.name}</p></DialogDescription>
+                </div>
+                <button type="button" aria-label="Tutup" onClick={() => setReconciling(null)} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><X size={18} /></button>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm">
+                <div><p className="text-xs font-bold text-slate-400">Total tagihan</p><p className="mt-1 font-black">{rupiah(reconciling.amount)}</p></div>
+                <div><p className="text-xs font-bold text-slate-400">Transfer yang diperlukan</p><p className="mt-1 font-black">{rupiah(reconciling.payment_outstanding_amount && reconciling.payment_outstanding_amount > 0 ? reconciling.payment_outstanding_amount : (reconciling.external_payment_amount ?? reconciling.amount))}</p></div>
+                {Boolean(reconciling.external_received_amount) && <div className="col-span-2"><p className="text-xs font-bold text-slate-400">Sudah diterima sebelumnya</p><p className="mt-1 font-black text-indigo-700">{rupiah(reconciling.external_received_amount || 0)}</p></div>}
+              </div>
+              <label className="mt-5 block"><span className="text-sm font-black text-slate-800">Nominal dana yang masuk</span><div className="mt-2 flex h-12 items-center rounded-xl border border-slate-200 px-4 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100"><span className="mr-2 text-sm font-bold text-slate-500">Rp</span><input autoFocus inputMode="numeric" value={actualReceived} onChange={(event) => setActualReceived(event.target.value.replace(/[^0-9]/g, ""))} className="min-w-0 flex-1 bg-transparent text-lg font-black outline-none" placeholder="0" /></div></label>
+              {actualReceived && (() => {
+                const required = reconciling.payment_outstanding_amount && reconciling.payment_outstanding_amount > 0 ? reconciling.payment_outstanding_amount : (reconciling.external_payment_amount ?? reconciling.amount);
+                const difference = Number(actualReceived) - required;
+                return <div className={`mt-3 rounded-xl p-3 text-sm font-bold ${difference < 0 ? "bg-amber-50 text-amber-800" : difference > 0 ? "bg-indigo-50 text-indigo-800" : "bg-emerald-50 text-emerald-800"}`}>{difference < 0 ? `Kurang ${rupiah(Math.abs(difference))}` : difference > 0 ? `Lebih ${rupiah(difference)} · masuk Saldo BimbelKu` : "Nominal tepat"}</div>;
+              })()}
+              <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setReconciling(null)} className="rounded-xl">Batal</Button><Button onClick={() => void reconcile()} disabled={processingId === reconciling.id} className="rounded-xl bg-slate-950">Konfirmasi nominal</Button></div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </FinanceSectionFrame>
   );
 }
@@ -356,5 +371,23 @@ function SummaryCard({ icon: Icon, label, value, detail, tone }: { icon: typeof 
 }
 
 function ProofModal({ payment, onClose, onAccept, onReject, pending }: { payment: Payment; onClose: () => void; onAccept: () => void; onReject: () => void; pending: boolean }) {
-  return <div className="fixed inset-0 z-[var(--layer-detail)] grid place-items-center bg-slate-950/65 p-3 backdrop-blur-sm sm:p-4"><div role="dialog" aria-modal="true" className="max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl overflow-y-auto rounded-[1.75rem] bg-white shadow-2xl sm:max-h-[92dvh]"><div className="sticky top-0 z-10 grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-start gap-2 border-b border-slate-100 bg-white/95 p-3 backdrop-blur sm:p-4"><button type="button" aria-label="Kembali ke daftar pembayaran" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><ArrowLeft size={18} /></button><div className="min-w-0 text-center"><p className="break-words font-black text-slate-950">Bukti transfer {payment.order_id}</p><p className="mt-1 break-words text-xs text-slate-500">{payment.student?.name} · transfer {rupiah(payment.external_payment_amount ?? payment.amount)}{(payment.wallet_reserved_amount || 0) + (payment.wallet_applied_amount || 0) ? ` · saldo ${rupiah((payment.wallet_reserved_amount || 0) + (payment.wallet_applied_amount || 0))}` : ""}</p></div><button type="button" aria-label="Tutup" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><X size={18} /></button></div><div className="p-4 sm:p-6">{payment.will_refund_if_accepted && <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm font-bold leading-6 text-violet-800">{payment.refund_reason_if_accepted === "capacity_full" ? "Kapasitas peserta terverifikasi sudah penuh. Jika bukti ini diterima, dana otomatis masuk antrean refund penuh dan peserta tidak ditambahkan." : "Kelas Bersama sudah dibatalkan. Jika bukti ini diterima, dana otomatis masuk antrean refund penuh. Jika ditolak, pembatalan selesai tanpa refund."}</div>}<div className="rounded-2xl bg-slate-100 p-2"><ProtectedImage source={payment.payment_proof || ""} alt={`Bukti pembayaran ${payment.order_id}`} className="mx-auto max-h-[60dvh] w-full rounded-xl object-contain" /></div>{pending && <div className="mt-5 grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={onReject} className="h-11 rounded-xl border-rose-200 text-rose-700">Tolak</Button><Button onClick={onAccept} className="h-11 rounded-xl bg-slate-950">Terima pembayaran</Button></div>}</div></div></div>;
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent layer="detail" hideCloseButton className="max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl gap-0 overflow-y-auto rounded-[1.75rem] border-0 bg-white p-0 shadow-2xl sm:max-h-[92dvh]">
+        <div className="sticky top-0 z-10 grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-start gap-2 border-b border-slate-100 bg-white/95 p-3 backdrop-blur sm:p-4">
+          <button type="button" aria-label="Kembali ke daftar pembayaran" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><ArrowLeft size={18} /></button>
+          <div className="min-w-0 text-center">
+            <DialogTitle asChild><p className="break-words px-0 font-black text-slate-950">Bukti transfer {payment.order_id}</p></DialogTitle>
+            <DialogDescription asChild><p className="mt-1 break-words text-xs text-slate-500">{payment.student?.name} · transfer {rupiah(payment.external_payment_amount ?? payment.amount)}{(payment.wallet_reserved_amount || 0) + (payment.wallet_applied_amount || 0) ? ` · saldo ${rupiah((payment.wallet_reserved_amount || 0) + (payment.wallet_applied_amount || 0))}` : ""}</p></DialogDescription>
+          </div>
+          <button type="button" aria-label="Tutup" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <div className="p-4 sm:p-6">
+          {payment.will_refund_if_accepted && <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm font-bold leading-6 text-violet-800">{payment.refund_reason_if_accepted === "capacity_full" ? "Kapasitas peserta terverifikasi sudah penuh. Jika bukti ini diterima, dana otomatis masuk antrean refund penuh dan peserta tidak ditambahkan." : "Kelas Bersama sudah dibatalkan. Jika bukti ini diterima, dana otomatis masuk antrean refund penuh. Jika ditolak, pembatalan selesai tanpa refund."}</div>}
+          <div className="rounded-2xl bg-slate-100 p-2"><ProtectedImage source={payment.payment_proof || ""} alt={`Bukti pembayaran ${payment.order_id}`} className="mx-auto max-h-[60dvh] w-full rounded-xl object-contain" /></div>
+          {pending && <div className="mt-5 grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={onReject} className="h-11 rounded-xl border-rose-200 text-rose-700">Tolak</Button><Button onClick={onAccept} className="h-11 rounded-xl bg-slate-950">Terima pembayaran</Button></div>}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }

@@ -17,6 +17,7 @@ import {
 import AdminLayout from "@/components/AdminLayout";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { openProtectedFile } from "@/components/ProtectedImage";
 import http, { getApiError } from "@/lib/http";
@@ -321,38 +322,43 @@ export default function RefundManagement({ embedded = false }: { embedded?: bool
         </section>
       </div>
 
-      {selected && (
-        <div className="fixed inset-0 z-[var(--layer-detail)] grid place-items-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-4">
-          <div role="dialog" aria-modal="true" className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-[1.75rem] bg-white p-5 shadow-2xl sm:p-6">
-            <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-start gap-2">
-              <span aria-hidden="true" className="h-10 w-10" />
-              <div className="min-w-0 text-center"><p className="break-words text-lg font-black text-slate-950">Selesaikan refund {selected.order_id}</p><p className="mt-1 text-sm text-slate-500">Nominal terkunci: <strong>{rupiah(selected.amount)}</strong></p></div>
-              <button type="button" aria-label="Tutup" onClick={() => setSelected(null)} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><X size={18} /></button>
-            </div>
-
-            <div className={`mt-5 rounded-2xl border p-4 ${selected.destination_method === "bimbelku_balance" ? "border-indigo-200 bg-indigo-50" : "border-emerald-200 bg-emerald-50"}`}>
-              <div className="flex gap-3">
-                {selected.destination_method === "bimbelku_balance" ? <WalletCards className="shrink-0 text-indigo-700" /> : <Landmark className="shrink-0 text-emerald-700" />}
-                <div><p className="font-black text-slate-950">Tujuan refund: {selected.destination_method === "bimbelku_balance" ? "Saldo BimbelKu" : selected.destination_method === "xendit_original" ? "Metode pembayaran asal" : "Rekening/e-wallet"}</p><p className="mt-1 text-xs leading-5 text-slate-600">Admin tidak dapat mengganti sumber tujuan refund. Bagian yang semula dibayar dari Saldo BimbelKu selalu kembali ke saldo.</p></div>
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+        <DialogContent layer="detail" hideCloseButton className="max-h-[92dvh] w-full max-w-2xl gap-0 overflow-y-auto rounded-[1.75rem] border-0 bg-white p-5 shadow-2xl sm:p-6">
+          {selected && (
+            <>
+              <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-start gap-2">
+                <span aria-hidden="true" className="h-10 w-10" />
+                <div className="min-w-0 text-center">
+                  <DialogTitle asChild><p className="break-words px-0 text-lg font-black text-slate-950">Selesaikan refund {selected.order_id}</p></DialogTitle>
+                  <DialogDescription asChild><p className="mt-1 text-sm text-slate-500">Nominal terkunci: <strong>{rupiah(selected.amount)}</strong></p></DialogDescription>
+                </div>
+                <button type="button" aria-label="Tutup" onClick={() => setSelected(null)} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><X size={18} /></button>
               </div>
-            </div>
 
-            {selected.destination_method === "bank_transfer" && (
-              <div className="mt-5 rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-black uppercase tracking-wide text-slate-400">Tujuan transfer eksternal</p>
-                <p className="mt-2 text-lg font-black text-emerald-700">{rupiah(selected.external_funded_amount)}</p>
-                {selected.wallet_funded_amount > 0 && <p className="mt-1 text-xs leading-5 text-indigo-700">{rupiah(selected.wallet_funded_amount)} otomatis kembali ke Saldo BimbelKu. Jangan ikut ditransfer ke rekening.</p>}
-                <p className="mt-3 font-black text-slate-900">{selected.bank_destination.bank_name || "Belum lengkap"}</p>
-                <p className="mt-1 break-all text-sm text-slate-600">{selected.bank_destination.account_name || "-"} · {selected.bank_destination.account_number || "-"}</p>
-                <label className="mt-4 block text-xs font-black text-slate-600">Bukti transfer {rupiah(selected.external_funded_amount)}<input type="file" accept=".jpg,.jpeg,.png,.webp" onChange={chooseProof} className="mt-2 block w-full text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-black file:text-indigo-700" /></label>
+              <div className={`mt-5 rounded-2xl border p-4 ${selected.destination_method === "bimbelku_balance" ? "border-indigo-200 bg-indigo-50" : "border-emerald-200 bg-emerald-50"}`}>
+                <div className="flex gap-3">
+                  {selected.destination_method === "bimbelku_balance" ? <WalletCards className="shrink-0 text-indigo-700" /> : <Landmark className="shrink-0 text-emerald-700" />}
+                  <div><p className="font-black text-slate-950">Tujuan refund: {selected.destination_method === "bimbelku_balance" ? "Saldo BimbelKu" : selected.destination_method === "xendit_original" ? "Metode pembayaran asal" : "Rekening/e-wallet"}</p><p className="mt-1 text-xs leading-5 text-slate-600">Admin tidak dapat mengganti sumber tujuan refund. Bagian yang semula dibayar dari Saldo BimbelKu selalu kembali ke saldo.</p></div>
+                </div>
               </div>
-            )}
 
-            <label className="mt-5 block text-xs font-black text-slate-600">Catatan admin<textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={1000} className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="Opsional: nomor referensi transfer atau catatan pemeriksaan" /></label>
-            <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setSelected(null)} className="rounded-xl">Batal</Button><Button onClick={() => void complete()} disabled={processing} className="rounded-xl bg-slate-950">{processing && <Loader2 size={15} className="mr-2 animate-spin" />}{selected.destination_method === "bimbelku_balance" ? "Masukkan ke saldo" : selected.destination_method === "xendit_original" ? "Proses refund" : `Catat transfer ${rupiah(selected.external_funded_amount)}`}</Button></div>
-          </div>
-        </div>
-      )}
+              {selected.destination_method === "bank_transfer" && (
+                <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+                  <p className="text-xs font-black uppercase tracking-wide text-slate-400">Tujuan transfer eksternal</p>
+                  <p className="mt-2 text-lg font-black text-emerald-700">{rupiah(selected.external_funded_amount)}</p>
+                  {selected.wallet_funded_amount > 0 && <p className="mt-1 text-xs leading-5 text-indigo-700">{rupiah(selected.wallet_funded_amount)} otomatis kembali ke Saldo BimbelKu. Jangan ikut ditransfer ke rekening.</p>}
+                  <p className="mt-3 font-black text-slate-900">{selected.bank_destination.bank_name || "Belum lengkap"}</p>
+                  <p className="mt-1 break-all text-sm text-slate-600">{selected.bank_destination.account_name || "-"} · {selected.bank_destination.account_number || "-"}</p>
+                  <label className="mt-4 block text-xs font-black text-slate-600">Bukti transfer {rupiah(selected.external_funded_amount)}<input type="file" accept=".jpg,.jpeg,.png,.webp" onChange={chooseProof} className="mt-2 block w-full text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-black file:text-indigo-700" /></label>
+                </div>
+              )}
+
+              <label className="mt-5 block text-xs font-black text-slate-600">Catatan admin<textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={1000} className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="Opsional: nomor referensi transfer atau catatan pemeriksaan" /></label>
+              <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setSelected(null)} className="rounded-xl">Batal</Button><Button onClick={() => void complete()} disabled={processing} className="rounded-xl bg-slate-950">{processing && <Loader2 size={15} className="mr-2 animate-spin" />}{selected.destination_method === "bimbelku_balance" ? "Masukkan ke saldo" : selected.destination_method === "xendit_original" ? "Proses refund" : `Catat transfer ${rupiah(selected.external_funded_amount)}`}</Button></div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </FinanceSectionFrame>
   );
 }

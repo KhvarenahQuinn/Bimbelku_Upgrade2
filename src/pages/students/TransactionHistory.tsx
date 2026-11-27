@@ -224,8 +224,23 @@ export default function TransactionHistory() {
         http.get("/orders"),
         http.get("/student/wallet"),
       ]);
-      setOrders(ordersResponse.data.data || []);
-      setWallet(walletResponse.data || { balance: 0, reserved_balance: 0, total_credit: 0, currency: "IDR", withdrawable: false, usage: "learning_payments", transactions: [] });
+      const rawOrders = ordersResponse?.data?.data;
+      if (!ordersResponse?.data || typeof ordersResponse.data !== "object" || (rawOrders !== undefined && !Array.isArray(rawOrders))) {
+        setOrders([]);
+        setError("generic");
+        return;
+      }
+      const rawWallet = walletResponse?.data;
+      setOrders(Array.isArray(rawOrders) ? rawOrders : []);
+      setWallet({
+        balance: Number(rawWallet?.balance || 0),
+        reserved_balance: Number(rawWallet?.reserved_balance || 0),
+        total_credit: Number(rawWallet?.total_credit || 0),
+        currency: typeof rawWallet?.currency === "string" && rawWallet.currency ? rawWallet.currency : "IDR",
+        withdrawable: Boolean(rawWallet?.withdrawable),
+        usage: typeof rawWallet?.usage === "string" ? rawWallet.usage : "learning_payments",
+        transactions: Array.isArray(rawWallet?.transactions) ? rawWallet.transactions : [],
+      });
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         if (!err.response) setError("network");
@@ -295,7 +310,11 @@ export default function TransactionHistory() {
   };
 
   const filtered = useMemo(
-    () => filter === "all" ? orders : orders.filter((order) => filter === "refund" ? order.status.includes("refund") : order.status === filter),
+    () => filter === "all"
+      ? orders
+      : orders.filter((order) => filter === "refund"
+        ? String(order.status || "").includes("refund")
+        : order.status === filter),
     [filter, orders],
   );
 
@@ -303,7 +322,7 @@ export default function TransactionHistory() {
     <StudentLayout title="Riwayat Pembayaran">
       <div className="w-full space-y-6 pb-12">
         <section className="grid gap-4 rounded-[1.75rem] bg-gradient-to-br from-slate-950 to-indigo-950 p-5 text-white sm:rounded-[2rem] sm:p-7 lg:grid-cols-[1fr_20rem] lg:items-end">
-          <div><p className="text-xs font-black uppercase tracking-[.2em] text-indigo-200">Keuangan murid</p><h1 className="mt-3 text-2xl font-black sm:text-3xl">Tagihan, transfer, refund, dan saldo</h1><p className="mt-2 text-sm text-indigo-100/70">Semua nominal dan status keputusan admin tercatat di sini.</p><Button onClick={load} variant="outline" className="mt-5 w-full rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white sm:w-auto"><RefreshCw size={16} className="mr-2" />Muat ulang</Button></div>
+          <div><p className="text-xs font-black uppercase tracking-[.2em] text-indigo-200">Keuangan murid</p><h1 className="mt-3 text-2xl font-black sm:text-3xl">Tagihan, transfer, refund, dan saldo</h1><p className="mt-2 text-sm text-indigo-100/70">Semua nominal dan status keputusan admin tercatat di sini.</p><Button onClick={() => void load()} variant="outline" className="mt-5 w-full rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white sm:w-auto"><RefreshCw size={16} className="mr-2" />Muat ulang</Button></div>
           <div className="rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur-sm"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 text-indigo-200"><WalletCards size={20} /></span><div><p className="text-xs font-black uppercase tracking-wide text-indigo-200">Saldo BimbelKu</p><p className="mt-1 text-2xl font-black">{rupiah(wallet.balance)}</p></div></div>{wallet.reserved_balance > 0 && <p className="mt-3 rounded-xl bg-amber-300/10 px-3 py-2 text-xs font-bold text-amber-100">{rupiah(wallet.reserved_balance)} sedang ditahan untuk pembayaran yang diperiksa.</p>}<p className="mt-3 text-xs leading-5 text-indigo-100/70">Store credit dari refund untuk Paket Belajar atau Kelas Bersama. Saldo tidak dapat ditarik tunai dan seluruh mutasinya tercatat otomatis.</p></div>
         </section>
         {wallet.transactions.length > 0 && (

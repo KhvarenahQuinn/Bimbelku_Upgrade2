@@ -84,6 +84,8 @@ export default function ClassMonitoring() {
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 400);
@@ -96,6 +98,7 @@ export default function ClassMonitoring() {
     let active = true;
     const load = async () => {
       setLoading(true);
+      setLoadError(null);
       try {
         const response = await http.get<Response>("/admin/classes", {
           params: {
@@ -109,18 +112,43 @@ export default function ClassMonitoring() {
           },
         });
         if (!active) return;
-        setRows(response.data.data || []);
-        setSummary(response.data.summary || { attention: 0, active: 0, upcoming: 0, history: 0 });
-        setMeta(response.data.meta || { current_page: 1, last_page: 1, per_page: 20, total: 0, scope });
+        const payload = response?.data;
+        if (!payload || typeof payload !== "object" || !Array.isArray(payload.data)) {
+          const message = "Format data pemantauan kelas tidak valid. Silakan coba lagi.";
+          setRows([]);
+          setLoadError(message);
+          notify.error(message);
+          return;
+        }
+        setRows(payload.data);
+        setSummary({
+          attention: Number(payload.summary?.attention || 0),
+          active: Number(payload.summary?.active || 0),
+          upcoming: Number(payload.summary?.upcoming || 0),
+          history: Number(payload.summary?.history || 0),
+        });
+        setMeta({
+          current_page: Number(payload.meta?.current_page || 1),
+          last_page: Number(payload.meta?.last_page || 1),
+          per_page: Number(payload.meta?.per_page || 20),
+          total: Number(payload.meta?.total || 0),
+          from: payload.meta?.from ?? null,
+          to: payload.meta?.to ?? null,
+          scope: payload.meta?.scope || scope,
+        });
       } catch (error) {
-        if (active) notify.error(getApiError(error, "Data pemantauan kelas gagal dimuat."));
+        if (!active) return;
+        const message = getApiError(error, "Data pemantauan kelas gagal dimuat.");
+        setRows([]);
+        setLoadError(message);
+        notify.error(message);
       } finally {
         if (active) setLoading(false);
       }
     };
     void load();
     return () => { active = false; };
-  }, [dateFrom, dateTo, debouncedSearch, page, scope, status]);
+  }, [dateFrom, dateTo, debouncedSearch, page, reloadTick, scope, status]);
 
   const hasFilters = Boolean(search || status || dateFrom || dateTo);
   const pageNumbers = useMemo(() => {
@@ -197,6 +225,13 @@ export default function ClassMonitoring() {
         <section className="overflow-hidden rounded-[1.75rem] border border-slate-100 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.05)]">
           {loading ? (
             <div className="grid min-h-72 place-items-center"><div className="text-center"><Loader2 className="mx-auto animate-spin text-indigo-600" size={30} /><p className="mt-3 text-sm font-bold text-slate-500">Memuat halaman {page}…</p></div></div>
+          ) : loadError ? (
+            <div className="px-5 py-16 text-center sm:py-20">
+              <AlertTriangle className="mx-auto text-rose-400" size={38} />
+              <h2 className="mt-4 font-black text-slate-800">Data pemantauan kelas gagal dimuat</h2>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">{loadError}</p>
+              <button type="button" onClick={() => setReloadTick((value) => value + 1)} className="mt-5 min-h-11 rounded-xl bg-indigo-600 px-5 text-sm font-black text-white">Coba lagi</button>
+            </div>
           ) : rows.length === 0 ? (
             <div className="px-5 py-16 text-center sm:py-20"><BookOpen className="mx-auto text-slate-300" size={38} /><h2 className="mt-4 font-black text-slate-800">Tidak ada data pada tampilan ini</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">{scope === "attention" ? "Bagus, saat ini tidak ada kelas yang membutuhkan tindakan admin." : "Coba ubah filter atau rentang tanggal."}</p>{hasFilters && <button type="button" onClick={resetFilters} className="mt-5 min-h-11 rounded-xl bg-indigo-600 px-5 text-sm font-black text-white">Reset filter</button>}</div>
           ) : (
@@ -246,7 +281,7 @@ function DesktopClassRow({ item }: { item: Row }) {
     <tr className="transition hover:bg-slate-50/70">
       <td className="px-6 py-5"><div className="max-w-md font-black text-slate-900">{item.title}</div><div className="mt-2 flex flex-wrap gap-1.5"><Badge>{item.type}</Badge><Badge>{item.method === "online" ? "Online" : "Offline"}</Badge>{item.needs_admin_attention && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">Perlu tindakan</span>}</div></td>
       <td className="px-5 py-5"><span className="font-mono text-xs font-black text-slate-600">Sesi #{item.id}</span></td>
-      <td className="px-5 py-5"><div className="flex items-center gap-2"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-black text-indigo-700">{item.teacher_name.charAt(0).toUpperCase()}</span><span className="text-sm font-semibold text-slate-600">{item.teacher_name}</span></div></td>
+      <td className="px-5 py-5"><div className="flex items-center gap-2"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-black text-indigo-700">{(item.teacher_name || "?").charAt(0).toUpperCase()}</span><span className="text-sm font-semibold text-slate-600">{item.teacher_name || "Tutor belum ditentukan"}</span></div></td>
       <td className="px-5 py-5 text-sm font-semibold text-slate-600">{dateTime(item.start_at)}</td>
       <td className="px-5 py-5"><span className="inline-flex items-center gap-2 text-sm font-bold text-slate-600"><User size={15} className="text-slate-400" />{item.student_count}</span></td>
       <td className="px-5 py-5"><span className={`text-xs font-black ${item.needs_admin_attention ? "text-amber-700" : "text-slate-600"}`}>{item.status_label}</span>{item.attention_reason && <p className="mt-1 max-w-64 text-[11px] font-semibold leading-4 text-rose-600">{item.attention_reason}</p>}</td>

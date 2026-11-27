@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, CheckCheck, ChevronRight, ExternalLink, Loader2, RefreshCw, Search, WifiOff, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import http, { getApiError } from "@/lib/http";
 import { announceNavigationAttentionChanged, attentionTargetLabel } from "@/lib/navigationAttention";
@@ -158,25 +159,30 @@ export default function NotificationCenter({ role = "teacher" }: NotificationCen
         </section>
       </div>
 
-      {selected && (
-        <div role="dialog" aria-modal="true" aria-label="Detail notifikasi" className="fixed inset-0 z-[var(--layer-modal)] flex items-end justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:items-center sm:p-4">
-          <button type="button" aria-label="Tutup detail notifikasi" className="absolute inset-0" onClick={() => setSelected(null)} />
-          <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-[2rem] bg-white shadow-2xl sm:rounded-[2.25rem]">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5 sm:p-6">
-              <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.18em] text-indigo-600">Detail notifikasi</p><h2 className="mt-2 break-words text-xl font-black text-slate-900">{selected.title}</h2><p className="mt-2 text-xs font-bold text-slate-400">{dateTime(selected.created_at)}</p></div>
-              <button type="button" aria-label="Tutup" onClick={() => setSelected(null)} className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200"><X size={18} /></button>
-            </div>
-            <div className="max-h-[55dvh] overflow-y-auto p-5 sm:p-6">
-              <p className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-600">{selected.message}</p>
-              {canOpenRelated ? <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 p-4"><p className="text-[10px] font-black uppercase tracking-[.16em] text-indigo-500">Halaman terkait</p><p className="mt-1 text-sm font-black text-indigo-950">{relatedLabel}</p><p className="mt-1 text-xs leading-5 text-indigo-700/75">Pindah ke halaman ini hanya jika kamu ingin menindaklanjuti pemberitahuan.</p></div> : <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold leading-5 text-slate-600">Ini hanya pemberitahuan informasi. Tidak ada halaman lain yang wajib dibuka.</p></div>}
-            </div>
-            <div className="grid gap-2 border-t border-slate-100 p-5 sm:grid-cols-2 sm:p-6">
-              <Button type="button" variant="outline" onClick={() => setSelected(null)} className="h-11 rounded-xl">Tutup</Button>
-              {canOpenRelated && <Button type="button" onClick={openRelated} className="h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700"><ExternalLink size={16} className="mr-2" />Buka {relatedLabel || "halaman terkait"}</Button>}
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+        <DialogContent hideCloseButton className="gap-0 overflow-hidden rounded-[2rem] border-0 bg-white p-0 shadow-2xl sm:max-w-lg sm:rounded-[2.25rem]">
+          {selected && (
+            <>
+              <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5 sm:p-6">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[.18em] text-indigo-600">Detail notifikasi</p>
+                  <DialogTitle className="mt-2 px-0 text-left text-xl font-black text-slate-900">{selected.title}</DialogTitle>
+                  <DialogDescription className="mt-2 text-xs font-bold text-slate-400">{dateTime(selected.created_at)}</DialogDescription>
+                </div>
+                <button type="button" aria-label="Tutup" onClick={() => setSelected(null)} className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200"><X size={18} /></button>
+              </div>
+              <div className="max-h-[55dvh] overflow-y-auto p-5 sm:p-6">
+                <p className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-600">{selected.message}</p>
+                {canOpenRelated ? <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 p-4"><p className="text-[10px] font-black uppercase tracking-[.16em] text-indigo-500">Halaman terkait</p><p className="mt-1 text-sm font-black text-indigo-950">{relatedLabel}</p><p className="mt-1 text-xs leading-5 text-indigo-700/75">Pindah ke halaman ini hanya jika kamu ingin menindaklanjuti pemberitahuan.</p></div> : <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold leading-5 text-slate-600">Ini hanya pemberitahuan informasi. Tidak ada halaman lain yang wajib dibuka.</p></div>}
+              </div>
+              <div className="grid gap-2 border-t border-slate-100 p-5 sm:grid-cols-2 sm:p-6">
+                <Button type="button" variant="outline" onClick={() => setSelected(null)} className="h-11 rounded-xl">Tutup</Button>
+                {canOpenRelated && <Button type="button" onClick={openRelated} className="h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700"><ExternalLink size={16} className="mr-2" />Buka {relatedLabel || "halaman terkait"}</Button>}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

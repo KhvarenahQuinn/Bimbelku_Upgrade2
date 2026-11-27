@@ -104,6 +104,16 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             $status = $exception->getStatusCode();
+            if ($status === 404 && ($previous = $exception->getPrevious()) instanceof ModelNotFoundException) {
+                $message = ($request->is('api/*') && $previous->getModel() === Promotion::class)
+                    ? 'Promo tidak ditemukan atau sudah dihapus.'
+                    : 'Data tidak ditemukan.';
+
+                return response()->json([
+                    'message' => $message,
+                ], 404, $exception->getHeaders());
+            }
+
             $message = trim($exception->getMessage());
             if ($message === '') {
                 $message = Response::$statusTexts[$status] ?? 'Terjadi kesalahan.';

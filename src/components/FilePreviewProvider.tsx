@@ -68,13 +68,25 @@ export default function FilePreviewProvider() {
   useEffect(() => {
     if (!preview) return;
 
-    restoreFocusRef.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && !dialogRef.current?.contains(active)) {
+      restoreFocusRef.current = active;
+    }
     window.requestAnimationFrame(() => dialogRef.current?.focus());
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const handleFocusIn = (event: FocusEvent) => {
+      const container = dialogRef.current;
+      if (!container) return;
+      if (container.contains(event.target as Node)) {
+        // Keep underlying Radix FocusScope from reclaiming focus while preview is active.
+        event.stopImmediatePropagation();
+        return;
+      }
+      event.stopImmediatePropagation();
+      container.focus();
+    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         // Radix Dialog mendengarkan Escape pada document (capture). Listener
@@ -86,6 +98,32 @@ export default function FilePreviewProvider() {
         close();
         return;
       }
+      if (event.key === "Tab") {
+        const container = dialogRef.current;
+        if (!container) return;
+        const focusables = Array.from(
+          container.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((node) => node.getClientRects().length > 0);
+        if (focusables.length === 0) {
+          event.preventDefault();
+          container.focus();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (event.shiftKey) {
+          if (document.activeElement === first || !container.contains(document.activeElement)) {
+            event.preventDefault();
+            last.focus();
+          }
+        } else if (document.activeElement === last || !container.contains(document.activeElement)) {
+          event.preventDefault();
+          first.focus();
+        }
+        return;
+      }
       if (event.key === "+" || event.key === "=") {
         setScale((value) => Math.min(MAX_SCALE, value + 0.25));
       }
@@ -93,12 +131,16 @@ export default function FilePreviewProvider() {
         setScale((value) => Math.max(MIN_SCALE, value - 0.25));
       }
     };
+    document.addEventListener("focusin", handleFocusIn, true);
     window.addEventListener("keydown", handleKeyDown, { capture: true });
 
     return () => {
       document.body.style.overflow = previousOverflow;
+      document.removeEventListener("focusin", handleFocusIn, true);
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
-      restoreFocusRef.current?.focus();
+      if (restoreFocusRef.current?.isConnected) {
+        restoreFocusRef.current.focus();
+      }
     };
   }, [preview]);
 
@@ -111,6 +153,7 @@ export default function FilePreviewProvider() {
     <div
       ref={dialogRef}
       tabIndex={-1}
+      data-dialog-interactive-portal="true"
       className="pointer-events-auto fixed inset-0 z-[var(--layer-preview)] flex flex-col bg-slate-950/95 text-white backdrop-blur-sm outline-none"
       role="dialog"
       aria-modal="true"

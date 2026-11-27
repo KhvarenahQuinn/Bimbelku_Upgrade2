@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { openProtectedFile } from "@/components/ProtectedImage";
 import { isValidRegistrationEmail, validateUpload } from "@/lib/validation";
 
@@ -207,19 +208,24 @@ export default function UserManagement() {
     <AdminLayout title="Manajemen Akun Pengguna">
       
       {/* MODAL POPUP LIHAT DATA */}
-      {modalOpen && selectedUser && (
-        <div className="fixed inset-0 z-[var(--layer-modal)] flex items-end justify-center bg-black/55 p-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] animate-in fade-in sm:items-center sm:p-4">
-          <div className="relative flex max-h-[calc(100dvh-1.5rem)] w-full min-w-0 max-w-lg flex-col overflow-hidden rounded-[1.5rem] bg-white shadow-2xl animate-in slide-in-from-bottom-4 sm:rounded-2xl sm:zoom-in-95">
-            
-            <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-gray-100 bg-gray-50 px-4 py-4 sm:px-6">
-              <div className="flex min-w-0 items-center gap-2">
-                <h3 className="flex min-w-0 items-center gap-2 break-words text-base font-bold text-gray-900 sm:text-lg">
-                  {selectedUser.role === "student" ? <School size={20} className="text-blue-500"/> : <GraduationCap size={20} className="text-orange-500"/>}
-                  {editingUser ? "Edit Data Pengguna" : `Detail ${selectedUser.role === 'student' ? 'Murid' : 'Tutor'}`}
-                </h3>
+      <Dialog open={modalOpen && Boolean(selectedUser)} onOpenChange={(open) => { if (!open) setModalOpen(false); }}>
+        <DialogContent hideCloseButton className="flex max-h-[calc(100dvh-1.5rem)] w-full min-w-0 max-w-lg flex-col gap-0 overflow-hidden rounded-[1.5rem] border-0 bg-white p-0 shadow-2xl sm:rounded-2xl">
+          {selectedUser && (
+            <>
+              <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-gray-100 bg-gray-50 px-4 py-4 sm:px-6">
+                <div className="flex min-w-0 items-center gap-2">
+                  <DialogTitle asChild>
+                    <h3 className="flex min-w-0 items-center gap-2 break-words px-0 text-left text-base font-bold text-gray-900 sm:text-lg">
+                      {selectedUser.role === "student" ? <School size={20} className="text-blue-500"/> : <GraduationCap size={20} className="text-orange-500"/>}
+                      {editingUser ? "Edit Data Pengguna" : `Detail ${selectedUser.role === 'student' ? 'Murid' : 'Tutor'}`}
+                    </h3>
+                  </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    {editingUser ? "Formulir ubah data pengguna" : `Informasi lengkap ${selectedUser.name}`}
+                  </DialogDescription>
+                </div>
+                <button type="button" aria-label="Tutup" onClick={() => setModalOpen(false)}><X size={24} className="text-gray-400 hover:text-gray-600" /></button>
               </div>
-              <button onClick={() => setModalOpen(false)}><X size={24} className="text-gray-400 hover:text-gray-600" /></button>
-            </div>
 
             <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
               {editingUser ? <div className="space-y-4">
@@ -381,9 +387,10 @@ export default function UserManagement() {
                </div>
                </>}
             </div>
-          </div>
-        </div>
-      )}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* --- TABEL UTAMA --- */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

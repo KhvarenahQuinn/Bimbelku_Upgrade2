@@ -16,6 +16,7 @@ import {
 import AdminLayout from "@/components/AdminLayout";
 import { ResponsiveMultiSelect, ResponsiveSelect } from "@/components/ResponsiveSelect";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -209,19 +210,37 @@ function Editor({ editor, plans, subjectOptions, close, saved }: { editor: { typ
     }
   };
 
+  const entityLabel = editor.type === "plans"
+    ? "Paket"
+    : editor.type === "promotions"
+      ? "Promo"
+      : editor.type === "banners"
+        ? "Banner"
+        : "Tutorial";
+
   return (
-    <div className="fixed inset-0 z-[var(--layer-modal)] flex items-end justify-center bg-slate-950/65 p-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:items-center sm:p-4">
-      <form onSubmit={submit} className="max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-[2rem] bg-white px-5 pb-8 pt-5 shadow-2xl sm:max-h-[94dvh] sm:max-w-2xl sm:px-7 sm:pb-10 sm:pt-7">
-        <div className="flex items-center justify-between"><h2 className="text-2xl font-black text-slate-900">{item.id ? "Ubah" : "Tambah"} {editor.type === "plans" ? "Paket" : editor.type === "promotions" ? "Promo" : editor.type === "banners" ? "Banner" : "Tutorial"}</h2><button type="button" aria-label="Tutup editor" onClick={close} className="rounded-full bg-slate-100 p-2 text-slate-500"><X size={19} /></button></div>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {editor.type === "plans" && <PlanFields item={item} set={set} />}
-          {editor.type === "promotions" && <PromoFields item={item} set={set} plans={plans} subjectOptions={subjectOptions} />}
-          {editor.type === "banners" && <BannerFields item={item} set={set} image={image} setImage={setImage} />}
-          {editor.type === "tutorials" && <TutorialFields item={item} set={set} setStepImage={(index, file) => setTutorialImages((current) => ({ ...current, [index]: file }))} />}
-        </div>
-        <button disabled={saving} className="mt-7 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 font-black text-white disabled:opacity-50">{saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} Simpan</button>
-      </form>
-    </div>
+    <Dialog open onOpenChange={(open) => { if (!open) close(); }}>
+      <DialogContent hideCloseButton className="max-h-[calc(100dvh-1.5rem)] w-full gap-0 overflow-y-auto rounded-[2rem] border-0 bg-white px-5 pb-8 pt-5 shadow-2xl sm:max-h-[94dvh] sm:max-w-2xl sm:px-7 sm:pb-10 sm:pt-7">
+        <form onSubmit={submit}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <DialogTitle asChild>
+                <h2 className="px-0 text-left text-2xl font-black text-slate-900">{item.id ? "Ubah" : "Tambah"} {entityLabel}</h2>
+              </DialogTitle>
+              <DialogDescription className="sr-only">Formulir pengaturan {entityLabel.toLowerCase()}</DialogDescription>
+            </div>
+            <button type="button" aria-label="Tutup editor" onClick={close} className="rounded-full bg-slate-100 p-2 text-slate-500"><X size={19} /></button>
+          </div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            {editor.type === "plans" && <PlanFields item={item} set={set} />}
+            {editor.type === "promotions" && <PromoFields item={item} set={set} plans={plans} subjectOptions={subjectOptions} />}
+            {editor.type === "banners" && <BannerFields item={item} set={set} image={image} setImage={setImage} />}
+            {editor.type === "tutorials" && <TutorialFields item={item} set={set} setStepImage={(index, file) => setTutorialImages((current) => ({ ...current, [index]: file }))} />}
+          </div>
+          <button disabled={saving} className="mt-7 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 font-black text-white disabled:opacity-50">{saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} Simpan</button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
