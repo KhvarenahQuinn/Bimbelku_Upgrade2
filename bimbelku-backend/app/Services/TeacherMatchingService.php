@@ -1211,13 +1211,13 @@ class TeacherMatchingService
                 default => 0,
             };
 
-            $profile->update([
+            $profile->forceFill([
                 'no_response_streak' => $streak,
                 'no_response_window_started_at' => $windowExpired
                     ? now()
                     : $profile->no_response_window_started_at,
                 'suspended_until' => $hours > 0 ? now()->addHours($hours) : null,
-            ]);
+            ])->save();
 
             return ['streak' => $streak, 'hours' => $hours];
         });

@@ -421,16 +421,15 @@ class DemoSessionReminder extends Command
             ]
         );
 
-        TeacherProfile::query()->updateOrCreate(
+        tap(TeacherProfile::query()->updateOrCreate(
             ['user_id' => $teacher->id],
             [
-                'expertise' => 'Matematika',
-                'teaching_method' => 'Online',
-                'bio' => 'Tutor demo lokal untuk pengujian alur sesi BimbelKu.',
-                'verified_at' => now(),
-                'is_accepting_requests' => true,
-            ]
-        );
+            'expertise' => 'Matematika',
+            'teaching_method' => 'Online',
+            'bio' => 'Tutor demo lokal untuk pengujian alur sesi BimbelKu.',
+            'is_accepting_requests' => true,
+        ]
+        ), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
 
         $profile = TeacherProfile::query()->where('user_id', $teacher->id)->firstOrFail();
         TeacherSubject::query()->where('teacher_profile_id', $profile->id)->delete();

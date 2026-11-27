@@ -399,14 +399,13 @@ class StageSixCAdminOperationsTest extends TestCase
             'role' => 'teacher',
             'status' => 'active',
         ]);
-        $profile = TeacherProfile::create([
+        $profile = tap(TeacherProfile::create([
             'user_id' => $teacher->id,
             'latitude' => -7.250445,
             'longitude' => 112.768845,
             'max_travel_km' => 12,
             'is_accepting_requests' => true,
-            'verified_at' => now(),
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         TeacherSubject::create([
             'teacher_profile_id' => $profile->id,
             'name' => 'Matematika',

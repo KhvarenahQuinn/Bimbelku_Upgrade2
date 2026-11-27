@@ -254,12 +254,11 @@ class StageFiveWorkflowTest extends TestCase
             'status' => 'active',
             'phone' => '081200000001',
         ]);
-        $profile = TeacherProfile::create([
+        $profile = tap(TeacherProfile::create([
             'user_id' => $teacher->id,
             'whatsapp_number' => '081200000001',
             'is_accepting_requests' => true,
-            'verified_at' => now()->subDay(),
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()->subDay()])->save());
         $subject = CurriculumSubject::query()->where('normalized_name', 'matematika')->firstOrFail();
         $profile->subjects()->create([
             'name' => 'Matematika',

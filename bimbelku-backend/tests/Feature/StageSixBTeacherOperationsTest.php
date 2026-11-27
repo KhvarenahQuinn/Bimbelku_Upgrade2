@@ -171,11 +171,10 @@ class StageSixBTeacherOperationsTest extends TestCase
             'status' => 'completed', 'completed_at' => now(), 'gross_amount' => 100000,
             'teacher_net_amount' => 80000, 'payout_status' => 'ready',
         ]);
-        TeacherProfile::create([
-            'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)',
-            'payout_channel_code' => 'BCA', 'account_number' => '1234567890',
-            'account_name' => $teacher->name, 'bank_details_version' => 1, 'location' => 'Yogyakarta',
-        ]);
+        tap(TeacherProfile::create([
+            'user_id' => $teacher->id,
+            'location' => 'Yogyakarta',
+        ]), fn ($profile) => $profile->forceFill(['bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name, 'bank_details_version' => 1])->save());
 
         Sanctum::actingAs($teacher);
         $this->getJson('/api/teacher/salary')
@@ -213,10 +212,10 @@ class StageSixBTeacherOperationsTest extends TestCase
             'status' => 'completed', 'completed_at' => now(), 'gross_amount' => 100000,
             'teacher_net_amount' => 80000, 'payout_status' => 'ready',
         ]);
-        TeacherProfile::create([
-            'user_id' => $teacher->id, 'bank_name' => 'BCA', 'payout_channel_code' => 'BCA',
-            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta',
-        ]);
+        tap(TeacherProfile::create([
+            'user_id' => $teacher->id,
+            'location' => 'Yogyakarta',
+        ]), fn ($profile) => $profile->forceFill(['bank_name' => 'BCA', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name])->save());
         Sanctum::actingAs($teacher);
 
         $this->getJson('/api/teacher/salary')->assertOk()
@@ -252,7 +251,7 @@ class StageSixBTeacherOperationsTest extends TestCase
         [$student, $teacher, $booking] = $this->makeBooking();
         $teacher->update(['address' => 'Yogyakarta']);
         $booking->update(['status' => 'completed', 'completed_at' => now(), 'gross_amount' => 100000, 'teacher_net_amount' => 80000, 'payout_status' => 'ready']);
-        TeacherProfile::create(['user_id' => $teacher->id, 'bank_name' => 'BCA', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta']);
+        tap(TeacherProfile::create(['user_id' => $teacher->id, 'location' => 'Yogyakarta']), fn ($profile) => $profile->forceFill(['bank_name' => 'BCA', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name])->save());
         $service = app(TeacherPayoutService::class);
         $otp = $this->issuePayoutOtp($teacher);
         $first = $service->request($teacher, 30000, null, ['otp' => $otp])['payout'];

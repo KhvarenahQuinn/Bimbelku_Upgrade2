@@ -575,12 +575,11 @@ class StageFourAccountFlowTest extends TestCase
             'phone' => '081234567890',
         ]);
         $verifiedAt = now()->subDay();
-        TeacherProfile::create([
+        tap(TeacherProfile::create([
             'user_id' => $teacher->id,
             'whatsapp_number' => '081234567890',
             'is_accepting_requests' => true,
-            'verified_at' => $verifiedAt,
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => $verifiedAt])->save());
         Sanctum::actingAs($teacher);
 
         $this->post('/api/teacher/profile', [

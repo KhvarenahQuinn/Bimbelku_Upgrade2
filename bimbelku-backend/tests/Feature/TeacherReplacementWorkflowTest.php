@@ -565,7 +565,7 @@ class TeacherReplacementWorkflowTest extends TestCase
     private function teacher(CurriculumSubject $catalog, string $suffix): User
     {
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'email' => "{$suffix}@replacement.test"]);
-        $profile = TeacherProfile::create(['user_id' => $teacher->id, 'is_accepting_requests' => true, 'verified_at' => now()->subDay()]);
+        $profile = tap(TeacherProfile::create(['user_id' => $teacher->id, 'is_accepting_requests' => true]), fn ($profile) => $profile->forceFill(['verified_at' => now()->subDay()])->save());
         $profile->subjects()->create([
             'name' => 'Matematika', 'curriculum_subject_id' => $catalog->id, 'levels' => ['SMP'], 'is_active' => true,
             'is_online' => true, 'is_offline' => false, 'is_private_active' => true,

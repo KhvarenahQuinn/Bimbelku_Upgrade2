@@ -45,10 +45,10 @@ class PayoutLifecycleTest extends TestCase
     {
         Http::fake(['https://api.xendit.test/v3/payouts' => Http::response(['payout_id' => 'po-payload-1', 'status' => 'ACCEPTED'])]);
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Yogyakarta']);
-        TeacherProfile::create([
-            'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
-            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta',
-        ]);
+        tap(TeacherProfile::create([
+            'user_id' => $teacher->id,
+            'location' => 'Yogyakarta',
+        ]), fn ($profile) => $profile->forceFill(['bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name])->save());
         $payout = Payout::create([
             'user_id' => $teacher->id, 'amount' => 120000, 'period' => 'November 2026', 'total_classes' => 0,
             'status' => 'processing', 'payment_provider' => 'xendit', 'account_number' => '1234567890',
@@ -74,10 +74,10 @@ class PayoutLifecycleTest extends TestCase
     {
         Http::fake(['https://api.xendit.test/v3/payouts' => Http::response(['payout_id' => 'po-idem', 'status' => 'ACCEPTED'])]);
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Yogyakarta']);
-        TeacherProfile::create([
-            'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
-            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta',
-        ]);
+        tap(TeacherProfile::create([
+            'user_id' => $teacher->id,
+            'location' => 'Yogyakarta',
+        ]), fn ($profile) => $profile->forceFill(['bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name])->save());
         $payout = Payout::create([
             'user_id' => $teacher->id, 'amount' => 120000, 'period' => 'November 2026', 'total_classes' => 0,
             'status' => 'processing', 'payment_provider' => 'xendit', 'account_number' => '1234567890',
@@ -106,10 +106,10 @@ class PayoutLifecycleTest extends TestCase
     {
         Http::fake(['https://api.xendit.test/v3/payouts' => Http::response(['payout_id' => 'po-payload', 'status' => 'ACCEPTED'])]);
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Jl. Rungkut Asri Timur No. 14']);
-        TeacherProfile::create([
-            'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
-            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Surabaya',
-        ]);
+        tap(TeacherProfile::create([
+            'user_id' => $teacher->id,
+            'location' => 'Surabaya',
+        ]), fn ($profile) => $profile->forceFill(['bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name])->save());
         $payout = Payout::create([
             'user_id' => $teacher->id, 'amount' => 50000, 'period' => 'November 2026', 'total_classes' => 0,
             'status' => 'processing', 'payment_provider' => 'xendit', 'account_number' => '1234567890',
@@ -235,10 +235,10 @@ class PayoutLifecycleTest extends TestCase
     {
         Http::fake(['https://api.xendit.test/v3/payouts' => Http::response(['payout_id' => 'po-name', 'status' => 'ACCEPTED'])]);
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Yogyakarta', 'name' => 'Rina']);
-        TeacherProfile::create([
-            'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
-            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta',
-        ]);
+        tap(TeacherProfile::create([
+            'user_id' => $teacher->id,
+            'location' => 'Yogyakarta',
+        ]), fn ($profile) => $profile->forceFill(['bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name])->save());
         $payout = Payout::create([
             'user_id' => $teacher->id, 'amount' => 120000, 'period' => 'November 2026', 'total_classes' => 0,
             'status' => 'processing', 'payment_provider' => 'xendit', 'account_number' => '1234567890',
@@ -259,10 +259,10 @@ class PayoutLifecycleTest extends TestCase
     {
         Http::fake(['https://api.xendit.test/v3/payouts' => Http::response(['payout_id' => 'po-name-2', 'status' => 'ACCEPTED'])]);
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Yogyakarta', 'name' => 'Rina Matematika']);
-        TeacherProfile::create([
-            'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
-            'account_number' => '1234567890', 'account_name' => $teacher->name, 'location' => 'Yogyakarta',
-        ]);
+        tap(TeacherProfile::create([
+            'user_id' => $teacher->id,
+            'location' => 'Yogyakarta',
+        ]), fn ($profile) => $profile->forceFill(['bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name])->save());
         $payout = Payout::create([
             'user_id' => $teacher->id, 'amount' => 120000, 'period' => 'November 2026', 'total_classes' => 0,
             'status' => 'processing', 'payment_provider' => 'xendit', 'account_number' => '1234567890',

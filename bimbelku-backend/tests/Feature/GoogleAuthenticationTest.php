@@ -140,10 +140,9 @@ class GoogleAuthenticationTest extends TestCase
         config()->set('services.google.client_id', 'test-client');
         config()->set('services.google.client_secret', 'test-secret');
         $teacher = User::factory()->create(['email' => 'tutor@example.test', 'role' => 'teacher', 'status' => 'active']);
-        TeacherProfile::create([
+        tap(TeacherProfile::create([
             'user_id' => $teacher->id,
-            'verified_at' => now(),
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
 
         $state = 'state-for-teacher-google-test';
         Cache::put('google_oauth_state:'.hash('sha256', $state), ['redirect' => null], now()->addMinutes(10));

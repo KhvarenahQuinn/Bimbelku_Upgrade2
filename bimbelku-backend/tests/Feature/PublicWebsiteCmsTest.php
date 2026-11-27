@@ -23,10 +23,9 @@ class PublicWebsiteCmsTest extends TestCase
     public function test_public_content_exposes_safe_brand_structure_and_real_system_value(): void
     {
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active']);
-        TeacherProfile::create([
+        tap(TeacherProfile::create([
             'user_id' => $teacher->id,
-            'verified_at' => now(),
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         WebsiteTrustItem::query()->where('source_key', 'verified_tutors')->update([
             'source_note' => 'Catatan internal yang tidak boleh tampil ke publik.',
         ]);

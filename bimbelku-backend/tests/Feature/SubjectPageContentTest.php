@@ -101,16 +101,14 @@ class SubjectPageContentTest extends TestCase
         $this->seed(CurriculumCatalogSeeder::class);
         $subject = CurriculumSubject::query()->where('name', 'Matematika')->firstOrFail();
         $teacher = User::factory()->create(['name' => 'Tutor Publik', 'role' => 'teacher', 'status' => 'active']);
-        $profile = TeacherProfile::query()->create([
+        $profile = tap(TeacherProfile::query()->create([
             'user_id' => $teacher->id,
             'title' => 'Tutor Matematika',
             'experience' => '4 tahun',
-            'verified_at' => now(),
             'public_profile_enabled' => true,
             'public_profile_consent_at' => now(),
-            'public_directory_approved_at' => now(),
             'public_credentials' => 'Alumni Pendidikan Matematika',
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now(), 'public_directory_approved_at' => now()])->save());
         TeacherSubject::query()->create([
             'teacher_profile_id' => $profile->id,
             'curriculum_subject_id' => $subject->id,
@@ -152,13 +150,12 @@ class SubjectPageContentTest extends TestCase
         $this->seed(CurriculumCatalogSeeder::class);
         $subject = CurriculumSubject::query()->where('name', 'Matematika')->firstOrFail();
         $teacher = User::factory()->create(['name' => 'Tutor Bidang', 'role' => 'teacher', 'status' => 'active']);
-        $profile = TeacherProfile::query()->create([
+        $profile = tap(TeacherProfile::query()->create([
             'user_id' => $teacher->id,
-            'verified_at' => now(),
             'public_profile_enabled' => true,
             'public_profile_consent_at' => now(),
             'public_credentials' => 'Alumni Pendidikan Matematika',
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         TeacherSubject::query()->create([
             'teacher_profile_id' => $profile->id,
             'curriculum_subject_id' => $subject->id,
@@ -241,13 +238,11 @@ class SubjectPageContentTest extends TestCase
                 'role' => 'teacher', 'status' => 'active',
             ]);
             $consented = $number <= 11;
-            $profile = TeacherProfile::query()->create([
-                'user_id' => $teacher->id,
-                'verified_at' => now(),
-                'public_profile_enabled' => $consented,
-                'public_profile_consent_at' => $consented ? now() : null,
-                'public_directory_approved_at' => $consented ? now() : null,
-            ]);
+            $profile = tap(TeacherProfile::query()->create([
+            'user_id' => $teacher->id,
+            'public_profile_enabled' => $consented,
+            'public_profile_consent_at' => $consented ? now() : null,
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now(), 'public_directory_approved_at' => $consented ? now() : null])->save());
             TeacherSubject::query()->create([
                 'teacher_profile_id' => $profile->id,
                 'curriculum_subject_id' => $subject->id,

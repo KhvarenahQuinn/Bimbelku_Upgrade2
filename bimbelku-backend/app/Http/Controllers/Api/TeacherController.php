@@ -47,34 +47,71 @@ class TeacherController extends Controller
 
         $profile->load('subjects');
 
-        $profileData = $profile->toArray();
         $inferredChannel = $profile->payout_channel_code ?: XenditPayoutChannelCatalog::inferCode($profile->bank_name);
         if (blank($profile->payout_channel_code) && filled($inferredChannel)) {
             $profile->forceFill(['payout_channel_code' => $inferredChannel])->save();
         }
-        $profileData['whatsapp_number'] = $profile->whatsapp_number;
-        $profileData['latitude'] = $profile->latitude;
-        $profileData['longitude'] = $profile->longitude;
-        $profileData['bank_name'] = $profile->bank_name;
-        $profileData['payout_channel_code'] = $inferredChannel;
-        $profileData['payout_channel_options'] = XenditPayoutChannelCatalog::options();
-        $profileData['payout_verification_method'] = $profile->payout_verification_method ?? 'otp';
-        $profileData['payout_verification_method_updated_at'] = $profile->payout_verification_method_updated_at;
-        $profileData['account_number'] = $profile->account_number;
-        $profileData['account_name'] = $profile->account_name;
-        $profileData['bank_account_changed_at'] = $profile->bank_account_changed_at;
-        $profileData['payout_hold_until'] = $profile->payout_hold_until;
-        $profileData['photo_url'] = PublicMedia::url($profile->photo);
-        $profileData['cv_url'] = $profile->cv_file ? "/teachers/{$user->id}/documents/cv_file" : null;
-        $profileData['identity_document_url'] = $profile->identity_document ? "/teachers/{$user->id}/documents/identity_document" : null;
-        $profileData['live_selfie_url'] = $profile->live_selfie ? "/teachers/{$user->id}/documents/live_selfie" : null;
-        $profileData['qualification_document_url'] = $profile->qualification_document ? "/teachers/{$user->id}/documents/qualification_document" : null;
-        $profileData['certification_document_url'] = $profile->certification_document ? "/teachers/{$user->id}/documents/certification_document" : null;
-        $profileData['profile_cover_url'] = $user->profile_cover_use_default
-            ? null
-            : PublicMedia::url($user->profile_cover);
 
-        $user->subjects = $profile->subjects;
+        $profileData = [
+            'id' => $profile->id,
+            'user_id' => $profile->user_id,
+            'expertise' => $profile->expertise,
+            'title' => $profile->title,
+            'location' => $profile->location,
+            'experience' => $profile->experience,
+            'bio' => $profile->bio,
+            'linkedin' => $profile->linkedin,
+            'teaching_method' => $profile->teaching_method,
+            'whatsapp_number' => $profile->whatsapp_number,
+            'latitude' => $profile->latitude,
+            'longitude' => $profile->longitude,
+            'max_travel_km' => $profile->max_travel_km,
+            'is_accepting_requests' => (bool) $profile->is_accepting_requests,
+            'public_profile_enabled' => (bool) $profile->public_profile_enabled,
+            'public_profile_consent_at' => $profile->public_profile_consent_at,
+            'public_directory_approved_at' => $profile->public_directory_approved_at,
+            'public_display_name' => $profile->public_display_name,
+            'public_degree' => $profile->public_degree,
+            'public_credentials' => $profile->public_credentials,
+            'photo' => $profile->photo,
+            'photo_url' => PublicMedia::url($profile->photo),
+            'profile_cover_url' => $user->profile_cover_use_default
+                ? null
+                : PublicMedia::url($user->profile_cover),
+            'cv_url' => $profile->cv_file ? "/teachers/{$user->id}/documents/cv_file" : null,
+            'identity_document_url' => $profile->identity_document ? "/teachers/{$user->id}/documents/identity_document" : null,
+            'live_selfie_url' => $profile->live_selfie ? "/teachers/{$user->id}/documents/live_selfie" : null,
+            'qualification_document_url' => $profile->qualification_document ? "/teachers/{$user->id}/documents/qualification_document" : null,
+            'certification_document_url' => $profile->certification_document ? "/teachers/{$user->id}/documents/certification_document" : null,
+            'bank_name' => $profile->bank_name,
+            'payout_channel_code' => $inferredChannel,
+            'payout_channel_options' => XenditPayoutChannelCatalog::options(),
+            'payout_verification_method' => $profile->payout_verification_method ?? 'otp',
+            'payout_verification_method_updated_at' => $profile->payout_verification_method_updated_at,
+            'account_number' => $profile->account_number,
+            'account_name' => $profile->account_name,
+            'bank_account_changed_at' => $profile->bank_account_changed_at,
+            'payout_hold_until' => $profile->payout_hold_until,
+            'verified_at' => $profile->verified_at,
+            'verification_stage' => $profile->verification_stage,
+            'verification_notes' => $profile->verification_notes,
+            'subjects' => $profile->subjects,
+        ];
+
+        $userData = [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => $user->phone,
+            'address' => $user->address,
+            'role' => $user->role,
+            'status' => $user->status,
+            'avatar' => $user->avatar,
+            'profile_cover_use_default' => (bool) $user->profile_cover_use_default,
+            'has_password' => (bool) ($user->has_password ?? true),
+            'password_updated_at' => $user->password_updated_at?->toIso8601String(),
+            'subjects' => $profile->subjects,
+        ];
 
         // Halaman Keamanan tutor memakai dua field ini untuk menentukan apakah
         // dialog ganti kata sandi harus meminta kata sandi lama (akun Google
@@ -85,7 +122,7 @@ class TeacherController extends Controller
         ];
 
         return response()->json([
-            'user' => $user,
+            'user' => $userData,
             'account_security' => $accountSecurity,
             'profile' => $profileData,
         ]);
@@ -540,7 +577,7 @@ class TeacherController extends Controller
             }
 
             $expertise = mb_substr(implode(', ', array_column($normalizedSubjects, 'name')), 0, 255);
-            $lockedProfile->update([
+            $lockedProfile->forceFill([
                 'expertise' => $expertise,
                 'public_directory_approved_at' => $competencyChanged
                     ? null
@@ -550,7 +587,7 @@ class TeacherController extends Controller
                     : $lockedProfile->is_accepting_requests,
                 'verified_at' => $reverificationRequired ? null : $lockedProfile->verified_at,
                 'verified_by' => $reverificationRequired ? null : $lockedProfile->verified_by,
-            ]);
+            ])->save();
 
             if ($reverificationRequired) {
                 $lockedUser->update(['status' => 'pending']);

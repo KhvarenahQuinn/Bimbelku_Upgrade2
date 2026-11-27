@@ -108,7 +108,7 @@ class UnifiedLoginTest extends TestCase
     public function test_verified_teacher_can_use_shared_login(): void
     {
         $teacher = User::factory()->create(['email' => 'teacher@example.test', 'password' => Hash::make('password'), 'role' => 'teacher', 'status' => 'active']);
-        TeacherProfile::create(['user_id' => $teacher->id, 'expertise' => 'Matematika', 'verified_at' => now()]);
+        tap(TeacherProfile::create(['user_id' => $teacher->id, 'expertise' => 'Matematika']), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         $this->postJson('/api/login', ['email' => $teacher->email, 'password' => 'password'])
             ->assertOk()->assertJsonPath('user.role', 'teacher');
     }

@@ -24,9 +24,35 @@ class TeacherProfile extends Model
         'bank_name',
         'account_number',
         'account_name',
+        'bank_account_fingerprint',
     ];
 
-    protected $guarded = ['id'];
+    protected $fillable = [
+        'user_id',
+        'expertise',
+        'linkedin',
+        'photo',
+        'location',
+        'title',
+        'teaching_method',
+        'cv_file',
+        'bio',
+        'experience',
+        'whatsapp_number',
+        'latitude',
+        'longitude',
+        'max_travel_km',
+        'is_accepting_requests',
+        'public_profile_enabled',
+        'public_profile_consent_at',
+        'public_display_name',
+        'public_degree',
+        'public_credentials',
+        'identity_document',
+        'live_selfie',
+        'qualification_document',
+        'certification_document',
+    ];
 
     protected $casts = [
         'latitude' => 'float',

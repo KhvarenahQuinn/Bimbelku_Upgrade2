@@ -32,11 +32,10 @@ class StageTwoMobileBookingTest extends TestCase
             'role' => 'teacher',
             'status' => 'active',
         ]);
-        $profile = TeacherProfile::create([
+        $profile = tap(TeacherProfile::create([
             'user_id' => $teacher->id,
             'is_accepting_requests' => true,
-            'verified_at' => now()->subDay(),
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()->subDay()])->save());
         $subject = CurriculumSubject::query()
             ->where('normalized_name', 'matematika')
             ->firstOrFail();
@@ -128,11 +127,10 @@ class StageTwoMobileBookingTest extends TestCase
             ->where('normalized_name', 'matematika')
             ->firstOrFail();
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active']);
-        $profile = TeacherProfile::create([
+        $profile = tap(TeacherProfile::create([
             'user_id' => $teacher->id,
             'is_accepting_requests' => true,
-            'verified_at' => now()->subDay(),
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()->subDay()])->save());
         $profile->subjects()->create([
             'name' => 'Nama lama yang berbeda',
             'curriculum_subject_id' => $subject->id,

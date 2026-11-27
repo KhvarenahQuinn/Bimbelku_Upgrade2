@@ -70,12 +70,14 @@ final class StageOneFixtureSet
                 'email_verified_at' => now(), 'address' => 'Alamat sintetis untuk pengujian',
                 'terms_accepted_at' => now(), 'privacy_accepted_at' => now(), 'policy_version' => 'qa-stage1-only',
             ]);
-            $profile = TeacherProfile::query()->create([
-                'user_id' => $teacher->id, 'expertise' => $subjects[$subjectKey]->name,
-                'teaching_method' => 'Online', 'public_degree' => 'Pendidikan QA sintetis',
-                'verified_at' => $verified ? now() : null, 'is_accepting_requests' => $accepting,
-                'public_profile_enabled' => false,
-            ]);
+            $profile = tap(TeacherProfile::query()->create([
+            'user_id' => $teacher->id,
+            'expertise' => $subjects[$subjectKey]->name,
+            'teaching_method' => 'Online',
+            'public_degree' => 'Pendidikan QA sintetis',
+            'is_accepting_requests' => $accepting,
+            'public_profile_enabled' => false,
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => $verified ? now() : null])->save());
             TeacherSubject::query()->create([
                 'teacher_profile_id' => $profile->id, 'curriculum_subject_id' => $subjects[$subjectKey]->id,
                 'name' => $subjects[$subjectKey]->name, 'levels' => ['SMA'], 'is_active' => true,

@@ -530,16 +530,15 @@ class DemoPackageRenewal extends Command
                 'policy_version' => 'demo-local',
             ]
         );
-        $profile = TeacherProfile::query()->updateOrCreate(
+        $profile = tap(TeacherProfile::query()->updateOrCreate(
             ['user_id' => $teacher->id],
             [
-                'expertise' => self::SUBJECT_NAME,
-                'teaching_method' => 'Online',
-                'bio' => 'Tutor demo lokal untuk pengujian perpanjangan Paket Belajar.',
-                'verified_at' => now(),
-                'is_accepting_requests' => true,
-            ]
-        );
+            'expertise' => self::SUBJECT_NAME,
+            'teaching_method' => 'Online',
+            'bio' => 'Tutor demo lokal untuk pengujian perpanjangan Paket Belajar.',
+            'is_accepting_requests' => true,
+        ]
+        ), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         TeacherSubject::query()->where('teacher_profile_id', $profile->id)->delete();
         TeacherSubject::query()->create([
             'teacher_profile_id' => $profile->id,

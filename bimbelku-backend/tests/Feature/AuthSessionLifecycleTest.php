@@ -161,11 +161,10 @@ class AuthSessionLifecycleTest extends TestCase
             'status' => 'active',
             'email_verified_at' => now(),
         ]);
-        TeacherProfile::create([
+        tap(TeacherProfile::create([
             'user_id' => $teacher->id,
             'expertise' => 'Matematika',
-            'verified_at' => now(),
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
 
         $studentLogin = $this->postJson('/api/login', [
             'email' => $student->email,

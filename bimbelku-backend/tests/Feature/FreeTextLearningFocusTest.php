@@ -169,10 +169,12 @@ class FreeTextLearningFocusTest extends TestCase
         $this->assertDatabaseCount('orders', 1);
 
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'email_verified_at' => now()]);
-        $profile = TeacherProfile::query()->create([
-            'user_id' => $teacher->id, 'expertise' => 'Matematika', 'teaching_method' => 'Online',
-            'verified_at' => now(), 'is_accepting_requests' => true,
-        ]);
+        $profile = tap(TeacherProfile::query()->create([
+            'user_id' => $teacher->id,
+            'expertise' => 'Matematika',
+            'teaching_method' => 'Online',
+            'is_accepting_requests' => true,
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         TeacherSubject::query()->create([
             'teacher_profile_id' => $profile->id, 'curriculum_subject_id' => $subject->curriculum_subject_id,
             'name' => 'Matematika', 'levels' => ['SMP'], 'is_active' => true,

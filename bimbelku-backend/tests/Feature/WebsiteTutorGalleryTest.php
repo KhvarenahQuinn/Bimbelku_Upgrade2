@@ -48,14 +48,12 @@ class WebsiteTutorGalleryTest extends TestCase
     public function test_linked_gallery_card_disappears_if_tutor_revokes_public_consent(): void
     {
         $user = User::factory()->create(['name' => 'Tutor Asli', 'role' => 'teacher', 'status' => 'active']);
-        $profile = TeacherProfile::query()->create([
+        $profile = tap(TeacherProfile::query()->create([
             'user_id' => $user->id,
-            'verified_at' => now(),
             'public_profile_enabled' => true,
             'public_profile_consent_at' => now(),
-            'public_directory_approved_at' => now(),
             'public_degree' => 'S.Pd.',
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now(), 'public_directory_approved_at' => now()])->save());
         Sanctum::actingAs(User::factory()->create(['role' => 'admin', 'status' => 'active']));
         $this->getJson('/api/admin/website-tutor-gallery/candidates')->assertOk()
             ->assertJsonPath('0.name', 'Tutor Asli')
@@ -73,7 +71,7 @@ class WebsiteTutorGalleryTest extends TestCase
         ])->assertCreated()->assertJsonPath('entry.photo_from_account', true);
         $this->getJson('/api/website-tutor-gallery')->assertOk()->assertJsonCount(1);
 
-        $profile->update(['public_profile_enabled' => false, 'public_directory_approved_at' => null]);
+        $profile->forceFill(['public_profile_enabled' => false, 'public_directory_approved_at' => null])->save();
         $this->getJson('/api/website-tutor-gallery')->assertOk()->assertJsonCount(0);
         $this->getJson('/api/admin/website-tutor-gallery/candidates')->assertOk()->assertJsonCount(0);
     }

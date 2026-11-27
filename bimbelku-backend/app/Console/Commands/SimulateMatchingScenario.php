@@ -415,11 +415,10 @@ class SimulateMatchingScenario extends Command
     private function createTeacher(string $subjectName = 'Matematika'): User
     {
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active']);
-        $profile = TeacherProfile::create([
+        $profile = tap(TeacherProfile::create([
             'user_id' => $teacher->id,
             'is_accepting_requests' => true,
-            'verified_at' => now()->subDay(),
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()->subDay()])->save());
         TeacherSubject::create([
             'teacher_profile_id' => $profile->id,
             'name' => $subjectName,

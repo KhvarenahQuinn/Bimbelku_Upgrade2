@@ -116,7 +116,7 @@ class AdminController extends Controller
                 $updates['whatsapp_test_passed_at'] = now();
                 $updates['verification_notes'] = trim((string) $validated['notes']);
             }
-            $profile->update($updates);
+            $profile->forceFill($updates)->save();
         }, 3);
 
         $activity->record($request, $request->user(), 'tutors', 'tutor.verification_stage_updated', 'Memperbarui tahap verifikasi tutor '.$teacher->name.' menjadi '.$validated['stage'].'.', 'User', $teacher->id, [
@@ -214,13 +214,13 @@ class AdminController extends Controller
             }
 
             $user->update(['status' => $validated['status']]);
-            $profile->update([
+            $profile->forceFill([
                 'verification_notes' => trim((string) ($validated['notes'] ?? '')) ?: null,
                 'verified_at' => $validated['status'] === 'active' ? now() : null,
                 'verified_by' => $request->user()->id,
                 'is_accepting_requests' => $validated['status'] === 'active',
                 'verification_stage' => $validated['status'] === 'active' ? 'approved' : 'rejected',
-            ]);
+            ])->save();
 
             if ($validated['status'] === 'rejected') {
                 $user->tokens()->delete();

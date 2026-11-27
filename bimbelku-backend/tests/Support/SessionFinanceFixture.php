@@ -34,12 +34,11 @@ final class SessionFinanceFixture
             'name' => 'Tutor Sesi',
             'address' => 'Jl. Merdeka No. 1, Yogyakarta',
         ]);
-        TeacherProfile::create([
+        tap(TeacherProfile::create([
             'user_id' => $teacher->id,
             'location' => 'Yogyakarta',
             'is_accepting_requests' => true,
-            'verified_at' => now()->subDay(),
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()->subDay()])->save());
 
         $plan = PackagePlan::create([
             'name' => 'Paket Sesi Finansial',

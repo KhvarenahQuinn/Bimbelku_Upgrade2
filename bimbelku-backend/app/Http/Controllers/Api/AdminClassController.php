@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Models\User;
+use App\Support\AdminPermissionCatalog;
 use App\Support\PublicMedia;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -128,7 +130,9 @@ class AdminClassController extends Controller
 
         $bookings = $query->paginate($perPage)->withQueryString();
 
-        $bookings->getCollection()->transform(function (Booking $booking) {
+        $admin = $request->user();
+
+        $bookings->getCollection()->transform(function (Booking $booking) use ($admin) {
             $request = $booking->bookingRequest;
             $isCompleted = in_array($booking->status, self::HISTORY_STATUSES, true);
             $attentionReason = in_array($booking->status, self::ATTENTION_STATUSES, true)
@@ -152,7 +156,7 @@ class AdminClassController extends Controller
                 'progress' => $this->progress($booking->status),
                 'needs_admin_attention' => $attentionReason !== null,
                 'attention_reason' => $attentionReason,
-                'action' => $this->actionForStatus($booking),
+                'action' => $this->actionForStatus($booking, $admin),
                 'start_at' => $booking->start_at,
                 'end_at' => $booking->end_at,
             ];
@@ -251,27 +255,33 @@ class AdminClassController extends Controller
         ]);
     }
 
-    private function actionForStatus(Booking $booking): ?array
+    private function actionForStatus(Booking $booking, ?User $admin = null): ?array
     {
         return match ($booking->status) {
             'refund_pending',
             'emergency_refund_pending',
-            'partially_refunded' => [
-                'label' => 'Kelola Refund',
-                'url' => '/admin/refunds',
-            ],
+            'partially_refunded' => $admin?->hasAdminPermission(AdminPermissionCatalog::FINANCE_REFUNDS)
+                ? [
+                    'label' => 'Kelola Refund',
+                    'url' => '/admin/refunds',
+                ]
+                : null,
 
-            'disputed' => [
-                'label' => 'Review Kasus',
-                'url' => '/admin/cases',
-            ],
+            'disputed' => $admin?->hasAdminPermission(AdminPermissionCatalog::CASES_MANAGE)
+                ? [
+                    'label' => 'Review Kasus',
+                    'url' => '/admin/cases',
+                ]
+                : null,
 
             'absence_review',
             'admin_review_required',
-            'awaiting_student_approval' => [
-                'label' => 'Review Kelas',
-                'url' => '/admin/cases',
-            ],
+            'awaiting_student_approval' => $admin?->hasAdminPermission(AdminPermissionCatalog::CASES_MANAGE)
+                ? [
+                    'label' => 'Review Kelas',
+                    'url' => '/admin/cases',
+                ]
+                : null,
 
             default => null,
         };

@@ -427,10 +427,12 @@ class DemoTeacherReplacement extends Command
             'name' => $name, 'password' => self::PASSWORD, 'role' => 'teacher', 'status' => 'active',
             'email_verified_at' => now(), 'terms_accepted_at' => now(), 'privacy_accepted_at' => now(), 'policy_version' => 'demo-local',
         ]);
-        $profile = TeacherProfile::query()->updateOrCreate(['user_id' => $teacher->id], [
-            'expertise' => self::SUBJECT_NAME, 'teaching_method' => 'Online', 'bio' => 'Tutor lokal demo penggantian guru.',
-            'verified_at' => now(), 'is_accepting_requests' => true,
-        ]);
+        $profile = tap(TeacherProfile::query()->updateOrCreate(['user_id' => $teacher->id], [
+            'expertise' => self::SUBJECT_NAME,
+            'teaching_method' => 'Online',
+            'bio' => 'Tutor lokal demo penggantian guru.',
+            'is_accepting_requests' => true,
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         TeacherSubject::query()->updateOrCreate(
             ['teacher_profile_id' => $profile->id, 'curriculum_subject_id' => $catalog->id],
             ['name' => self::SUBJECT_NAME, 'levels' => ['SMP'], 'is_active' => true, 'is_online' => true, 'is_offline' => false, 'is_private_active' => true],

@@ -67,6 +67,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'payment_pin_hash',
+        'finance_totp_secret',
         'remember_token',
         'google_id',
         'phone',

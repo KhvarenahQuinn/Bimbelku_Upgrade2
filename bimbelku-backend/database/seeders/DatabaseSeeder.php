@@ -40,21 +40,20 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        $profile = TeacherProfile::updateOrCreate(
+        $profile = tap(TeacherProfile::updateOrCreate(
             ['user_id' => $teacher->id],
             [
-                'title' => 'Tutor Matematika',
-                'bio' => 'Berpengalaman mendampingi pembelajaran Matematika tingkat SD sampai SMA.',
-                'experience' => '10 Tahun',
-                'whatsapp_number' => '081234567890',
-                'location' => 'Surabaya',
-                'latitude' => -7.2575,
-                'longitude' => 112.7521,
-                'max_travel_km' => 12,
-                'is_accepting_requests' => true,
-                'verified_at' => now(),
-            ]
-        );
+            'title' => 'Tutor Matematika',
+            'bio' => 'Berpengalaman mendampingi pembelajaran Matematika tingkat SD sampai SMA.',
+            'experience' => '10 Tahun',
+            'whatsapp_number' => '081234567890',
+            'location' => 'Surabaya',
+            'latitude' => -7.2575,
+            'longitude' => 112.7521,
+            'max_travel_km' => 12,
+            'is_accepting_requests' => true,
+        ]
+        ), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         $mathematics = CurriculumSubject::query()
             ->where('normalized_name', 'matematika')
             ->first();

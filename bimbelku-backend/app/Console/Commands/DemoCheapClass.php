@@ -767,16 +767,15 @@ class DemoCheapClass extends Command
             ]
         );
 
-        TeacherProfile::query()->updateOrCreate(
+        tap(TeacherProfile::query()->updateOrCreate(
             ['user_id' => $teacher->id],
             [
-                'expertise' => 'Matematika',
-                'teaching_method' => 'Online',
-                'bio' => 'Tutor demo lokal untuk pengujian Paket Belajar dan Kelas Kelompok.',
-                'verified_at' => now(),
-                'is_accepting_requests' => true,
-            ]
-        );
+            'expertise' => 'Matematika',
+            'teaching_method' => 'Online',
+            'bio' => 'Tutor demo lokal untuk pengujian Paket Belajar dan Kelas Kelompok.',
+            'is_accepting_requests' => true,
+        ]
+        ), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
 
         return [$student->fresh(), $secondStudent->fresh(), $teacher->fresh('teacherProfile')];
     }

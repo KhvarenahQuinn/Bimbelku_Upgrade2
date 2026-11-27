@@ -348,10 +348,10 @@ class PackageCheckoutService
                 ->where('old_teacher_id', $teacher->id)
                 ->where('status', 'requested')
                 ->update(['status' => 'tutor_accepted']);
-            $profile->update([
+            $profile->forceFill([
                 'no_response_streak' => 0,
                 'no_response_window_started_at' => null,
-            ]);
+            ])->save();
 
             $package->refresh()->load('subjects');
             $allAccepted = $package->subjects->every(fn (PackageSubject $item) => $item->status === 'accepted');

@@ -138,10 +138,12 @@ class LearningProgramProductTest extends TestCase
 
         // Satu tutor yang mampu mengajar semuanya tetap hanya boleh mengambil satu mapel.
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'email_verified_at' => now()]);
-        $profile = TeacherProfile::query()->create([
-            'user_id' => $teacher->id, 'expertise' => 'TKA', 'teaching_method' => 'Online',
-            'verified_at' => now(), 'is_accepting_requests' => true,
-        ]);
+        $profile = tap(TeacherProfile::query()->create([
+            'user_id' => $teacher->id,
+            'expertise' => 'TKA',
+            'teaching_method' => 'Online',
+            'is_accepting_requests' => true,
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         foreach ($subjects as $subject) {
             TeacherSubject::query()->create([
                 'teacher_profile_id' => $profile->id, 'curriculum_subject_id' => $subject->id,
@@ -157,10 +159,12 @@ class LearningProgramProductTest extends TestCase
         }
         foreach ($subjects as $subject) {
             $specialist = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'email_verified_at' => now()]);
-            $specialistProfile = TeacherProfile::query()->create([
-                'user_id' => $specialist->id, 'expertise' => $subject->name,
-                'teaching_method' => 'Online', 'verified_at' => now(), 'is_accepting_requests' => true,
-            ]);
+            $specialistProfile = tap(TeacherProfile::query()->create([
+            'user_id' => $specialist->id,
+            'expertise' => $subject->name,
+            'teaching_method' => 'Online',
+            'is_accepting_requests' => true,
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
             TeacherSubject::query()->create([
                 'teacher_profile_id' => $specialistProfile->id, 'curriculum_subject_id' => $subject->id,
                 'name' => $subject->name, 'levels' => ['SMA'], 'is_active' => true,

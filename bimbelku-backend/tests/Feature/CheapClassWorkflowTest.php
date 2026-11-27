@@ -44,11 +44,10 @@ class CheapClassWorkflowTest extends TestCase
             'is_active' => true,
         ]);
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active']);
-        $profile = TeacherProfile::create([
+        $profile = tap(TeacherProfile::create([
             'user_id' => $teacher->id,
-            'verified_at' => now(),
             'is_accepting_requests' => true,
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         TeacherSubject::create([
             'teacher_profile_id' => $profile->id,
             'curriculum_subject_id' => $subject->id,
@@ -339,11 +338,10 @@ class CheapClassWorkflowTest extends TestCase
         $this->assertSame('waiting_teacher', $class->status);
 
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active']);
-        $profile = TeacherProfile::create([
+        $profile = tap(TeacherProfile::create([
             'user_id' => $teacher->id,
-            'verified_at' => now(),
             'is_accepting_requests' => true,
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         foreach ($catalog->take(2) as [$subject]) {
             TeacherSubject::create([
                 'teacher_profile_id' => $profile->id,
@@ -475,11 +473,10 @@ class CheapClassWorkflowTest extends TestCase
         $this->assertSame('waiting_teacher', $class->status);
 
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active']);
-        $profile = TeacherProfile::create([
+        $profile = tap(TeacherProfile::create([
             'user_id' => $teacher->id,
-            'verified_at' => now(),
             'is_accepting_requests' => true,
-        ]);
+        ]), fn ($profile) => $profile->forceFill(['verified_at' => now()])->save());
         TeacherSubject::create([
             'teacher_profile_id' => $profile->id,
             'curriculum_subject_id' => $subject->id,

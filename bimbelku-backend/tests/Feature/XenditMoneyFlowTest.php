@@ -188,10 +188,9 @@ class XenditMoneyFlowTest extends TestCase
         $this->assertDatabaseHas('refunds', ['id' => $refund->id, 'gateway_refund_id' => 'rfd-test-1', 'destination_method' => 'xendit_original']);
 
         $teacher = User::factory()->create(['role' => 'teacher', 'status' => 'active', 'address' => 'Yogyakarta']);
-        TeacherProfile::create([
-            'user_id' => $teacher->id, 'bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA',
-            'account_number' => '1234567890', 'account_name' => $teacher->name,
-        ]);
+        tap(TeacherProfile::create([
+            'user_id' => $teacher->id,
+        ]), fn ($profile) => $profile->forceFill(['bank_name' => 'Bank Central Asia (BCA)', 'payout_channel_code' => 'BCA', 'account_number' => '1234567890', 'account_name' => $teacher->name])->save());
         $payout = Payout::create([
             'user_id' => $teacher->id, 'amount' => 120000, 'period' => 'September 2026', 'total_classes' => 2,
             'status' => 'processing', 'payment_provider' => 'xendit', 'account_number' => '1234567890',

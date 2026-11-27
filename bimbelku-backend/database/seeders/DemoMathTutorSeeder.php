@@ -59,33 +59,20 @@ class DemoMathTutorSeeder extends Seeder
             ]
         );
 
-        $profile = TeacherProfile::updateOrCreate(
+        $profile = tap(TeacherProfile::updateOrCreate(
             ['user_id' => $tutor->id],
             [
-                'expertise' => 'Matematika',
-                'title' => 'Tutor Matematika SD–SMA',
-                'bio' => 'Mengajar Matematika untuk semua jenjang pendidikan, dari SD, SMP, SMA, hingga kelas umum. Fokus pada pemahaman konsep dan latihan soal.',
-                'experience' => '6 Tahun',
-                'location' => self::CITY,
-                'latitude' => -7.2575,
-                'longitude' => 112.7521,
-                'max_travel_km' => 12,
-                'is_accepting_requests' => true,
-                'verified_at' => now(),
-                'verified_by' => $adminId,
-                'verification_stage' => 'approved',
-                'verification_notes' => 'Dokumen dan tes WhatsApp lolos. Siap menerima permintaan Matematika semua jenjang.',
-                'documents_checked_at' => now(),
-                'whatsapp_test_scheduled_at' => now(),
-                'whatsapp_test_passed_at' => now(),
-                // Seeded so the demo tutor can be paid out without a manual
-                // bank-details save; the holder name is the same constant.
-                'bank_name' => self::BANK_NAME,
-                'payout_channel_code' => self::CHANNEL_CODE,
-                'account_number' => self::ACCOUNT_NUMBER,
-                'account_name' => self::NAME,
-            ]
-        );
+            'expertise' => 'Matematika',
+            'title' => 'Tutor Matematika SD–SMA',
+            'bio' => 'Mengajar Matematika untuk semua jenjang pendidikan, dari SD, SMP, SMA, hingga kelas umum. Fokus pada pemahaman konsep dan latihan soal.',
+            'experience' => '6 Tahun',
+            'location' => self::CITY,
+            'latitude' => -7.2575,
+            'longitude' => 112.7521,
+            'max_travel_km' => 12,
+            'is_accepting_requests' => true,
+        ]
+        ), fn ($profile) => $profile->forceFill(['verified_at' => now(), 'verified_by' => $adminId, 'verification_stage' => 'approved', 'verification_notes' => 'Dokumen dan tes WhatsApp lolos. Siap menerima permintaan Matematika semua jenjang.', 'documents_checked_at' => now(), 'whatsapp_test_scheduled_at' => now(), 'whatsapp_test_passed_at' => now(), 'bank_name' => self::BANK_NAME, 'payout_channel_code' => self::CHANNEL_CODE, 'account_number' => self::ACCOUNT_NUMBER, 'account_name' => self::NAME])->save());
 
         // Satu mapel aktif untuk semua jenjang dan mode online/offline.
         TeacherSubject::query()
