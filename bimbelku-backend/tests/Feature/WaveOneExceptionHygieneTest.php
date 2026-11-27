@@ -2,10 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\Promotion;
 use App\Models\User;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Sanctum;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\TestCase;
 
 class WaveOneExceptionHygieneTest extends TestCase
@@ -36,8 +39,29 @@ class WaveOneExceptionHygieneTest extends TestCase
         $this->assertNoDebugLeak($forbidden);
 
         // 404 model not found (guest order lookup) & unknown route
-        $notFoundModel = $this->getJson('/api/guest/packages/INVALID-CODE-999')->assertNotFound();
+        $notFoundModel = $this->getJson('/api/guest/packages/INVALID-CODE-999')
+            ->assertNotFound()
+            ->assertExactJson(['message' => 'Data tidak ditemukan.']);
         $this->assertNoDebugLeak($notFoundModel);
+        $this->assertStringNotContainsString('GuestPackageOrder', $notFoundModel->getContent());
+        $this->assertStringNotContainsString('No query results', $notFoundModel->getContent());
+
+        // Wrapped ModelNotFoundException for Promotion preserves specific Indonesian 404 copy
+        Route::middleware('api')->get('/api/_wave2-promotion-missing', function () {
+            $modelException = (new ModelNotFoundException)->setModel(Promotion::class, [999]);
+            throw new NotFoundHttpException('No query results for model [App\\Models\\Promotion].', $modelException);
+        });
+        $notFoundPromotion = $this->getJson('/api/_wave2-promotion-missing')
+            ->assertNotFound()
+            ->assertExactJson(['message' => 'Promo tidak ditemukan atau sudah dihapus.']);
+        $this->assertNoDebugLeak($notFoundPromotion);
+
+        // Custom HttpException 404 preserves explicit Indonesian copy
+        Route::middleware('api')->get('/api/_wave2-custom-404', fn () => abort(404, 'Halaman khusus tidak ditemukan.'));
+        $custom404 = $this->getJson('/api/_wave2-custom-404')
+            ->assertNotFound()
+            ->assertExactJson(['message' => 'Halaman khusus tidak ditemukan.']);
+        $this->assertNoDebugLeak($custom404);
 
         $notFoundRoute = $this->getJson('/api/does-not-exist-wave1')->assertNotFound();
         $this->assertNoDebugLeak($notFoundRoute);

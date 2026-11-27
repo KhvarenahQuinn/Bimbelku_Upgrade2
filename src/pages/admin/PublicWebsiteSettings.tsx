@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Eye, EyeOff, Loader2, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import axios from "axios";
 import { Link } from "react-router-dom";
@@ -184,35 +184,54 @@ export default function PublicWebsiteSettings() {
   const [ratingOptions, setRatingOptions] = useState<RatingOption[]>([]);
   const [deletedTestimonialIds, setDeletedTestimonialIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    http.get<WebsitePayload>("/admin/website-settings")
-      .then(({ data }) => {
-        if (!active) return;
-        setSettings({
-          ...defaultSettings,
-          ...data.settings,
-          brand_description: nullable(data.settings.brand_description),
-          information_bar_text: nullable(data.settings.information_bar_text),
-          whatsapp_number: nullable(data.settings.whatsapp_number),
-          whatsapp_hours: nullable(data.settings.whatsapp_hours),
-          whatsapp_default_message: nullable(data.settings.whatsapp_default_message),
-          contact_email: nullable(data.settings.contact_email),
-          office_address: nullable(data.settings.office_address),
-          google_maps_url: nullable(data.settings.google_maps_url),
-          navigation_items: (data.settings.navigation_items || []).map((item) => ({ ...item, is_visible: item.is_visible !== false })),
-        });
-        setSections(data.sections || []);
-        setTrustItems(data.trust_items || []);
-        setTestimonials((data.testimonials || []).map((item) => ({ ...item, client_key: `saved-${item.id}` })));
-      })
-      .catch(() => notify.error("Pengaturan website publik gagal dimuat."))
-      .finally(() => active && setLoading(false));
-
-    return () => { active = false; };
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const { data } = await http.get<WebsitePayload>("/admin/website-settings");
+      if (!data || typeof data !== "object" || !data.settings) {
+        const message = "Data pengaturan website publik tidak lengkap. Silakan muat ulang.";
+        setLoadError(message);
+        notify.error(message);
+        return;
+      }
+      setSettings({
+        ...defaultSettings,
+        ...data.settings,
+        brand_description: nullable(data.settings.brand_description),
+        information_bar_text: nullable(data.settings.information_bar_text),
+        whatsapp_number: nullable(data.settings.whatsapp_number),
+        whatsapp_hours: nullable(data.settings.whatsapp_hours),
+        whatsapp_default_message: nullable(data.settings.whatsapp_default_message),
+        contact_email: nullable(data.settings.contact_email),
+        office_address: nullable(data.settings.office_address),
+        google_maps_url: nullable(data.settings.google_maps_url),
+        navigation_items: Array.isArray(data.settings.navigation_items)
+          ? data.settings.navigation_items.map((item) => ({ ...item, is_visible: item.is_visible !== false }))
+          : defaultSettings.navigation_items,
+      });
+      setSections(Array.isArray(data.sections) ? data.sections : []);
+      setTrustItems(Array.isArray(data.trust_items) ? data.trust_items : []);
+      setTestimonials(
+        Array.isArray(data.testimonials)
+          ? data.testimonials.map((item) => ({ ...item, client_key: `saved-${item.id}` }))
+          : [],
+      );
+    } catch {
+      const message = "Pengaturan website publik gagal dimuat.";
+      setLoadError(message);
+      notify.error(message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
 
   useEffect(() => {
     void Promise.all([
@@ -349,16 +368,25 @@ export default function PublicWebsiteSettings() {
 
     setSaving(true);
     try {
-      const { data } = await http.post<{ message: string; data: WebsitePayload }>("/admin/website-settings", payload);
-      setSettings((current) => ({ ...current, ...data.data.settings }));
-      setSections(data.data.sections);
-      setTrustItems(data.data.trust_items);
-      setTestimonials((data.data.testimonials || []).map((item) => ({ ...item, client_key: `saved-${item.id}` })));
+      const { data } = await http.post<{ message?: string; data?: Partial<WebsitePayload> }>("/admin/website-settings", payload);
+      const saved = data?.data;
+      if (saved?.settings) {
+        setSettings((current) => ({ ...current, ...saved.settings }));
+      }
+      if (Array.isArray(saved?.sections)) {
+        setSections(saved.sections);
+      }
+      if (Array.isArray(saved?.trust_items)) {
+        setTrustItems(saved.trust_items);
+      }
+      if (Array.isArray(saved?.testimonials)) {
+        setTestimonials(saved.testimonials.map((item) => ({ ...item, client_key: `saved-${item.id}` })));
+      }
       setTestimonialFiles({});
       setDeletedTestimonialIds([]);
       clearApiCache("/website-content");
       window.dispatchEvent(new Event("bimbelku:website-content-changed"));
-      notify.success(data.message);
+      notify.success(data?.message || "Pengaturan website publik berhasil disimpan.");
     } catch (error) {
       const message = axios.isAxiosError(error)
         ? error.response?.data?.message
@@ -371,6 +399,20 @@ export default function PublicWebsiteSettings() {
 
   if (loading) {
     return <AdminLayout title="Website Publik"><div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-orange-600" /></div></AdminLayout>;
+  }
+
+  if (loadError) {
+    return (
+      <AdminLayout title="Website Publik">
+        <div className="mx-auto my-10 max-w-md rounded-3xl border border-rose-200 bg-rose-50 p-6 text-center">
+          <p className="text-base font-black text-rose-900">Pengaturan website publik gagal dimuat</p>
+          <p className="mt-2 text-sm leading-6 text-rose-800">{loadError}</p>
+          <button type="button" onClick={() => void loadSettings()} className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#C2410C] px-5 text-sm font-bold text-white hover:bg-[#9A3412]">
+            Coba lagi
+          </button>
+        </div>
+      </AdminLayout>
+    );
   }
 
   return (

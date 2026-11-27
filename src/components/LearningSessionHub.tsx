@@ -173,6 +173,7 @@ const noChangeReasonLabel = (value?: string | null) => ({
 export default function LearningSessionHub({ bookingId, open, onOpenChange, initialTab = "session", backLabel, onBack }: Props) {
   const [hub, setHub] = useState<HubData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [confirmCheckout, setConfirmCheckout] = useState(false);
   const [tab, setTab] = useState<LearningSessionHubTab>(initialTab);
@@ -200,14 +201,43 @@ export default function LearningSessionHub({ bookingId, open, onOpenChange, init
 
   const load = useCallback(async (quiet = false) => {
     if (!bookingId) return;
-    if (!quiet) setLoading(true);
+    if (!quiet) {
+      setLoading(true);
+      setLoadError(null);
+    }
     try {
       const response = await http.get<HubData>(`/bookings/${bookingId}/learning-session`);
-      setHub(response.data);
+      const payload = response.data;
+      if (!payload || typeof payload !== "object" || !payload.booking) {
+        if (!quiet) {
+          const message = "Data ruang belajar belum lengkap. Silakan muat ulang.";
+          setHub(null);
+          setLoadError(message);
+          notify.error(message);
+        }
+        return;
+      }
+      const normalized: HubData = {
+        ...payload,
+        learning_chapters: Array.isArray(payload.learning_chapters) ? payload.learning_chapters : [],
+        messages: Array.isArray(payload.messages) ? payload.messages : [],
+        progress_reports: Array.isArray(payload.progress_reports) ? payload.progress_reports : [],
+        schedule_changes: Array.isArray(payload.schedule_changes) ? payload.schedule_changes : [],
+        permissions: {
+          can_chat: Boolean(payload.permissions?.can_chat),
+          can_mark_ready: Boolean(payload.permissions?.can_mark_ready),
+          can_confirm_presence: Boolean(payload.permissions?.can_confirm_presence),
+          can_check_out: Boolean(payload.permissions?.can_check_out),
+          can_report_progress: Boolean(payload.permissions?.can_report_progress),
+          can_request_schedule_change: Boolean(payload.permissions?.can_request_schedule_change),
+          can_request_future_schedule: Boolean(payload.permissions?.can_request_future_schedule),
+        },
+      };
+      setHub(normalized);
       if (!quiet) {
-        setFocusNote(response.data.booking.session_focus_note || "");
+        setFocusNote(normalized.booking.session_focus_note || "");
         const loaded: Record<string, ChapterUpdateState> = {};
-        for (const chapter of response.data.learning_chapters || []) {
+        for (const chapter of normalized.learning_chapters) {
           loaded[chapter.chapter] = {
             selected: Boolean(chapter.session_status),
             activity_type: chapter.session_activity === "mixed"
@@ -219,12 +249,16 @@ export default function LearningSessionHub({ bookingId, open, onOpenChange, init
           };
         }
         setChapterUpdates(loaded);
-        setReportForm((current) => ({ ...current, progress_percent: String(response.data.material_progress_percent || 0) }));
+        setReportForm((current) => ({ ...current, progress_percent: String(normalized.material_progress_percent || 0) }));
         setScheduleOptions([]);
         setProposedStartAt("");
       }
     } catch (error) {
-      if (!quiet) notify.error(getApiError(error, "Ruang belajar gagal dimuat."));
+      if (!quiet) {
+        const errorMessage = getApiError(error, "Ruang belajar gagal dimuat.");
+        setLoadError(errorMessage);
+        notify.error(errorMessage);
+      }
     } finally {
       if (!quiet) setLoading(false);
     }
@@ -252,7 +286,8 @@ export default function LearningSessionHub({ bookingId, open, onOpenChange, init
   useEffect(() => {
     if (tab !== "chat") return;
     const node = chatScrollRef.current;
-    const latestId = hub?.messages[hub.messages.length - 1]?.id ?? 0;
+    const messages = Array.isArray(hub?.messages) ? hub.messages : [];
+    const latestId = messages[messages.length - 1]?.id ?? 0;
     if (!node || !latestId || latestId === lastChatMessageId.current) return;
     const firstBatch = lastChatMessageId.current === 0;
     lastChatMessageId.current = latestId;
@@ -442,7 +477,7 @@ export default function LearningSessionHub({ bookingId, open, onOpenChange, init
 
   const waitingForStudent = Boolean(hub?.booking.tutor_ready_at && !hub?.booking.student_confirmed_at);
   const sessionLive = Boolean(hub?.booking.student_confirmed_at && hub?.attendance && !hub.attendance.check_out_at);
-  const reportSaved = Boolean(hub?.progress_reports.length);
+  const reportSaved = Boolean(hub?.progress_reports?.length);
   const statusLabel = useMemo(() => {
     if (!hub) return "";
     if (hub.booking.status === "awaiting_student_approval") return "Menunggu konfirmasi murid";
@@ -467,8 +502,17 @@ export default function LearningSessionHub({ bookingId, open, onOpenChange, init
           </div>
         </DialogHeader>
 
-        {loading || !hub ? (
+        {loading ? (
           <div className="grid min-h-72 place-items-center"><Loader2 className="animate-spin text-indigo-600" /></div>
+        ) : loadError || !hub ? (
+          <div className="mx-auto my-8 max-w-md rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center">
+            <p className="text-base font-black text-rose-900">Ruang belajar belum dapat ditampilkan</p>
+            <p className="mt-2 text-sm leading-6 text-rose-800">{loadError || "Data ruang belajar belum tersedia. Silakan coba muat ulang."}</p>
+            <div className="mt-5 flex justify-center gap-2">
+              <Button type="button" variant="outline" className="rounded-xl" onClick={() => onOpenChange(false)}>Tutup</Button>
+              <Button type="button" className="rounded-xl bg-indigo-600 hover:bg-indigo-700" onClick={() => void load()}>Coba lagi</Button>
+            </div>
+          </div>
         ) : (
           <div className="space-y-5">
             <section className="relative overflow-hidden rounded-[1.6rem] bg-[#102b3f] p-5 text-white sm:p-7">
