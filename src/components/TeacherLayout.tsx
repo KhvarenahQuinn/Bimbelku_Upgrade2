@@ -227,9 +227,8 @@ export default function TeacherLayout({ children, title, lockContentScroll = fal
       {sidebarOpen && ( <button type="button" aria-label="Tutup menu tutor" className="fixed inset-0 z-30 bg-slate-900/60 backdrop-blur-sm xl:hidden" onClick={() => setSidebarOpen(false)} /> )}
 
       {/* SIDEBAR */}
-      <aside
+      <aside id="teacher-mobile-navigation"
         ref={drawerRef}
-        id="teacher-mobile-navigation"
         tabIndex={-1}
         role={sidebarOpen ? "dialog" : undefined}
         aria-modal={sidebarOpen ? true : undefined}
