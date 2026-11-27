@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useDrawerFocusTrap } from "@/hooks/useDrawerFocusTrap";
 import { clearBrowserSession } from "@/lib/session";
 import {
   ArrowRight,
@@ -55,8 +56,12 @@ export default function Navbar() {
   const [programMenuLoaded, setProgramMenuLoaded] = useState(false);
   const [user] = useState<StoredUser | null>(() => readStoredUser());
   const headerRef = useRef<HTMLElement>(null);
+  const mobileNavRef = useRef<HTMLDivElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
+
+  useDrawerFocusTrap(mobileOpen, mobileNavRef, mobileMenuButtonRef, () => setMobileOpen(false));
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -185,7 +190,7 @@ export default function Navbar() {
           <div className="flex shrink-0 items-center gap-2 xl:hidden">
             {whatsappCta(true)}
             {primaryCta("hidden min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#C2410C] px-3 text-xs font-extrabold text-white sm:inline-flex")}
-            <button type="button" onClick={() => setMobileOpen((value) => !value)} aria-expanded={mobileOpen} aria-controls="mobile-navigation" aria-label={mobileOpen ? "Tutup menu" : "Buka menu"} className="grid h-10 w-10 place-items-center rounded-xl border border-stone-200 bg-white text-[#14213D]">{mobileOpen ? <X size={20} /> : <Menu size={20} />}</button>
+            <button ref={mobileMenuButtonRef} type="button" onClick={() => setMobileOpen((value) => !value)} aria-expanded={mobileOpen} aria-controls="mobile-navigation" aria-label={mobileOpen ? "Tutup menu" : "Buka menu"} className="grid h-10 w-10 place-items-center rounded-xl border border-stone-200 bg-white text-[#14213D]">{mobileOpen ? <X size={20} /> : <Menu size={20} />}</button>
           </div>
         </div>
       </nav>
@@ -202,7 +207,7 @@ export default function Navbar() {
       {activeMenu === "guides" && <GuidesMenu close={closeMenus} />}
       {activeMenu === "about" && <AboutMenu consultationUrl={consultationUrl} close={closeMenus} />}
 
-      {mobileOpen && <MobileNavigation user={user} dashboardLink={dashboardLink} consultationUrl={consultationUrl} programGroups={programGroups} close={closeMenus} />}
+      {mobileOpen && <MobileNavigation containerRef={mobileNavRef} user={user} dashboardLink={dashboardLink} consultationUrl={consultationUrl} programGroups={programGroups} close={closeMenus} />}
       <PublicWhatsappButton />
     </header>
   );
@@ -254,8 +259,8 @@ function CompactPanel({ width, children }: { width: number; children: ReactNode 
   return <div className="absolute top-full overflow-y-auto rounded-3xl border border-stone-200 bg-white shadow-2xl" style={{ left: "50%", width: `min(${width}px, calc(100vw - 48px))`, maxHeight: "calc(100dvh - 9rem)", transform: "translateX(-50%)" }}><div className="px-7 py-6">{children}</div></div>;
 }
 
-function MobileNavigation({ user, dashboardLink, consultationUrl, programGroups, close }: { user: StoredUser | null; dashboardLink: string; consultationUrl: string | null; programGroups: ProgramGroup[]; close: () => void }) {
-  return <div id="mobile-navigation" className="max-h-[calc(100dvh-7rem)] overflow-y-auto border-b border-stone-200 bg-white px-5 py-4 shadow-xl xl:hidden"><div className="mx-auto max-w-[1200px] space-y-2">
+function MobileNavigation({ containerRef, user, dashboardLink, consultationUrl, programGroups, close }: { containerRef: RefObject<HTMLDivElement | null>; user: StoredUser | null; dashboardLink: string; consultationUrl: string | null; programGroups: ProgramGroup[]; close: () => void }) {
+  return <div ref={containerRef} id="mobile-navigation" tabIndex={-1} role="dialog" aria-modal="true" aria-label="Navigasi utama seluler" className="max-h-[calc(100dvh-7rem)] overflow-y-auto border-b border-stone-200 bg-white px-5 py-4 shadow-xl xl:hidden"><div className="mx-auto max-w-[1200px] space-y-2">
     <MobileGroup label="Kategori & program">{programGroups.length ? programGroups.map((group) => <MobileLink key={group.id} to={`/program?group=${encodeURIComponent(group.slug)}#g-${encodeURIComponent(group.slug)}`} close={close}>{group.name}</MobileLink>) : <><MobileLink to="/program?level=SD" close={close}>Program SD</MobileLink><MobileLink to="/program?level=SMP" close={close}>Program SMP</MobileLink><MobileLink to="/program?level=SMA" close={close}>Program SMA</MobileLink></>}<MobileLink to="/program" close={close}>Semua kategori & program</MobileLink></MobileGroup>
     <MobileGroup label="Cara Belajar"><MobileLink to="/cara-belajar" close={close}>Ringkasan cara belajar</MobileLink><MobileLink to="/cara-belajar/privat-tatap-muka" close={close}>Privat tatap muka</MobileLink><MobileLink to="/cara-belajar/privat-online" close={close}>Privat online</MobileLink><MobileLink to="/cara-belajar/kelas-bersama" close={close}>Kelas Bersama</MobileLink></MobileGroup>
     <MobileGroup label="Wawasan"><MobileLink to="/cara-belajar/panduan-memilih-program" close={close}>Panduan memilih program</MobileLink><MobileLink to="/cara-belajar/cara-pemesanan" close={close}>Cara pemesanan</MobileLink><MobileLink to="/cara-belajar/sistem-matching-tutor" close={close}>Sistem matching tutor</MobileLink><MobileLink to="/cara-belajar/pembayaran-dan-refund" close={close}>Pembayaran dan refund</MobileLink></MobileGroup>

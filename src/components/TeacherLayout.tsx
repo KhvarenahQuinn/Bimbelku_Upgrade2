@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import ProfileQuickMenu from "@/components/ProfileQuickMenu";
 import { scheduleNonCriticalTask } from "@/lib/schedule";
 import { usePersistentSidebarScroll } from "@/hooks/usePersistentSidebarScroll";
+import { useDrawerFocusTrap } from "@/hooks/useDrawerFocusTrap";
 import { announceNavigationAttentionChanged, hasSidebarAttention, NAVIGATION_ATTENTION_CHANGED_EVENT, unreadIdsForCurrentPage, type AttentionNotification } from "@/lib/navigationAttention";
 import {
   LayoutDashboard, BookOpen, Menu, X, Settings, Wallet, Banknote, 
@@ -46,6 +47,8 @@ export default function TeacherLayout({ children, title, lockContentScroll = fal
   const [selectedNotif, setSelectedNotif] = useState<any>(null);
 
   const lastNotificationIdRef = useRef<number>(0);
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const location = useLocation();
   const { sidebarScrollRef, handleSidebarScroll } = usePersistentSidebarScroll("teacher", location.pathname);
   const navigate = useNavigate();
@@ -57,6 +60,8 @@ export default function TeacherLayout({ children, title, lockContentScroll = fal
     setSidebarOpen(false);
     setShowNotifDropdown(false);
   }, [location.pathname]);
+
+  useDrawerFocusTrap(sidebarOpen, drawerRef, menuButtonRef, () => setSidebarOpen(false));
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
@@ -222,7 +227,15 @@ export default function TeacherLayout({ children, title, lockContentScroll = fal
       {sidebarOpen && ( <button type="button" aria-label="Tutup menu tutor" className="fixed inset-0 z-30 bg-slate-900/60 backdrop-blur-sm xl:hidden" onClick={() => setSidebarOpen(false)} /> )}
 
       {/* SIDEBAR */}
-      <aside id="teacher-mobile-navigation" className={`fixed xl:static inset-y-0 left-0 z-40 w-[min(18rem,88vw)] bg-white border-r border-slate-100 transform transition-transform duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full xl:translate-x-0'} shadow-xl xl:shadow-none flex flex-col`}>
+      <aside
+        ref={drawerRef}
+        id="teacher-mobile-navigation"
+        tabIndex={-1}
+        role={sidebarOpen ? "dialog" : undefined}
+        aria-modal={sidebarOpen ? true : undefined}
+        aria-label={sidebarOpen ? "Navigasi tutor" : undefined}
+        className={`fixed xl:static inset-y-0 left-0 z-40 w-[min(18rem,88vw)] bg-white border-r border-slate-100 transform transition-transform duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full xl:translate-x-0'} shadow-xl xl:shadow-none flex flex-col`}
+      >
         <div className="h-24 flex items-center px-8 border-b border-slate-50">
              <DashboardBrand className="mr-3 h-10 w-10" />
              <div><h1 className="text-xl font-black text-slate-900 tracking-tight leading-none">BimbelKu</h1><span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest bg-indigo-50 px-1.5 py-0.5 rounded mt-1 inline-block">Teacher</span></div>
@@ -267,7 +280,7 @@ export default function TeacherLayout({ children, title, lockContentScroll = fal
       <main id="main-content" tabIndex={-1} className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden">
         <header className="h-16 sm:h-20 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 flex items-center justify-between px-3 sm:px-6 xl:px-10 sticky top-0 z-20 transition-all">
           <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-            <button type="button" aria-label={sidebarOpen ? "Tutup menu" : "Buka menu"} aria-expanded={sidebarOpen} aria-controls="teacher-mobile-navigation" className="xl:hidden p-2.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl shadow-sm transition" onClick={() => setSidebarOpen((open) => !open)}>{sidebarOpen ? <X size={20} /> : <Menu size={20} />}</button>
+            <button ref={menuButtonRef} type="button" aria-label={sidebarOpen ? "Tutup menu" : "Buka menu"} aria-expanded={sidebarOpen} aria-controls="teacher-mobile-navigation" className="xl:hidden p-2.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl shadow-sm transition" onClick={() => setSidebarOpen((open) => !open)}>{sidebarOpen ? <X size={20} /> : <Menu size={20} />}</button>
             <div className="min-w-0"><h1 className="max-w-[9.5rem] truncate text-base font-black tracking-tight text-slate-800 sm:max-w-none sm:text-xl">{title}</h1></div>
           </div>
 

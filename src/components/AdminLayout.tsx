@@ -32,6 +32,7 @@ import { ADMIN_PERMISSIONS, canAdmin, readStoredAdmin } from "@/lib/adminPermiss
 import { scheduleNonCriticalTask } from "@/lib/schedule";
 import { hasActiveBrowserSession, isLoggingOut, SESSION_UPDATED_EVENT } from "@/lib/session";
 import { usePersistentSidebarScroll } from "@/hooks/usePersistentSidebarScroll";
+import { useDrawerFocusTrap } from "@/hooks/useDrawerFocusTrap";
 import {
   hasAdminMobileMenuAttention,
   hasSidebarAttention,
@@ -170,6 +171,8 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
   const [attentionNotifications, setAttentionNotifications] = useState<AttentionNotification[]>([]);
   const [operationalCounts, setOperationalCounts] = useState<OperationalAttentionCounts>(emptyOperationalCounts);
   const attentionRequestsRef = useRef(new Set<AbortController>());
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const location = useLocation();
   const { sidebarScrollRef, handleSidebarScroll } = usePersistentSidebarScroll("admin", location.pathname);
   const admin = useMemo(readStoredAdmin, []);
@@ -264,6 +267,8 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
     setSidebarOpen(false);
   }, [location.pathname, location.search]);
 
+  useDrawerFocusTrap(sidebarOpen, drawerRef, menuButtonRef, () => setSidebarOpen(false));
+
   useEffect(() => {
     let disposed = false;
     const abortAttentionRequests = () => {
@@ -333,6 +338,12 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
       )}
 
       <aside
+        ref={drawerRef}
+        id="admin-mobile-navigation"
+        tabIndex={-1}
+        role={sidebarOpen ? "dialog" : undefined}
+        aria-modal={sidebarOpen ? true : undefined}
+        aria-label={sidebarOpen ? "Navigasi admin" : undefined}
         className={`fixed inset-y-0 left-0 z-50 flex w-[min(19rem,90vw)] flex-col border-r border-slate-200 bg-white shadow-2xl transition-transform duration-300 xl:static xl:translate-x-0 xl:shadow-none ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
@@ -400,8 +411,11 @@ export default function AdminLayout({ children, title, subtitle = "Pusat operasi
         <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/90 px-3 backdrop-blur-xl sm:h-20 sm:px-6 xl:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <button
+              ref={menuButtonRef}
               type="button"
               aria-label="Buka menu admin"
+              aria-expanded={sidebarOpen}
+              aria-controls="admin-mobile-navigation"
               className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 xl:hidden"
               onClick={() => setSidebarOpen(true)}
             >

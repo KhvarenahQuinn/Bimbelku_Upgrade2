@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ChevronDown, CircleHelp, LogOut, Settings, UserRound } from "lucide-react";
 import { useLogout } from "@/hooks/useLogout";
@@ -39,6 +39,8 @@ export default function ProfileQuickMenu({
   helpTo?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const menuId = useId();
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const location = useLocation();
   const logout = useLogout();
   const tone = styles[accent];
@@ -55,7 +57,10 @@ export default function ProfileQuickMenu({
   useEffect(() => {
     if (!open) return;
     const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     const isMobile = !window.matchMedia("(min-width: 1024px)").matches;
     const previousOverflow = document.body.style.overflow;
@@ -70,10 +75,11 @@ export default function ProfileQuickMenu({
   return (
     <div className="relative z-[120] border-l border-slate-200 pl-1.5 sm:pl-4">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
-        aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={menuId}
         aria-label="Buka menu profil"
         className="group flex min-h-11 min-w-11 items-center justify-end gap-2 rounded-2xl px-1.5 py-1 transition hover:bg-slate-50 sm:gap-3 sm:px-2"
       >
@@ -102,7 +108,7 @@ export default function ProfileQuickMenu({
             onClick={() => setOpen(false)}
           />
           <div
-            role="menu"
+            id={menuId}
             aria-label="Menu akun"
             className="fixed right-4 top-20 z-[9999] w-[min(18rem,calc(100vw-2rem))] max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_18px_50px_rgba(15,23,42,0.18)] animate-in fade-in zoom-in-95 duration-150 lg:absolute lg:right-0 lg:top-full lg:mt-3 lg:w-[min(22rem,calc(100vw-2rem))] lg:max-h-none lg:overflow-hidden lg:rounded-[1.5rem] lg:border lg:p-3"
           >
@@ -122,18 +128,18 @@ export default function ProfileQuickMenu({
             </div>
 
             <div className="mt-2 space-y-1">
-              <Link role="menuitem" to={profileTo} onClick={() => setOpen(false)} className="flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50">
+              <Link to={profileTo} onClick={() => setOpen(false)} className="flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50">
                 <span className={`grid h-9 w-9 place-items-center rounded-xl ${tone.icon}`}><UserRound size={17} /></span>
                 Profil Saya
               </Link>
               {accountTo && (
-                <Link role="menuitem" to={accountTo} onClick={() => setOpen(false)} className="flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50">
+                <Link to={accountTo} onClick={() => setOpen(false)} className="flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50">
                   <span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-600"><Settings size={17} /></span>
                   Pengaturan
                 </Link>
               )}
               {helpTo && (
-                <Link role="menuitem" to={helpTo} onClick={() => setOpen(false)} className="flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50">
+                <Link to={helpTo} onClick={() => setOpen(false)} className="flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50">
                   <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><CircleHelp size={17} /></span>
                   Bantuan
                 </Link>
@@ -143,7 +149,6 @@ export default function ProfileQuickMenu({
             <div className="mt-2 border-t border-slate-100 pt-2">
               <button
                 type="button"
-                role="menuitem"
                 onClick={handleLogout}
                 className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-rose-600 transition hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
               >
