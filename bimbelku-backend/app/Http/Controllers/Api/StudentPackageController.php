@@ -54,6 +54,7 @@ class StudentPackageController extends Controller
             ->orderBy('sort_order')
             ->orderBy('session_count')
             ->get()
+            ->toArray()
         );
 
         return $this->publicCachedResponse($request, $plans, 60);
@@ -69,6 +70,7 @@ class StudentPackageController extends Controller
             ->filter(fn (LearningTimeSlot $slot) => substr((string) $slot->start_time, 3, 2) === '00'
                 && substr((string) $slot->start_time, 0, 5) < '23:00')
             ->values()
+            ->toArray()
         );
 
         return $this->publicCachedResponse($request, $timeSlots, 60);
@@ -84,7 +86,7 @@ class StudentPackageController extends Controller
             'teacher_response_minutes',
         ];
 
-        $values = Cache::remember('package_booking_rules.v1', now()->addMinute(), fn () => Setting::query()->whereIn('key', $keys)->pluck('value', 'key'));
+        $values = Cache::remember('package_booking_rules.v1', now()->addMinute(), fn () => Setting::query()->whereIn('key', $keys)->pluck('value', 'key')->all());
 
         return response()->json([
             'booking_lead_hours' => (int) ($values['booking_lead_hours'] ?? 24),

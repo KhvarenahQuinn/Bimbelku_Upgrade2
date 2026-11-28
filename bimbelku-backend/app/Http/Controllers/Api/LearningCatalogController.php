@@ -45,9 +45,9 @@ class LearningCatalogController extends Controller
                 ->values();
 
             return [
-                'subjects' => $subjects,
-                'subject_options' => $catalogSubjects,
-                'landing_subjects' => $this->landingSubjects($catalogSubjects),
+                'subjects' => $subjects->all(),
+                'subject_options' => $catalogSubjects->toArray(),
+                'landing_subjects' => $this->landingSubjects($catalogSubjects)->all(),
             ];
         });
 

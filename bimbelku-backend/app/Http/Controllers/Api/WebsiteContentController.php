@@ -458,8 +458,9 @@ class WebsiteContentController extends Controller
             'brand_name', 'brand_description', 'information_bar_enabled', 'information_bar_text',
             'navigation_items', 'primary_cta_label', 'primary_cta_url', 'whatsapp_enabled',
             'whatsapp_number', 'whatsapp_label', 'whatsapp_hours', 'whatsapp_default_message',
-            'contact_email', 'office_address', 'google_maps_url', 'animations_enabled', 'updated_at',
+            'contact_email', 'office_address', 'google_maps_url', 'animations_enabled',
         ]))->merge([
+            'updated_at' => $settings->updated_at?->toJSON(),
             'logo_url' => $this->mediaUrl($settings->logo_path),
             'logo_light_url' => $this->mediaUrl($settings->logo_light_path),
             'logo_dark_url' => $this->mediaUrl($settings->logo_dark_path),
@@ -495,15 +496,16 @@ class WebsiteContentController extends Controller
             'sections' => $sectionsQuery->get()->map(fn (WebsiteSection $section) => $section->only([
                 'id', 'section_key', 'label', 'eyebrow', 'title', 'description', 'content',
                 'is_visible', 'order_locked', 'sort_order',
-            ]))->values(),
-            'trust_items' => $trustQuery->get()->map(fn (WebsiteTrustItem $item) => $this->trustPayload($item, $admin))->values(),
+            ]))->values()->all(),
+            'trust_items' => $trustQuery->get()->map(fn (WebsiteTrustItem $item) => $this->trustPayload($item, $admin))->values()->all(),
             'rating_summary' => $this->ratingSummary(),
             'testimonials' => ($admin ? WebsiteTestimonial::query() : $this->publicTestimonials())
                 ->orderByDesc('is_featured')->orderBy('sort_order')->orderByDesc('id')
                 ->when(! $admin, fn ($query) => $query->limit(12))
                 ->get()
                 ->map(fn (WebsiteTestimonial $testimonial) => $this->testimonialPayload($testimonial, $admin))
-                ->values(),
+                ->values()
+                ->all(),
         ];
     }
 
@@ -528,8 +530,9 @@ class WebsiteContentController extends Controller
         $payload = $testimonial->only([
             'id', 'rating_id', 'curriculum_subject_id', 'display_name', 'audience_role', 'quote', 'program_name',
             'outcome', 'institution', 'major', 'achievement_year', 'is_featured',
-            'is_visible', 'sort_order', 'created_at',
+            'is_visible', 'sort_order',
         ]);
+        $payload['created_at'] = $testimonial->created_at?->toJSON();
         $payload['photo_url'] = $this->mediaUrl($testimonial->photo_path);
         $payload['rating'] = $testimonial->rating?->rating;
         $payload['is_verified'] = $testimonial->verified_at !== null;
@@ -559,7 +562,7 @@ class WebsiteContentController extends Controller
         return [
             'average' => round((float) $ratings->avg('rating'), 1),
             'count' => $ratings->count(),
-            'distribution' => $distribution,
+            'distribution' => $distribution->all(),
         ];
     }
 
@@ -567,8 +570,9 @@ class WebsiteContentController extends Controller
     {
         $payload = $item->only([
             'id', 'title', 'display_value', 'description', 'icon_key', 'source_type',
-            'source_key', 'source_note', 'source_updated_at', 'is_visible', 'sort_order',
+            'source_key', 'source_note', 'is_visible', 'sort_order',
         ]);
+        $payload['source_updated_at'] = $item->source_updated_at?->toJSON();
         $payload['resolved_value'] = $item->source_type === 'system'
             ? $this->systemValue($item->source_key)
             : $item->display_value;

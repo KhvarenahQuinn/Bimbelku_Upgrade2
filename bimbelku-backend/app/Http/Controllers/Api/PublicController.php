@@ -20,6 +20,7 @@ class PublicController extends Controller
                 'footer_tiktok',
             ])
             ->pluck('value', 'key')
+            ->all()
         );
 
         $response = response()->json($settings);
