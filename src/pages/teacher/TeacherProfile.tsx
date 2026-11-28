@@ -545,13 +545,13 @@ export default function TeacherProfile() {
                 </div>
               </div>
               <Field label="Batas perjalanan offline (maks. 12 km)" htmlFor="teacher-max-travel"><Input id="teacher-max-travel" type="number" min="1" max="12" value={profile.max_travel_km} onChange={(event) => setProfile((current) => ({ ...current, max_travel_km: event.target.value }))} className="h-12 rounded-xl" /></Field>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 flex items-center justify-between gap-4"><div><p className="font-bold text-slate-800">Terima permintaan baru</p><p className="mt-1 text-xs text-slate-500">Matikan saat sedang tidak tersedia.</p></div><Switch checked={profile.is_accepting_requests} onCheckedChange={(checked) => setProfile((current) => ({ ...current, is_accepting_requests: checked }))} /></div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 flex items-center justify-between gap-4"><div><Label htmlFor="teacher-accepting-requests" className="cursor-pointer font-bold text-slate-800">Terima permintaan baru</Label><p className="mt-1 text-xs text-slate-500">Matikan saat sedang tidak tersedia.</p></div><Switch id="teacher-accepting-requests" aria-label="Terima permintaan baru" checked={profile.is_accepting_requests} onCheckedChange={(checked) => setProfile((current) => ({ ...current, is_accepting_requests: checked }))} /></div>
             </div>
 
             <div className="mt-5"><Field label="Tentang saya" htmlFor="teacher-bio"><Textarea id="teacher-bio" maxLength={3000} value={profile.bio} onChange={(event) => setProfile((current) => ({ ...current, bio: event.target.value }))} className="min-h-32 rounded-xl" placeholder="Jelaskan pendekatan mengajar secara ringkas." /></Field></div>
 
             <div className="mt-6 rounded-2xl border border-teal-200 bg-teal-50 p-5">
-              <div className="flex items-start justify-between gap-4"><div><p className="font-black text-slate-900">Izin profil publik</p><p className="mt-1 text-xs leading-5 text-slate-600">Jika diaktifkan, nama, foto profil, judul, mapel, pengalaman, dan jejak pendidikan/karier di bawah dapat tampil di halaman Kenali Tutor dan mapel setelah akun lulus verifikasi serta disetujui admin. Nomor kontak, lokasi rinci, dan dokumen tidak pernah dipublikasikan.</p></div><Switch checked={profile.public_profile_enabled} onCheckedChange={(checked) => setProfile((current) => ({ ...current, public_profile_enabled: checked }))} /></div>
+              <div className="flex items-start justify-between gap-4"><div><Label htmlFor="teacher-public-profile-enabled" className="cursor-pointer font-black text-slate-900">Izin profil publik</Label><p className="mt-1 text-xs leading-5 text-slate-600">Jika diaktifkan, nama, foto profil, judul, mapel, pengalaman, dan jejak pendidikan/karier di bawah dapat tampil di halaman Kenali Tutor dan mapel setelah akun lulus verifikasi serta disetujui admin. Nomor kontak, lokasi rinci, dan dokumen tidak pernah dipublikasikan.</p></div><Switch id="teacher-public-profile-enabled" aria-label="Izin profil publik" checked={profile.public_profile_enabled} onCheckedChange={(checked) => setProfile((current) => ({ ...current, public_profile_enabled: checked }))} /></div>
               <div className="mt-4"><Field label="Jejak pendidikan, karier, atau prestasi publik" htmlFor="teacher-public-credentials"><Textarea id="teacher-public-credentials" maxLength={300} value={profile.public_credentials} onChange={(event) => setProfile((current) => ({ ...current, public_credentials: event.target.value }))} className="min-h-24 rounded-xl bg-white" placeholder="Contoh: Alumni Pendidikan Matematika UNY · Finalis Olimpiade Matematika 2024" /></Field></div>
               <p className="mt-3 text-xs font-semibold leading-5 text-teal-900">Mengaktifkan pilihan ini memberi izin publikasi, bukan langsung menayangkan profil. Admin meninjau sebelum tampil. Perubahan informasi publik memerlukan persetujuan ulang, dan izin dapat dicabut kapan saja.</p>
             </div>
@@ -675,7 +675,8 @@ function DocumentInput({ label, icon: Icon, current, accept, capture, onChange }
         ) : null}
         <label className={`inline-flex h-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:border-indigo-200 hover:text-indigo-700 ${current ? "" : "col-span-2"}`}>
           {current ? "Ganti" : "Pilih"}
-          <Input type="file" accept={accept} capture={capture} className="hidden" onChange={(event) => onChange(event.target.files?.[0] || null)} />
+          <span className="sr-only"> berkas {label}</span>
+          <Input type="file" aria-label={`${current ? "Ganti" : "Pilih"} berkas ${label}`} accept={accept} capture={capture} className="hidden" onChange={(event) => onChange(event.target.files?.[0] || null)} />
         </label>
       </div>
     </div>

@@ -103,6 +103,7 @@ export default function ProfileQuickMenu({
         <>
           <button
             type="button"
+            tabIndex={-1}
             aria-label="Tutup menu profil"
             className="fixed inset-0 z-[9998] bg-transparent"
             onClick={() => setOpen(false)}

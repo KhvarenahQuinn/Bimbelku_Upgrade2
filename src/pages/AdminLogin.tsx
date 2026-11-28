@@ -49,8 +49,13 @@ export default function AdminLogin() {
     event.preventDefault();
     if (loadingRef.current) return;
     if (!isValidEmail(form.email)) {
-      setSummaryError(GENERIC_LOGIN_ERROR);
       setErrors({ email: "Masukkan alamat email yang valid." });
+      setSummaryError("Periksa alamat email Anda, lalu coba lagi.");
+      return;
+    }
+    if (!form.password) {
+      setErrors({ password: "Masukkan kata sandi Anda." });
+      setSummaryError("Masukkan kata sandi Anda sebelum melanjutkan.");
       return;
     }
     if (turnstileEnabled && !turnstileToken.trim()) {
@@ -166,7 +171,7 @@ export default function AdminLogin() {
 
           {remainingSeconds > 0 && <p role="status" aria-live="polite" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">Terlalu banyak percobaan. Coba lagi dalam {remainingSeconds} detik.</p>}
 
-          <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="mt-7 space-y-5">
             <label htmlFor="admin-email" className="block text-sm font-bold text-slate-700">
               Email admin
               <div className="mt-2 flex items-center overflow-hidden rounded-xl border-2 border-slate-300 bg-white focus-within:border-orange-500 focus-within:ring-4 focus-within:ring-orange-500/15" data-invalid={Boolean(errors.email)}>

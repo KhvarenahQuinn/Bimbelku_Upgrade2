@@ -65,3 +65,8 @@ Schedule::command('refunds:reconcile')
 Schedule::command('sanctum:prune-expired --hours=24')
     ->dailyAt('03:00')
     ->withoutOverlapping(30);
+// Prune destruktif: hanya di production, setelah jadwal 02:00/02:30/03:00.
+Schedule::command('storage:prune-orphaned-private --force')
+    ->dailyAt('03:30')
+    ->environments(['production'])
+    ->withoutOverlapping(30);

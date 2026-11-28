@@ -73,20 +73,37 @@ export default function FilePreviewProvider() {
     if (active instanceof HTMLElement && !dialogRef.current?.contains(active)) {
       restoreFocusRef.current = active;
     }
-    window.requestAnimationFrame(() => dialogRef.current?.focus());
+
+    let refocusing = false;
+    const focusContainer = () => {
+      const container = dialogRef.current;
+      if (!container || refocusing) return;
+      refocusing = true;
+      try {
+        container.focus({ preventScroll: true });
+      } finally {
+        refocusing = false;
+      }
+    };
+
+    const focusFrame = window.requestAnimationFrame(focusContainer);
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const handleFocusOut = (event: FocusEvent) => {
+      // Stop capture-phase focusout before @radix-ui/react-focus-scope's document
+      // bubble listener sees focus leaving the underlying Dialog and fights back.
+      event.stopImmediatePropagation();
+    };
     const handleFocusIn = (event: FocusEvent) => {
       const container = dialogRef.current;
       if (!container) return;
       if (container.contains(event.target as Node)) {
-        // Keep underlying Radix FocusScope from reclaiming focus while preview is active.
         event.stopImmediatePropagation();
         return;
       }
       event.stopImmediatePropagation();
-      container.focus();
+      focusContainer();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -111,15 +128,18 @@ export default function FilePreviewProvider() {
         setScale((value) => Math.max(MIN_SCALE, value - 0.25));
       }
     };
+    document.addEventListener("focusout", handleFocusOut, true);
     document.addEventListener("focusin", handleFocusIn, true);
     window.addEventListener("keydown", handleKeyDown, { capture: true });
 
     return () => {
+      window.cancelAnimationFrame(focusFrame);
       document.body.style.overflow = previousOverflow;
+      document.removeEventListener("focusout", handleFocusOut, true);
       document.removeEventListener("focusin", handleFocusIn, true);
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       if (restoreFocusRef.current?.isConnected) {
-        restoreFocusRef.current.focus();
+        restoreFocusRef.current.focus({ preventScroll: true });
       }
     };
   }, [preview]);

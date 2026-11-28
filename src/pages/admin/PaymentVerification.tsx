@@ -1,5 +1,5 @@
 import { notify } from "@/lib/notify";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -20,6 +20,7 @@ import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import http, { getApiError, getApiErrorDetails } from "@/lib/http";
 
 type Payment = {
@@ -120,6 +121,8 @@ export default function PaymentVerification({ embedded = false }: { embedded?: b
   const [rejectReason, setRejectReason] = useState("");
   const [reconciling, setReconciling] = useState<Payment | null>(null);
   const [actualReceived, setActualReceived] = useState("");
+  const rejectTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const reconcileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -313,7 +316,7 @@ export default function PaymentVerification({ embedded = false }: { embedded?: b
 
       {proof && <ProofModal payment={proof} onClose={() => setProof(null)} onAccept={() => void accept(proof)} onReject={() => { setRejecting(proof); setRejectReason(""); setProof(null); }} pending={tab === "pending"} />}
       <Dialog open={Boolean(rejecting)} onOpenChange={(open) => { if (!open) setRejecting(null); }}>
-        <DialogContent hideCloseButton className="w-full max-w-lg gap-0 rounded-[1.75rem] border-0 bg-white p-5 shadow-2xl sm:p-6">
+        <DialogContent hideCloseButton onOpenAutoFocus={(event) => { event.preventDefault(); rejectTextareaRef.current?.focus(); }} className="w-full max-w-lg gap-0 rounded-[1.75rem] border-0 bg-white p-5 shadow-2xl sm:p-6">
           {rejecting && (
             <>
               <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-start gap-2">
@@ -324,14 +327,15 @@ export default function PaymentVerification({ embedded = false }: { embedded?: b
                 </div>
                 <button type="button" aria-label="Tutup" onClick={() => setRejecting(null)} className="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"><X size={18} /></button>
               </div>
-              <textarea autoFocus value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} maxLength={500} className="mt-5 min-h-32 w-full rounded-xl border border-slate-200 p-4 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="Contoh: nominal pada bukti tidak sesuai dengan tagihan..." />
+              <Label htmlFor="payment-reject-reason" className="mt-5 block text-sm font-black text-slate-800">Alasan penolakan pembayaran</Label>
+              <textarea ref={rejectTextareaRef} id="payment-reject-reason" value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} maxLength={500} className="mt-2 min-h-32 w-full rounded-xl border border-slate-200 p-4 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="Contoh: nominal pada bukti tidak sesuai dengan tagihan..." />
               <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setRejecting(null)} className="rounded-xl">Batal</Button><Button onClick={() => void reject()} disabled={processingId === rejecting.id} className="rounded-xl bg-rose-600 hover:bg-rose-700">Tolak bukti</Button></div>
             </>
           )}
         </DialogContent>
       </Dialog>
       <Dialog open={Boolean(reconciling)} onOpenChange={(open) => { if (!open) setReconciling(null); }}>
-        <DialogContent hideCloseButton className="w-full max-w-lg gap-0 rounded-[1.75rem] border-0 bg-white p-5 shadow-2xl sm:p-6">
+        <DialogContent hideCloseButton onOpenAutoFocus={(event) => { event.preventDefault(); reconcileInputRef.current?.focus(); }} className="w-full max-w-lg gap-0 rounded-[1.75rem] border-0 bg-white p-5 shadow-2xl sm:p-6">
           {reconciling && (
             <>
               <div className="flex items-start justify-between gap-3">
@@ -346,7 +350,7 @@ export default function PaymentVerification({ embedded = false }: { embedded?: b
                 <div><p className="text-xs font-bold text-slate-400">Transfer yang diperlukan</p><p className="mt-1 font-black">{rupiah(reconciling.payment_outstanding_amount && reconciling.payment_outstanding_amount > 0 ? reconciling.payment_outstanding_amount : (reconciling.external_payment_amount ?? reconciling.amount))}</p></div>
                 {Boolean(reconciling.external_received_amount) && <div className="col-span-2"><p className="text-xs font-bold text-slate-400">Sudah diterima sebelumnya</p><p className="mt-1 font-black text-indigo-700">{rupiah(reconciling.external_received_amount || 0)}</p></div>}
               </div>
-              <label className="mt-5 block"><span className="text-sm font-black text-slate-800">Nominal dana yang masuk</span><div className="mt-2 flex h-12 items-center rounded-xl border border-slate-200 px-4 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100"><span className="mr-2 text-sm font-bold text-slate-500">Rp</span><input autoFocus inputMode="numeric" value={actualReceived} onChange={(event) => setActualReceived(event.target.value.replace(/[^0-9]/g, ""))} className="min-w-0 flex-1 bg-transparent text-lg font-black outline-none" placeholder="0" /></div></label>
+              <label className="mt-5 block"><span className="text-sm font-black text-slate-800">Nominal dana yang masuk</span><div className="mt-2 flex h-12 items-center rounded-xl border border-slate-200 px-4 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100"><span className="mr-2 text-sm font-bold text-slate-500">Rp</span><input ref={reconcileInputRef} inputMode="numeric" value={actualReceived} onChange={(event) => setActualReceived(event.target.value.replace(/[^0-9]/g, ""))} className="min-w-0 flex-1 bg-transparent text-lg font-black outline-none" placeholder="0" /></div></label>
               {actualReceived && (() => {
                 const required = reconciling.payment_outstanding_amount && reconciling.payment_outstanding_amount > 0 ? reconciling.payment_outstanding_amount : (reconciling.external_payment_amount ?? reconciling.amount);
                 const difference = Number(actualReceived) - required;
